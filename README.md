@@ -5,8 +5,8 @@ solid foundation for moving forward. I'd like to establish a sound base (coding
 style, binding methodology, warnings-as-errors, static analysis, valgrind/ASAN
 support, etc) so that ANYONE can jump in and contribute.
 
-**NOTE** During development, we need to continually ask the question "how can
-existing/establish projects--that already use OSG--leverage OUR headers to
+**NOTE**: During development, we need to continually ask the question "how can
+existing/established projects--that already use OSG--leverage OUR headers to
 simplify creating their OWN bindings?" This will mean that we need to keep
 things modular, support `pybind11::import_`, and export ALL of the utility
 functions and *"trampoline"* wrappers necessary for any external project to
@@ -15,8 +15,8 @@ include and utilize.
 **NOTE**: In addition to the above, it may become necessary at SOME POINT to
 create a kind of "shared core" library that both these bindings **AND** others
 link to in order to resolve utility/trampoline bits. For example, if a user
-wants to add Python to their existing product (`osgAcme`), they can/should be
-able to do something like the following:
+wants to create Python bindings for their existing product (`osgAcme`), they
+can/should be able to do something like the following:
 
 ```
 // First, they'll kick off an import to make pybind11 aware of all the types
@@ -34,7 +34,7 @@ py::class_<osgAcme::Foo, osg::Group, osg::ref_ptr<osgAcme::Foo>>(m, "Foo")
 // virtual methods that need to work both in Python AND C++):
 py::class_<
     osgAcme::EventHandler,
-    pyosgGA::detail::GUIEventHandler,
+    pyosgGA::GUIEventHandler,
     osg::ref_ptr<osgAcme::EventHandler>
 >(m, "EventHandler")
     .def("method", ...)
@@ -43,7 +43,7 @@ py::class_<
 ;
 ```
 
-In the above, notice how we use `pyosgGA::detail::GUIEventHandler` (instead of
+In the above, notice how we use `pyosgGA::GUIEventHandler` (instead of
 `osgGA::GUIEventHandler`) in the template parameters; this is **REQUIRED** (a
 "trampoline") in order for virtual overrides--defined in Python--to interop with
 C++ and pybind11 correctly. The "shared core" mentioned above would provide both
@@ -52,10 +52,10 @@ OpenSceneGraph.so module and the hypothetical osgAcme.so module).
 
 # TODO
 
-[ ] All of the corresponding "math" bindings; can the GLM python module serve in the interim?
-[x] GUIEventHandler
-[x] NodeCallback
-[ ] Drawable/DrawCallback (tricky due to rendering pipeline and non-copyable args)
-[ ] CameraManipulator (multimethod override, multiple overloads, non-copyable args)
-[ ] Operation
-[x] Callback (NodeCallback)
+- [ ] All of the corresponding "math" bindings; can the GLM python module serve in the interim?
+- [x] GUIEventHandler
+- [x] NodeCallback
+- [ ] Drawable/DrawCallback (tricky due to rendering pipeline and non-copyable args)
+- [ ] CameraManipulator (multimethod override, multiple overloads, non-copyable args)
+- [ ] Operation
+- [x] Callback (NodeCallback)
