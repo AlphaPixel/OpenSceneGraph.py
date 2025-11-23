@@ -58,4 +58,4 @@ OpenSceneGraph.so module and the hypothetical osgAcme.so module).
 - [ ] Drawable/DrawCallback (tricky due to rendering pipeline and non-copyable args)
 - [ ] CameraManipulator (multimethod override, multiple overloads, non-copyable args)
 - [ ] Operation
-- [x] Callback (NodeCallback)
+- [x] Basic osgViewer::Viewer demo
