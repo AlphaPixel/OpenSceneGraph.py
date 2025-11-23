@@ -1,0 +1,2297 @@
+{
+    reach_000
+    Memcheck:Leak
+    match-leak-kinds: reachable
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyMem_RawWcsdup
+    fun:_PyPathConfig_UpdateGlobal
+    fun:interpreter_update_config
+    fun:init_interp_main
+    fun:pyinit_main
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_001
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+}
+{
+    defin_002
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:PyMarshal_ReadObjectFromString
+    fun:unmarshal_frozen_code.isra.0
+    fun:PyImport_ImportFrozenModuleObject
+}
+{
+    defin_003
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:PyMarshal_ReadObjectFromString
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:config_init_import
+}
+{
+    defin_004
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:PyMarshal_ReadObjectFromString
+    fun:unmarshal_frozen_code.isra.0
+    fun:UnknownInlinedFun
+    fun:_imp_get_frozen_object
+    fun:cfunction_vectorcall_FASTCALL
+}
+{
+    defin_005
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyPegen_name_token
+    fun:UnknownInlinedFun
+    fun:simple_stmt_rule
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:simple_stmts_rule
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:statements_rule
+    fun:UnknownInlinedFun
+    fun:_PyPegen_parse
+    fun:_PyPegen_run_parser
+    fun:UnknownInlinedFun
+    fun:_PyParser_ASTFromString
+    fun:_PyRun_StringFlagsWithName.constprop.0
+    fun:UnknownInlinedFun
+    fun:builtin_exec
+    fun:cfunction_vectorcall_FASTCALL_KEYWORDS
+}
+{
+    defin_006
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:UnknownInlinedFun
+    fun:marshal_loads
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+}
+{
+    defin_007
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:UnknownInlinedFun
+    fun:marshal_loads
+    fun:_PyEval_EvalFrameDefault
+}
+{
+    defin_008
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyUnicode_InternFromString
+    fun:_PyImport_FixupBuiltin
+    fun:_PySys_Create
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_009
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:_PyBuiltin_Init
+    fun:UnknownInlinedFun
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_010
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:PyMarshal_ReadObjectFromString
+    fun:unmarshal_frozen_code.isra.0
+    fun:PyImport_ImportFrozenModuleObject
+    fun:PyImport_ImportFrozenModule
+}
+{
+    defin_011
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:PyMarshal_ReadObjectFromString
+    fun:unmarshal_frozen_code.isra.0
+}
+{
+    defin_012
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:PyMarshal_ReadObjectFromString
+    fun:unmarshal_frozen_code.isra.0
+    fun:UnknownInlinedFun
+    fun:_imp_get_frozen_object
+    fun:cfunction_vectorcall_FASTCALL
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+}
+{
+    defin_013
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:UnknownInlinedFun
+    fun:marshal_loads
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+    fun:cfunction_vectorcall_FASTCALL_KEYWORDS
+}
+{
+    defin_014
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:UnknownInlinedFun
+    fun:marshal_loads
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+}
+{
+    defin_015
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+}
+{
+    defin_016
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:UnknownInlinedFun
+    fun:_PySys_Create
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_017
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:descr_new
+    fun:PyDescr_NewMember
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:type_ready
+    fun:init_static_type
+    fun:_PyStructSequence_InitBuiltinWithFlags
+    fun:UnknownInlinedFun
+    fun:PyThread_GetInfo
+    fun:UnknownInlinedFun
+    fun:_PySys_Create
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+}
+{
+    defin_018
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:PyMarshal_ReadObjectFromString
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:config_init_import
+    fun:UnknownInlinedFun
+    fun:init_interp_main
+    fun:pyinit_main
+    fun:Py_InitializeFromConfig
+}
+{
+    defin_019
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:UnknownInlinedFun
+    fun:PyModule_AddIntConstant
+    fun:UnknownInlinedFun
+    fun:posixmodule_exec.cold
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+}
+{
+    defin_020
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:UnknownInlinedFun
+    fun:marshal_loads
+    fun:cfunction_vectorcall_FASTCALL_KEYWORDS
+    fun:UnknownInlinedFun
+    fun:PyObject_Vectorcall
+    fun:_PyEval_EvalFrameDefault
+}
+{
+    defin_021
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:UnknownInlinedFun
+    fun:PyModule_AddIntConstant
+    fun:UnknownInlinedFun
+    fun:signal_module_exec
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+}
+{
+    defin_022
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:PyMarshal_ReadObjectFromString
+    fun:unmarshal_frozen_code.isra.0
+    fun:PyImport_ImportFrozenModuleObject
+    fun:PyImport_ImportFrozenModule
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:pycore_interp_init
+}
+{
+    defin_023
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:thread_module_exec
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:_PyObject_CallFunctionVa
+    fun:PyObject_CallMethod
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+}
+{
+    defin_024
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:config_init_import
+    fun:UnknownInlinedFun
+    fun:init_interp_main
+    fun:pyinit_main
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_025
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:PyMarshal_ReadObjectFromString
+}
+{
+    defin_026
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:descr_new
+    fun:PyDescr_NewMember
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:type_ready
+    fun:_PyType_FromMetaclass_impl
+    fun:_PyStructSequence_NewType
+    fun:posixmodule_exec.cold
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+}
+{
+    defin_027
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:type_get_module
+    fun:_Py_type_getattro_impl
+    fun:PyObject_GetOptionalAttr
+    fun:functools_copy_attr
+    fun:functools_wraps
+    fun:cm_init
+    fun:UnknownInlinedFun
+    fun:_PyObject_MakeTpCall
+    fun:_PyEval_EvalFrameDefault
+    fun:builtin___build_class__
+    fun:cfunction_vectorcall_FASTCALL_KEYWORDS
+}
+{
+    defin_028
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:strings_rule
+    fun:atom_rule
+    fun:primary_raw
+    fun:primary_rule
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:factor_rule
+    fun:term_raw
+    fun:term_rule
+    fun:UnknownInlinedFun
+    fun:sum_rule
+    fun:UnknownInlinedFun
+    fun:shift_expr_rule
+    fun:UnknownInlinedFun
+    fun:bitwise_and_rule
+}
+{
+    defin_029
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:descr_new
+    fun:PyDescr_NewGetSet
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:type_ready
+    fun:_PyType_FromMetaclass_impl
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:pycore_init_types
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_030
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:config_init_import
+    fun:UnknownInlinedFun
+    fun:init_interp_main
+    fun:pyinit_main
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_031
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:PyMarshal_ReadObjectFromString
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:config_init_import
+    fun:UnknownInlinedFun
+    fun:init_interp_main
+    fun:pyinit_main
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+}
+{
+    defin_032
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:PyMarshal_ReadObjectFromString
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:config_init_import
+    fun:UnknownInlinedFun
+    fun:init_interp_main
+    fun:pyinit_main
+}
+{
+    defin_033
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:PyMarshal_ReadObjectFromString
+    fun:unmarshal_frozen_code.isra.0
+    fun:UnknownInlinedFun
+    fun:_imp_get_frozen_object
+    fun:cfunction_vectorcall_FASTCALL
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+}
+{
+    defin_034
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:PyMarshal_ReadObjectFromString
+    fun:unmarshal_frozen_code.isra.0
+    fun:UnknownInlinedFun
+    fun:_imp_get_frozen_object
+}
+{
+    defin_035
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:UnknownInlinedFun
+    fun:pycore_init_types
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_036
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_037
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:iomodule_exec
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+}
+{
+    defin_038
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:UnknownInlinedFun
+    fun:PyModule_AddIntConstant
+    fun:init_timezone
+    fun:time_exec
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+}
+{
+    defin_039
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:UnknownInlinedFun
+    fun:marshal_loads
+    fun:cfunction_vectorcall_FASTCALL_KEYWORDS
+    fun:UnknownInlinedFun
+    fun:PyObject_Vectorcall
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+}
+{
+    defin_040
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:signal_module_exec
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+    fun:cfunction_vectorcall_FASTCALL_KEYWORDS
+}
+{
+    defin_041
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyPegen_name_token
+    fun:UnknownInlinedFun
+    fun:simple_stmt_rule
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:simple_stmts_rule
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:statements_rule
+    fun:UnknownInlinedFun
+    fun:_PyPegen_parse
+    fun:_PyPegen_run_parser
+    fun:UnknownInlinedFun
+    fun:_PyParser_ASTFromString
+    fun:_PyRun_StringFlagsWithName.constprop.0
+    fun:UnknownInlinedFun
+    fun:builtin_exec
+    fun:_PyEval_EvalFrameDefault
+}
+{
+    defin_042
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:PyMarshal_ReadObjectFromString
+    fun:unmarshal_frozen_code.isra.0
+    fun:PyImport_ImportFrozenModuleObject
+    fun:PyImport_ImportFrozenModule
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+}
+{
+    defin_043
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:posixmodule_exec.cold
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+}
+{
+    defin_044
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:UnknownInlinedFun
+    fun:marshal_loads
+    fun:cfunction_vectorcall_FASTCALL_KEYWORDS
+    fun:UnknownInlinedFun
+    fun:PyObject_Vectorcall
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+}
+{
+    defin_045
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PySys_Create
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_046
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:weakref_exec
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:_PyObject_CallFunctionVa
+    fun:PyObject_CallMethod
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+}
+{
+    defin_047
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:UnknownInlinedFun
+    fun:PyModule_AddIntConstant
+    fun:time_exec
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+}
+{
+    defin_048
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:errno_exec
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+}
+{
+    defin_049
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyCodec_Lookup
+    fun:_PyCodec_LookupTextEncoding
+    fun:codec_getitem_checked
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyUnicode_Decode
+    fun:method_vectorcall_FASTCALL_KEYWORDS
+    fun:UnknownInlinedFun
+    fun:PyObject_Vectorcall
+    fun:_PyEval_EvalFrameDefault
+    fun:PyEval_EvalCode
+    fun:UnknownInlinedFun
+    fun:builtin_exec
+    fun:_PyEval_EvalFrameDefault
+}
+{
+    defin_050
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:_PySys_Create
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_051
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:descr_new
+    fun:PyDescr_NewMethod
+    fun:type_add_method
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:type_ready
+    fun:_PyType_FromMetaclass_impl
+    fun:iomodule_exec
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+}
+{
+    defin_052
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:UnknownInlinedFun
+    fun:marshal_loads
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+}
+{
+    defin_053
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:PyModule_Add
+    fun:thread_module_exec
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:_PyObject_CallFunctionVa
+    fun:PyObject_CallMethod
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:pycore_interp_init
+}
+{
+    defin_054
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:time_exec
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+}
+{
+    defin_055
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:UnknownInlinedFun
+    fun:marshal_loads
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+}
+{
+    defin_056
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:descr_new
+    fun:PyDescr_NewGetSet
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:type_ready
+    fun:init_static_type
+    fun:UnknownInlinedFun
+    fun:pycore_init_types
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_057
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:descr_new
+    fun:PyDescr_NewMember
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:type_ready
+    fun:init_static_type
+    fun:_PyStructSequence_InitBuiltinWithFlags
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:pycore_init_types
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+}
+{
+    defin_058
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:warnings_module_exec
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:_PyObject_CallFunctionVa
+    fun:PyObject_CallMethod
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+}
+{
+    defin_059
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:PyModule_Add
+    fun:UnknownInlinedFun
+    fun:posixmodule_exec.cold
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+}
+{
+    defin_060
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:descr_new
+    fun:PyDescr_NewMethod
+    fun:type_add_method
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:type_ready
+    fun:init_static_type
+    fun:UnknownInlinedFun
+    fun:pycore_init_types
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+}
+{
+    defin_061
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:PyModule_Add
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+}
+{
+    defin_062
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:UnknownInlinedFun
+    fun:marshal_loads
+}
+{
+    defin_063
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:PyMarshal_ReadObjectFromString
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:config_init_import
+    fun:UnknownInlinedFun
+    fun:init_interp_main
+}
+{
+    defin_064
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:UnknownInlinedFun
+    fun:interpreter_update_config
+    fun:init_interp_main
+    fun:pyinit_main
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_065
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyUnicode_InternFromString
+    fun:PyImport_ImportFrozenModule
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_066
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:UnknownInlinedFun
+    fun:PyModule_AddIntConstant
+    fun:iomodule_exec
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+}
+{
+    defin_067
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:PyModule_Add
+    fun:imp_module_exec
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_068
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyPegen_name_token
+    fun:UnknownInlinedFun
+    fun:dotted_name_rule
+    fun:dotted_as_name_rule
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:import_stmt_rule
+    fun:simple_stmt_rule
+    fun:simple_stmts_rule
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:statements_rule
+    fun:UnknownInlinedFun
+    fun:_PyPegen_parse
+    fun:_PyPegen_run_parser
+    fun:UnknownInlinedFun
+    fun:_PyParser_ASTFromString
+}
+{
+    defin_069
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:strings_rule
+    fun:atom_rule
+    fun:t_primary_raw
+    fun:UnknownInlinedFun
+    fun:target_with_star_atom_rule
+    fun:star_target_rule
+    fun:star_targets_rule
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:simple_stmt_rule
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:simple_stmts_rule
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:statements_rule
+    fun:UnknownInlinedFun
+    fun:_PyPegen_parse
+}
+{
+    defin_070
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyUnicode_FromUCS1.part.0
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:r_object
+    fun:r_object
+    fun:read_object
+    fun:UnknownInlinedFun
+    fun:marshal_loads
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+    fun:cfunction_vectorcall_FASTCALL_KEYWORDS
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+}
+{
+    defin_071
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:descr_new
+    fun:PyDescr_NewClassMethod
+    fun:type_add_method
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:type_ready
+    fun:init_static_type
+    fun:UnknownInlinedFun
+    fun:pycore_init_types
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+}
+{
+    defin_072
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:descr_new
+    fun:PyDescr_NewMember
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:type_ready
+    fun:init_static_type
+    fun:UnknownInlinedFun
+    fun:pycore_init_types
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_073
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:descr_new
+    fun:PyDescr_NewMethod
+    fun:type_add_method
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:type_ready
+    fun:_PyType_FromMetaclass_impl
+    fun:posixmodule_exec.cold
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+}
+{
+    defin_074
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyPegen_name_token
+    fun:primary_raw
+    fun:primary_rule
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:factor_rule
+    fun:term_raw
+    fun:term_rule
+    fun:UnknownInlinedFun
+    fun:sum_rule
+    fun:UnknownInlinedFun
+    fun:shift_expr_rule
+    fun:UnknownInlinedFun
+    fun:bitwise_and_rule
+    fun:UnknownInlinedFun
+    fun:bitwise_xor_rule
+}
+{
+    defin_075
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:init_interp_main
+    fun:pyinit_main
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_076
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyUnicode_InternFromString
+    fun:PyObject_SetAttrString
+    fun:_add_methods_to_object
+    fun:PyModule_FromDefAndSpec2
+    fun:import_run_extension.isra.0
+    fun:create_builtin
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+}
+{
+    defin_077
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyUnicode_InternFromString
+    fun:PyObject_SetAttrString
+    fun:_add_methods_to_object
+    fun:PyModule_AddFunctions
+    fun:_PyModule_CreateInitialized
+    fun:_PySys_Create
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+}
+{
+    reach_078
+    Memcheck:Leak
+    match-leak-kinds: reachable
+    fun:malloc
+    fun:_PyPathConfig_UpdateGlobal
+    fun:interpreter_update_config
+    fun:init_interp_main
+    fun:pyinit_main
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
+{
+    defin_079
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:descr_new
+    fun:PyDescr_NewMember
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:type_ready
+    fun:init_static_type
+    fun:_PyStructSequence_InitBuiltinWithFlags
+    fun:UnknownInlinedFun
+    fun:_PySys_Create
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+}
+{
+    defin_080
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyUnicode_InternFromString
+    fun:PyObject_SetAttrString
+    fun:_add_methods_to_object
+    fun:PyModule_AddFunctions
+    fun:_PyModule_CreateInitialized
+    fun:_PyBuiltin_Init
+    fun:UnknownInlinedFun
+    fun:pycore_interp_init
+    fun:UnknownInlinedFun
+    fun:pyinit_core.constprop.0
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+}
+{
+    defin_081
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:setup_confname_table
+    fun:UnknownInlinedFun
+    fun:posixmodule_exec.cold
+    fun:PyModule_ExecDef
+    fun:UnknownInlinedFun
+    fun:_imp_exec_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+    fun:PyObject_CallMethodObjArgs
+    fun:UnknownInlinedFun
+    fun:PyImport_ImportModuleLevelObject
+}
+{
+    defin_082
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyUnicode_InternFromString
+    fun:PyObject_SetAttrString
+    fun:_add_methods_to_object
+    fun:PyModule_FromDefAndSpec2
+    fun:import_run_extension.isra.0
+    fun:create_builtin
+    fun:_imp_create_builtin
+    fun:cfunction_vectorcall_O
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:_PyEval_EvalFrameDefault
+    fun:UnknownInlinedFun
+    fun:object_vacall
+}
+{
+    defin_083
+    Memcheck:Leak
+    match-leak-kinds: definite
+    fun:malloc
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:unicode_decode_utf8
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:PyDict_SetItemString
+    fun:_PyConfig_AsDict
+    fun:UnknownInlinedFun
+    fun:UnknownInlinedFun
+    fun:config_init_import
+    fun:UnknownInlinedFun
+    fun:init_interp_main
+    fun:pyinit_main
+    fun:Py_InitializeFromConfig
+    fun:Py_InitializeEx
+    fun:main
+}
