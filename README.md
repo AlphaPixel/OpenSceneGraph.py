@@ -52,10 +52,14 @@ OpenSceneGraph.so module and the hypothetical osgAcme.so module).
 
 # TODO
 
-- [ ] All of the corresponding "math" bindings; can the GLM python module serve in the interim?
+- [ ] Math
+  - [x] Vec
+  - [ ] Quat
+  - [ ] Matrix
 - [x] GUIEventHandler
 - [x] NodeCallback
 - [ ] Drawable/DrawCallback (tricky due to rendering pipeline and non-copyable args)
 - [ ] CameraManipulator (multimethod override, multiple overloads, non-copyable args)
 - [ ] Operation
 - [x] Basic osgViewer::Viewer demo
+- [ ] Demo secondary bindings **BASED ON** these

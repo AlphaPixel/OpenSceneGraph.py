@@ -134,6 +134,7 @@ namespace detail {
 
 void bind(py::module_& m);
 
+void bind_Vec(py::module_& m);
 void bind_Object(py::module_& m);
 void bind_Node(py::module_& m);
 void bind_NodeVisitor(py::module_& m);

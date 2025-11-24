@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include <pybind11/pybind11.h>
+#include <pybind11/operators.h>
 
 #define PYOSG_DISABLE_WARNINGS \
 	_Pragma("GCC diagnostic push") \
