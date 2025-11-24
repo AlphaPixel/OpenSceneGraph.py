@@ -10,8 +10,6 @@ PYOSG_ENABLE_WARNINGS
 
 namespace pyosgGA {
 
-// class OSGGA_EXPORT EventHandler: public osg::NodeCallback, public osg::DrawableEventCallback
-// NodeCallback <- Callback <- Object
 class GUIEventHandler: public osgGA::GUIEventHandler {
 public:
 	using osgGA::GUIEventHandler::GUIEventHandler;

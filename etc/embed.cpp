@@ -8,15 +8,16 @@ int main(int argc, char** argv) {
 	Py_Initialize();
 
 	if(!Py_IsInitialized()) {
-		std::cerr << "Failed to initialize Python\n";
+		std::cerr << "Failed to initialize Python" << std::endl;
 
 		return 1;
 	}
 
+	// Run any Python code here that you want to subject to Valgrind/ASAN sanity checks!
 	// PyRun_SimpleString("print('HelloWorld')");
 
 	// per CPython docs: nonzero if finalize fails
-	if(Py_FinalizeEx() < 0) return 1;
+	if(Py_FinalizeEx() < 0) return 2;
 
 	return 0;
 }

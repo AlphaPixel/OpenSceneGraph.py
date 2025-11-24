@@ -15,22 +15,9 @@ namespace detail {
 		using osg::NodeCallback::NodeCallback;
 
 		void operator()(osg::Node* node, osg::NodeVisitor* nv) override {
-			/* if(auto r = call_override<bool>("handle", this, node, nv); *r) osg::NodeCallback::operator()(node, nv);
+			auto r = call_override<bool>("handle", this, node, nv);
 
-			osg::NodeCallback::operator()(node, nv); */
-
-        // call_override<bool>:
-        //   - optional(true)  → Python returned True
-        //   - optional(false) → Python returned False
-        //   - empty optional  → Python returned None OR no override
-        auto r = call_override<bool>("handle", this, node, nv);
-
-        // default behavior = call base callback
-        bool call_base = r.value_or(true);
-
-        if (call_base)
-            osg::NodeCallback::operator()(node, nv);
-
+			if(r.value_or(true)) osg::NodeCallback::operator()(node, nv);
 		}
 	};
 }

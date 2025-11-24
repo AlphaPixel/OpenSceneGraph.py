@@ -20,6 +20,17 @@ namespace detail {
 		raise_error(PyExc_FileNotFoundError, msg.c_str());
 	}
 
+	// Constructors for pybind11 types cannot call methods of that type until AFTER it is created
+	// (obviously). We therefore need SOME unified, predictable way to create "chains" of
+	// initialization wherein each type/participant should add their supported keywords and then
+	// properly forward the unused arguments into their base classes.
+	//
+	// For example, both `Node` and `Group` define overrides of this template function (supporting
+	// different keyword-based arguments); once `Group` has performed the relevant processing, it
+	// necessarily calls its next bases' overide (so forth and so on).
+	//
+	// TODO: This will almost certainly need to be grouped with the "trampoline" wrappers that
+	// eventually go into their own shared "core" library!
 	template<typename T>
 	void kwargs_init(T& self, const py::kwargs& kwargs) {}
 
@@ -47,9 +58,9 @@ namespace detail {
 	});
 #endif
 
-	// Unified helper used by all trampoline classes to safely invoke a Python
-	// override for a virtual C++ method; we need this because PYBIND11_OVERRIDE doesn't really jive
-	// that well with OSG code. :(
+	// Unified helper used by all trampoline classes to safely invoke a Python override for a
+	// virtual C++ method; we need this because PYBIND11_OVERRIDE doesn't really jive that well
+	// with OSG code. :(
 	//
 	// It performs the following steps:
 	//
@@ -68,23 +79,22 @@ namespace detail {
 	// Return-value rules:
 	//   Ret = void
 	//       returns bool
-	//           true > override exists and was called
-	//           false > no override
+	//           true = override exists and was called
+	//           false = no override
 	//
 	//   Ret != void
 	//       returns std::optional<Ret>
-	//           optional(value) > override returned a concrete value
-	//           empty optional > no override OR Python returned None
+	//           optional(value) = override returned a concrete value
+	//           empty optional = no override OR Python returned None
 	//
 	// This behavior allows trampoline code to make clear decisions:
 	//
 	//       if (auto r = call_override<bool>(...)) { ... }
-	//
 	//       bool was_called = call_override<void>(...)
 	//
-	// Python returning None is treated as “no opinion / use default behavior”.
-	// This matches OSG semantics in NodeVisitor, NodeCallback, GUIEventHandler,
-	// and all other OSG virtual-call conventions.
+	// Python returning None is treated as “no opinion/use default behavior”. This (mostly) matches
+	// OSG semantics in NodeVisitor, NodeCallback, GUIEventHandler, and all other OSG virtual-call
+	// conventions where visitation/continuation can potentially be short-circuited.
 	template<typename Ret, typename Self, typename... Args>
 	auto call_override(const char* name, const Self* self, Args&&... args) {
 		// Always acquire the GIL before touching Python.
