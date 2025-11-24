@@ -18,7 +18,7 @@ namespace detail {
 	template<typename T, size_t I>
 	constexpr auto vec_set() { return [](T& v, typename T::value_type val) { v[I] = val; }; }
 
-	template<typename T, int N>
+	template<typename T, size_t N>
 	auto bind_Vec(py::module_& m, const char* name) {
 		using value_type = typename T::value_type;
 
@@ -54,24 +54,16 @@ namespace detail {
 
 			.def("__eq__", [](const T& a, const T& b) { return a == b; })
 
-			.def("__getitem__", [](const T& v, size_t i){
-				if(i >= N) throw py::index_error();
-
-				return v[i];
-			})
-
-			.def("__setitem__", [](T& v, size_t i, value_type val){
-				if(i >= N) throw py::index_error();
-
-				v[i] = val;
-			})
-
 			.def("__len__", [](const T&){ return N; })
 
 			.def("__iter__", [](const T& v){
 				py::tuple t(N);
 
-				for(size_t i = 0; i < N; i++) t[i] = v[i];
+				PYOSG_DISABLE_WARNINGS
+
+					for(size_t i = 0; i < N; i++) t[i] = v[i];
+
+				PYOSG_ENABLE_WARNINGS
 
 				return py::iter(t);
 			})
@@ -82,7 +74,11 @@ namespace detail {
 				ss << name << "(";
 
 				for(size_t i = 0; i < N; i++) {
-					ss << v[i];
+					PYOSG_DISABLE_WARNINGS
+
+						ss << v[i];
+
+					PYOSG_ENABLE_WARNINGS
 
 					if(i + 1 < N) ss << ", ";
 				}
@@ -102,6 +98,24 @@ namespace detail {
 				return a * b;
 			})
 		;
+
+		PYOSG_DISABLE_WARNINGS
+
+			vec
+				.def("__getitem__", [](const T& v, size_t i) {
+					if(i >= N) throw py::index_error();
+
+					return v[i];
+				})
+
+				.def("__setitem__", [](T& v, size_t i, value_type val){
+					if(i >= N) throw py::index_error();
+
+					v[i] = val;
+				})
+			;
+
+		PYOSG_ENABLE_WARNINGS
 
 		// Now we're going to start defining CONDITIONAL comile-time methods, based on the value of
 		// the template parameter N; I really love modern C++.
@@ -152,7 +166,7 @@ namespace detail {
 		return vec;
 	}
 
-	template<typename T, int N>
+	template<typename T, size_t N>
 	auto bind_alias_Vec(py::module_& m, const char* name, const char* alias) {
 		auto v = bind_Vec<T, N>(m, name);
 

@@ -46,7 +46,8 @@ void bind(py::module_& m) {
 		.def("test", [](osgViewer::Viewer* self) {
 			OSG_NOTICE << std::endl << "Doing test setup" << std::endl << std::endl;
 
-			self->setUpViewInWindow(1970, 50, 800, 600);
+			// self->setUpViewInWindow(1970, 50, 800, 600);
+			self->setThreadingModel(osgViewer::Viewer::SingleThreaded);
 			self->setCameraManipulator(new osgGA::TrackballManipulator());
 		})
 	;

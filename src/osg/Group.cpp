@@ -33,13 +33,14 @@ namespace detail {
 			return g->getNumChildren();
 		}
 
-		constexpr size_t _index(int index) const {
+		// constexpr size_t _index(int index) const {
+		constexpr auto _index(int index) const {
 			auto n = static_cast<int>(g->getNumChildren());
 
 			if(index < 0) index += n;
 			if(index < 0 || index >= n) throw py::index_error();
 
-			return static_cast<size_t>(index);
+			return static_cast<unsigned int>(index);
 		}
 
 		osg::Node* get(int index) const {

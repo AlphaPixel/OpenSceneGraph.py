@@ -84,6 +84,7 @@ find_package(OpenSceneGraph REQUIRED
 pybind11_add_module(OpenSceneGraph
 	"src/OpenSceneGraph-python.cpp"
 	"src/osg.cpp"
+	"src/osg/Notify.cpp"
 	"src/osg/Vec.cpp"
 	"src/osg/Object.cpp"
 	"src/osg/Node.cpp"

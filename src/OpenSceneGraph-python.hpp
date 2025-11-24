@@ -31,3 +31,16 @@ namespace py = pybind11;
 // Tell pybind11 that osg::ref_ptr<T> is a holder type for T.  The 3rd argument = true because
 // osg::ref_ptr<T> can safely be constructed from a raw T* (intrusive refcounting).
 PYBIND11_DECLARE_HOLDER_TYPE(T, osg::ref_ptr<T>, true);
+
+#ifdef _MSC_VER
+	// Make MSVC run our function before any global/static initializers
+	#pragma section(".CRT$XCU", read)
+	#define PYOSG_CONSTRUCTOR(func) \
+		static void __cdecl func(void); \
+		__declspec(allocate(".CRT$XCU")) void (__cdecl* func##_)(void) = func; \
+		static void __cdecl func(void)
+
+#else
+	// GCC/Clang
+	#define PYOSG_CONSTRUCTOR(func) __attribute__((constructor)) static void func(void)
+#endif

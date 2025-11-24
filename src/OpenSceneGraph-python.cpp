@@ -4,6 +4,10 @@
 #include "osgGA.hpp"
 #include "osgViewer.hpp"
 
+PYOSG_CONSTRUCTOR(pyosg_preinit) {
+	// std::cout << "PYOSG_CONSTRUCTOR: You can do your static init here..." << std::endl;
+}
+
 PYBIND11_MODULE(OpenSceneGraph, m) {
 	auto osg = m.def_submodule("osg", "osg namespace");
 
@@ -20,4 +24,11 @@ PYBIND11_MODULE(OpenSceneGraph, m) {
 	auto osgViewer = m.def_submodule("osgViewer", "osgViewer namespace");
 
 	pyosgViewer::bind(osgViewer);
+
+	/* py::module_ atexit = py::module_::import("atexit");
+
+	atexit.attr("register")(
+		py::cpp_function([]() {
+		})
+	); */
 }

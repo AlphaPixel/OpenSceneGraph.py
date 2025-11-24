@@ -52,6 +52,7 @@ OpenSceneGraph.so module and the hypothetical osgAcme.so module).
 
 # TODO
 
+- [ ] Threading supoport (see below)
 - [ ] Math
   - [x] Vec
   - [ ] Quat
@@ -63,3 +64,11 @@ OpenSceneGraph.so module and the hypothetical osgAcme.so module).
 - [ ] Operation
 - [x] Basic osgViewer::Viewer demo
 - [ ] Demo secondary bindings **BASED ON** these
+
+## TODO (Threading) **IMPORTANT!!!**
+
+This is going to be a HUGE headache, no matter WHAT we do. For now, we should
+**ENFORCE** a `SingleThreaded` model. Later, in order to FULLY support
+multithreaded processing, we'll need to utilize some kind of "event queue" or
+similar; Python has LONG be notorious for very poor paralellism when interacting
+with C/C++ extension modules.
