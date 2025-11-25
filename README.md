@@ -52,7 +52,7 @@ OpenSceneGraph.so module and the hypothetical osgAcme.so module).
 
 # TODO
 
-- [ ] Threading supoport (see below)
+- [ ] Threading support (see below)
 - [ ] Math
   - [x] Vec
   - [ ] Quat

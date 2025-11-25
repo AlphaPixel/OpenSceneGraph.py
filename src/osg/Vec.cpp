@@ -7,8 +7,6 @@ PYOSG_DISABLE_WARNINGS
 
 PYOSG_ENABLE_WARNINGS
 
-#include <sstream>
-
 namespace pyosg {
 
 namespace detail {
@@ -68,24 +66,25 @@ namespace detail {
 				return py::iter(t);
 			})
 
-			.def("__repr__", [name](const T& v){
-				std::ostringstream ss;
-
-				ss << name << "(";
+			.def("__repr__", [name](const T& v) {
+				py::gil_scoped_acquire gil;
+				py::list items;
 
 				for(size_t i = 0; i < N; i++) {
 					PYOSG_DISABLE_WARNINGS
 
-						ss << v[i];
+						// No matter WHAT the value_type is, lets give Python a double... a nice
+						// side-effect of how Python handles float-point numbers is that the
+						// `repr()` value of any true float-based type will CLEARLY indicate how a
+						// true 32bit float will look to the GPU!
+						auto val = py::float_(static_cast<double>(v[i]));
 
 					PYOSG_ENABLE_WARNINGS
 
-					if(i + 1 < N) ss << ", ";
+					items.append(py::repr(val));
 				}
 
-				ss << ")";
-
-				return ss.str();
+				return py::str("{}({})").format(name, py::str(", ").attr("join")(items));
 			})
 
 			// XXX: It turns out that `Vec * Vec` returns a SCALAR in C++, which is all fine and

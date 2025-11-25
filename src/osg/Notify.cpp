@@ -9,6 +9,10 @@ PYOSG_ENABLE_WARNINGS
 namespace pyosg {
 
 namespace detail {
+	// XXX: I've left the implementation of osg::NotifyHandler here for educational purposes. It
+	// does "work"--to some degree--but comes with many caveats due to how OSG uses a singleton
+	// approach for supporting notification.
+
 	/* struct NotifyHandler: public osg::NotifyHandler {
 		using osg::NotifyHandler::NotifyHandler;
 
@@ -26,23 +30,38 @@ namespace detail {
 		}
 	}; */
 
-	struct NotifyHandler: public osg::NotifyHandler {
-		py::object cb;
-
-		explicit NotifyHandler(py::object _cb):
-		cb(std::move(_cb)) {}
+	// Instead of the above, we setup our bindings to accept a generic, callable Python object to
+	// use as the "handler" for all notifications. This could be a function, a lambda, or a class
+	// with the `__call__` method defined.
+	//
+	// TODO: Since we'll likely use this technique in a few places, it makes sense to generalize at
+	// some point (osg::ArgumentParser, osg::DisplaySettings, etc); ANYTHING that OSG stores as
+	// static data and exposes via a singleton API.
+	class NotifyHandler: public osg::NotifyHandler {
+	public:
+		explicit NotifyHandler(py::object cb):
+		_cb(std::move(cb)) {}
 
 		void notify(osg::NotifySeverity sev, const char* msg) override {
 			py::gil_scoped_acquire gil;
 
 			try {
-				cb(sev, msg);
+				_cb(sev, msg);
 			}
 
 			catch(const py::error_already_set&) {
 				PyErr_Print();
 			}
 		}
+
+		py::object getCallback() {
+			if(!_cb || _cb.is_none()) return py::none();
+
+			return _cb;
+		}
+
+	protected:
+		py::object _cb;
 	};
 
 	static osg::ref_ptr<NotifyHandler> notifyHandler = nullptr;
@@ -80,14 +99,17 @@ void bind_Notify(py::module_& m) {
 		.def("getNotifyHandler", []() -> py::object {
 			if(!detail::notifyHandler.valid()) return py::none();
 
-			if(
+			/* if(
 				!detail::notifyHandler->cb ||
 				!detail::notifyHandler->cb.is_none()
 			) return py::none();
 
-			return detail::notifyHandler->cb;
+			return detail::notifyHandler->cb; */
+
+			return detail::notifyHandler->getCallback();
 		})
-		.def("setNotifyHandler", [](py::object cb) {
+		.def("setNotifyHandler", [](const py::object& cb) {
+			// Clear handler with the `None` argument.
 			if(cb.is_none()) {
 				osg::setNotifyHandler(nullptr);
 
@@ -96,9 +118,12 @@ void bind_Notify(py::module_& m) {
 				return;
 			}
 
+			// Whatever is passed-in MUST be a callable object!
+			if(!PyCallable_Check(cb.ptr())) throw py::type_error("Expected a callable or None");
+
 			detail::notifyHandler = new detail::NotifyHandler(cb);
 
-			osg::setNotifyHandler(detail::notifyHandler);
+			osg::setNotifyHandler(detail::notifyHandler.get());
 		})
 		.def("getNotifyLevel", &osg::getNotifyLevel)
 		.def("setNotifyLevel", [](osg::NotifySeverity level) {
