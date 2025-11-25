@@ -5,7 +5,7 @@
 #include "osgViewer.hpp"
 
 PYOSG_CONSTRUCTOR(pyosg_preinit) {
-	// std::cout << "PYOSG_CONSTRUCTOR: You can do your static init here..." << std::endl;
+	// OSG_INFO << "PYOSG_CONSTRUCTOR: You can do your static init here..." << std::endl;
 }
 
 PYBIND11_MODULE(OpenSceneGraph, m) {

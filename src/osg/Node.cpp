@@ -35,8 +35,6 @@ void bind_Node(py::module_& m) {
 		// }, py::keep_alive<2, 1>())
 		})
 		/* .def("traverse", [](osg::Node* self, osg::NodeVisitor* nv) {
-			std::cout << "INSIDE .def(\"traverse\"), [](){}" << std::endl;
-
 			self->traverse(*nv);
 		// }, py::keep_alive<2, 1>())
 		}) */

@@ -14,14 +14,11 @@ namespace detail {
 	void kwargs_init(osg::Group& self, const py::kwargs& kwargs) {
 		kwargs_init(static_cast<osg::Node&>(self), kwargs);
 
-		// if constexpr(!std::is_same_v<osg::Group, osg::Node>) kwargs_init(static_cast<osg::Node&>(group), kw);
-
 		if(kwargs.contains("children")) {
 			for(py::handle child : kwargs["children"]) {
 				self.addChild(child.cast<osg::Node*>());
 			}
 		}
-
 	}
 
 	struct ChildrenProxy {
@@ -33,7 +30,6 @@ namespace detail {
 			return g->getNumChildren();
 		}
 
-		// constexpr size_t _index(int index) const {
 		constexpr auto _index(int index) const {
 			auto n = static_cast<int>(g->getNumChildren());
 
@@ -56,14 +52,14 @@ namespace detail {
 		}
 
 		void append(osg::Node* n) {
-			g->addChild(n);
+			// We call the PYTHON METHOD to make sure `keep_alive` is applied.
+			py::cast(g).attr("addChild")(n);
 		}
 
 		void extend(py::object iterable) {
 			for(py::handle item : iterable) {
-				auto* n = item.cast<osg::Node*>();
-
-				g->addChild(n);
+				// See `append` above.
+				py::cast(g).attr("addChild")(item.cast<osg::Node*>());
 			}
 		}
 	};
@@ -90,33 +86,31 @@ void bind_Group(py::module_& m) {
 
 			return g;
 		}))
-#if 0
 		.def("addChild", [](osg::Group* self, osg::Node* child) {
 			return self->addChild(child);
-		}, py::arg("child"))
+		}, py::arg("child"), py::keep_alive<1, 2>())
+		.def("getChild",
+			static_cast<osg::Node*(osg::Group::*)(unsigned int)>(&osg::Group::getChild),
+			py::return_value_policy::reference_internal
+		)
 		.def("getNumChildren", &osg::Group::getNumChildren)
-		.def("getChild", [](osg::Group* self, unsigned int index) {
-			return self->getChild(index);
-		}, py::arg("index"))
-		// .def("getChild", static_cast<osg::Node*(osg::Group::*)(unsigned int)>(&osg::Group::getChild))
-		/* .def("addChildren", [](osg::Group* self, py::object obj) {
-			if(py::isinstance<py::iterable>(obj)) {
-				for(auto item : obj) {
-					// osg::Node* child = item.cast<osg::Node*>();
-					auto* child = item.cast<osg::Node*>();
-
-					self->addChild(child);
-				}
-			}
-
-			else {
-				// osg::Node* child = obj.cast<osg::Node*>();
-				auto* child = obj.cast<osg::Node*>();
-
-				self->addChild(child);
-			}
-		},
-		py::arg("children")) */
+		.def("removeChild",
+			static_cast<bool(osg::Group::*)(osg::Node*)>(&osg::Group::removeChild),
+			py::arg("child")
+		)
+		.def("removeChildren",
+			&osg::Group::removeChildren,
+			py::arg("index"),
+			py::arg("numChildren")
+		)
+		.def("replaceChild",
+			[](osg::Group* self, osg::Node* oldChild, osg::Node* newChild) {
+				return self->replaceChild(oldChild, newChild);
+			},
+			py::arg("oldChild"),
+			py::arg("newChild"),
+			py::keep_alive<1, 3>()
+		)
 		.def("addChildren", [](osg::Group* self, const py::args& args) {
 			int count = 0;
 
@@ -129,7 +123,11 @@ void bind_Group(py::module_& m) {
 			return count;
 		},
 		"Add one or more children. Returns number of children added.")
-#endif
+		// This is the more Pythonic way ot interacting with child nodes; people will EXPECT IT.
+		// However, it does introduce "identity" errors, since it returns a new instance every call;
+		// this means code like the following will fail: `g.children[0] is g.children[0]`, but it's
+		// unlikely people will actually check against identity like that. Much more frequently will
+		// be checks for EQUALITY (and those will SUCCEED).
 		.def_property_readonly("children", [](osg::Group* g) {
 			return detail::ChildrenProxy(g);
 		})

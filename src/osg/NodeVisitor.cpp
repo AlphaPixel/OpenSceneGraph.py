@@ -22,7 +22,7 @@ namespace detail {
 
 		void apply(osg::Node& node) override {
 			// Optional logging: keep or delete.
-			std::cout
+			OSG_INFO
 				<< "detail::NodeVisitor::apply(Node&)"
 				<< " this=" << this
 				<< " typeid=" << typeid(node).name()
@@ -46,7 +46,7 @@ namespace detail {
 		// Keep Group overload ONLY to collapse to Node path.
 		// No logging, no Python dispatch here.
 		void apply(osg::Group& group) override {
-			std::cout
+			OSG_INFO
 				<< "detail::NodeVisitor::apply(Geode&)"
 				<< " this=" << this
 				<< " typeid=" << typeid(group).name()
