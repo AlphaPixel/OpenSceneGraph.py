@@ -99,16 +99,9 @@ void bind_Notify(py::module_& m) {
 		.def("getNotifyHandler", []() -> py::object {
 			if(!detail::notifyHandler.valid()) return py::none();
 
-			/* if(
-				!detail::notifyHandler->cb ||
-				!detail::notifyHandler->cb.is_none()
-			) return py::none();
-
-			return detail::notifyHandler->cb; */
-
 			return detail::notifyHandler->getCallback();
 		})
-		.def("setNotifyHandler", [](const py::object& cb) {
+		.def("setNotifyHandler", [](py::object cb) {
 			// Clear handler with the `None` argument.
 			if(cb.is_none()) {
 				osg::setNotifyHandler(nullptr);

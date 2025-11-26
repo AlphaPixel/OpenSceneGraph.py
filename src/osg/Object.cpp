@@ -14,6 +14,16 @@ void bind_Object(py::module_& m) {
 		.def_property("name", &osg::Object::getName, [](osg::Object* self, const std::string& name) {
 			self->setName(name);
 		})
+		.def("ref", [](osg::Object* self) {
+			self->ref();
+
+			return self;
+		})
+		.def("unref", [](osg::Object* self) {
+			self->unref();
+
+			return self;
+		})
 	;
 }
 

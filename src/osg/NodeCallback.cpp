@@ -15,7 +15,7 @@ namespace detail {
 		using osg::NodeCallback::NodeCallback;
 
 		void operator()(osg::Node* node, osg::NodeVisitor* nv) override {
-			auto r = call_override<bool>("handle", this, node, nv);
+			auto r = call_override<bool>("__call__", this, node, nv);
 
 			if(r.value_or(true)) osg::NodeCallback::operator()(node, nv);
 		}
@@ -25,7 +25,7 @@ namespace detail {
 void bind_NodeCallback(py::module_& m) {
 	py::class_<osg::NodeCallback, detail::NodeCallback, osg::Object, osg::ref_ptr<osg::NodeCallback>>(m, "NodeCallback")
 		.def(py::init<>())
-		.def("handle", [](osg::NodeCallback* self, osg::Node* node, osg::NodeVisitor* nv) {
+		.def("__call__", [](osg::NodeCallback* self, osg::Node* node, osg::NodeVisitor* nv) {
 			// Manual forwarding; ensures Python sees correct signature.
 			return;
 		})
