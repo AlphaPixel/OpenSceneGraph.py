@@ -68,7 +68,15 @@ namespace detail {
 			})
 
 			.def("__repr__", [name](const T& v) {
-				py::list items;
+				return seq_repr<N>(name, [&](size_t i) {
+					PYOSG_DISABLE_WARNINGS
+
+						return v[i];
+
+					PYOSG_ENABLE_WARNINGS
+				});
+
+				/* py::list items;
 
 				for(size_t i = 0; i < N; i++) {
 					PYOSG_DISABLE_WARNINGS
@@ -84,7 +92,7 @@ namespace detail {
 					items.append(py::repr(val));
 				}
 
-				return py::str("{}({})").format(name, py::str(", ").attr("join")(items));
+				return py::str("{}({})").format(name, py::str(", ").attr("join")(items)); */
 			})
 
 			// XXX: It turns out that `Vec * Vec` returns a SCALAR in C++, which is all fine and

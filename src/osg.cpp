@@ -5,6 +5,7 @@ namespace pyosg {
 void bind(py::module_& m) {
 	bind_Notify(m);
 	bind_Vec(m);
+	bind_Matrix(m);
 	bind_Bound(m);
 	bind_Object(m);
 	bind_Node(m);

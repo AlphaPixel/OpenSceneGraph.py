@@ -20,6 +20,22 @@ namespace detail {
 		raise_error(PyExc_FileNotFoundError, msg.c_str());
 	}
 
+	template<size_t N, typename Getter>
+	py::str seq_repr(const char* name, Getter get) {
+		py::list items;
+
+		for(size_t i = 0; i < N; i++) {
+			auto val = py::float_(static_cast<double>(get(i)));
+
+			items.append(py::repr(val));
+		}
+
+		return py::str("{}({})").format(
+			name,
+			py::str(", ").attr("join")(items)
+		);
+	}
+
 	// Constructors for pybind11 types cannot call methods of that type until AFTER it is created
 	// (obviously). We therefore need SOME unified, predictable way to create "chains" of
 	// initialization wherein each type/participant should add their supported keywords and then
@@ -143,6 +159,7 @@ void bind(py::module_& m);
 
 void bind_Notify(py::module_& m);
 void bind_Vec(py::module_& m);
+void bind_Matrix(py::module_& m);
 void bind_Bound(py::module_& m);
 void bind_Object(py::module_& m);
 void bind_Node(py::module_& m);

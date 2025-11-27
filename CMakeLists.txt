@@ -86,6 +86,7 @@ pybind11_add_module(OpenSceneGraph
 	"src/osg.cpp"
 	"src/osg/Notify.cpp"
 	"src/osg/Vec.cpp"
+	"src/osg/Matrix.cpp"
 	"src/osg/Bound.cpp"
 	"src/osg/Object.cpp"
 	"src/osg/Node.cpp"
