@@ -90,11 +90,11 @@ void bind_NodeVisitor(py::module_& m) {
 		) */
 		.def("traverse", &osg::NodeVisitor::traverse, py::arg("node"))
 		// .def("_traverse", &detail::NodeVisitor::_traverse, py::arg("node"))
-		.def("_traverse", [](detail::NodeVisitor* self, osg::Node& node) {
-			self->_traverse(node);
+		.def("_traverse", [](detail::NodeVisitor& self, osg::Node& node) {
+			self._traverse(node);
 		})
-		/* .def("apply", [](osg::NodeVisitor* self, osg::Node& node) {
-			return self->apply(node);
+		/* .def("apply", [](osg::NodeVisitor& self, osg::Node& node) {
+			return self.apply(node);
 		}) */
 		.def("apply", (void (osg::NodeVisitor::*)(osg::Node&)) &osg::NodeVisitor::apply)
 		// .def("apply", (void (osg::NodeVisitor::*)(osg::Group&)) &osg::NodeVisitor::apply)

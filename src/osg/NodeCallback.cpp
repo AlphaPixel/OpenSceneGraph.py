@@ -25,7 +25,7 @@ namespace detail {
 void bind_NodeCallback(py::module_& m) {
 	py::class_<osg::NodeCallback, detail::NodeCallback, osg::Object, osg::ref_ptr<osg::NodeCallback>>(m, "NodeCallback")
 		.def(py::init<>())
-		.def("__call__", [](osg::NodeCallback* self, osg::Node* node, osg::NodeVisitor* nv) {
+		.def("__call__", [](osg::NodeCallback& self, osg::Node* node, osg::NodeVisitor* nv) {
 			// Manual forwarding; ensures Python sees correct signature.
 			return;
 		})

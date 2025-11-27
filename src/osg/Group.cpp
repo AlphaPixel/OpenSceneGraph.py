@@ -86,8 +86,8 @@ void bind_Group(py::module_& m) {
 
 			return g;
 		}))
-		.def("addChild", [](osg::Group* self, osg::Node* child) {
-			return self->addChild(child);
+		.def("addChild", [](osg::Group& self, osg::Node* child) {
+			return self.addChild(child);
 		}, py::arg("child"), py::keep_alive<1, 2>())
 		.def("getChild",
 			static_cast<osg::Node*(osg::Group::*)(unsigned int)>(&osg::Group::getChild),
@@ -104,20 +104,20 @@ void bind_Group(py::module_& m) {
 			py::arg("numChildren")
 		)
 		.def("replaceChild",
-			[](osg::Group* self, osg::Node* oldChild, osg::Node* newChild) {
-				return self->replaceChild(oldChild, newChild);
+			[](osg::Group& self, osg::Node* oldChild, osg::Node* newChild) {
+				return self.replaceChild(oldChild, newChild);
 			},
 			py::arg("oldChild"),
 			py::arg("newChild"),
 			py::keep_alive<1, 3>()
 		)
-		.def("addChildren", [](osg::Group* self, const py::args& args) {
+		.def("addChildren", [](osg::Group& self, const py::args& args) {
 			int count = 0;
 
 			for(auto item : args) {
 				auto* child = item.cast<osg::Node*>();
 
-				if(self->addChild(child)) count++;
+				if(self.addChild(child)) count++;
 			}
 
 			return count;
@@ -128,8 +128,8 @@ void bind_Group(py::module_& m) {
 		// this means code like the following will fail: `g.children[0] is g.children[0]`, but it's
 		// unlikely people will actually check against identity like that. Much more frequently will
 		// be checks for EQUALITY (and those will SUCCEED).
-		.def_property_readonly("children", [](osg::Group* g) {
-			return detail::ChildrenProxy(g);
+		.def_property_readonly("children", [](osg::Group& self) {
+			return detail::ChildrenProxy(&self);
 		})
 	;
 }

@@ -73,8 +73,8 @@ void bind(py::module_& m) {
 	py::class_<osgGA::GUIEventHandler, GUIEventHandler, osg::Object, osg::ref_ptr<osgGA::GUIEventHandler>>(m, "GUIEventHandler")
 		.def(py::init_alias<>())
 		// .def("handle", py::overload_cast<const osgGA::GUIEventAdapter&, osgGA::GUIActionAdapter&>(&osgGA::GUIEventHandler::handle))
-		.def("handle", [](osgGA::GUIEventHandler* self, const osgGA::GUIEventAdapter& ea, osgGA::GUIActionAdapter& aa) {
-			return self->handle(ea, aa, nullptr, nullptr);
+		.def("handle", [](osgGA::GUIEventHandler& self, const osgGA::GUIEventAdapter& ea, osgGA::GUIActionAdapter& aa) {
+			return self.handle(ea, aa, nullptr, nullptr);
 		})
 	;
 }

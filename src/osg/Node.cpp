@@ -25,17 +25,18 @@ void bind_Node(py::module_& m) {
 
 			return n;
 		}))
-		.def("setUpdateCallback", [](osg::Node* self, osg::NodeCallback* cb) {
-			self->setUpdateCallback(cb);
+		.def("setUpdateCallback", [](osg::Node& self, osg::NodeCallback* cb) {
+			// TODO: What happens when cb is nullptr?
+			self.setUpdateCallback(cb);
 		}, py::keep_alive<1, 2>())
 		// NOTE: We do NOT use py::keep_alive here, since the visitor will stay alive the entirety
 		// of this call, even IF you do something like: node.accept(PythonVistor()).
-		.def("accept", [](osg::Node* self, osg::NodeVisitor* nv) {
-			self->accept(*nv);
+		.def("accept", [](osg::Node& self, osg::NodeVisitor* nv) {
+			self.accept(*nv);
 		// }, py::keep_alive<2, 1>())
 		})
-		/* .def("traverse", [](osg::Node* self, osg::NodeVisitor* nv) {
-			self->traverse(*nv);
+		/* .def("traverse", [](osg::Node& self, osg::NodeVisitor* nv) {
+			self.traverse(*nv);
 		// }, py::keep_alive<2, 1>())
 		}) */
 		.def_property("nodeMask", &osg::Node::getNodeMask, &osg::Node::setNodeMask)

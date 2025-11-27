@@ -15,13 +15,13 @@ void bind(py::module_& m) {
 	py::class_<osgViewer::View, osg::View, osg::ref_ptr<osgViewer::View>>(m, "View")
 		.def(py::init<>())
 		// .def("addEventHandler", &osgViewer::View::addEventHandler)
-		.def("addEventHandler", [](osgViewer::View* self, py::object obj) {
+		.def("addEventHandler", [](osgViewer::View& self, py::object obj) {
 			auto* handler = obj.cast<osgGA::GUIEventHandler*>();
 
-			self->addEventHandler(handler);
+			self.addEventHandler(handler);
 		}, py::keep_alive<1, 2>())
-		.def("setSceneData", [](osgViewer::View* self, osg::Node* node) {
-			self->setSceneData(node);
+		.def("setSceneData", [](osgViewer::View& self, osg::Node* node) {
+			self.setSceneData(node);
 		}, py::keep_alive<1, 2>())
 	;
 
@@ -33,22 +33,22 @@ void bind(py::module_& m) {
 			&osgViewer::ViewerBase::setDone,
 			"TODO"
 		)
-		.def("frame", [](osgViewer::ViewerBase* self) {
+		.def("frame", [](osgViewer::ViewerBase& self) {
 			py::gil_scoped_release release;
 
-			self->frame();
+			self.frame();
 		})
 	;
 
 	py::class_<osgViewer::Viewer, osgViewer::ViewerBase, osgViewer::View, osg::ref_ptr<osgViewer::Viewer>>(m, "Viewer")
 		.def(py::init<>())
 		// TODO: This is where I put stuff I NEED to call, but haven't wrapped (YET)!
-		.def("test", [](osgViewer::Viewer* self) {
+		.def("test", [](osgViewer::Viewer& self) {
 			OSG_NOTICE << std::endl << "Doing test setup" << std::endl << std::endl;
 
-			// self->setUpViewInWindow(1970, 50, 800, 600);
-			self->setThreadingModel(osgViewer::Viewer::SingleThreaded);
-			self->setCameraManipulator(new osgGA::TrackballManipulator());
+			// self.setUpViewInWindow(1970, 50, 800, 600);
+			self.setThreadingModel(osgViewer::Viewer::SingleThreaded);
+			self.setCameraManipulator(new osgGA::TrackballManipulator());
 		})
 	;
 }

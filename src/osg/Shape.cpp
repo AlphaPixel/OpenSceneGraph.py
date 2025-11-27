@@ -34,19 +34,19 @@ void bind_Shape(py::module_& m) {
 
 			return s;
 		})) */
-		.def("__bool__", [](const osg::Sphere* self) {
-			return self->valid();
+		.def("__bool__", [](const osg::Sphere& self) {
+			return self.valid();
 		})
-		.def("__repr__", [](const osg::Sphere* self) {
+		.def("__repr__", [](const osg::Sphere& self) {
 			return py::str("Sphere(center={}, radius={})").format(
-				self->getCenter(),
-				self->getRadius()
+				self.getCenter(),
+				self.getRadius()
 			);
 		})
 		.def("valid", &osg::Sphere::valid)
 #if 0
-		.def("accept", [](osg::Node* self, osg::NodeVisitor* nv) {
-			self->accept(*nv);
+		.def("accept", [](osg::Shape& self, osg::ShapeVisitor* nv) {
+			self.accept(*nv);
 		// }, py::keep_alive<2, 1>())
 		})
 #endif
@@ -68,13 +68,13 @@ void bind_Shape(py::module_& m) {
 
 			return s;
 		}))
-		.def("__bool__", [](const osg::Box* self) {
-			return self->valid();
+		.def("__bool__", [](const osg::Box& self) {
+			return self.valid();
 		})
-		.def("__repr__", [](const osg::Box* self) {
+		.def("__repr__", [](const osg::Box& self) {
 			return py::str("Sphere(center={}, halfLengths={})").format(
-				self->getCenter(),
-				self->getHalfLengths()
+				self.getCenter(),
+				self.getHalfLengths()
 			);
 		})
 		.def("valid", &osg::Box::valid)
