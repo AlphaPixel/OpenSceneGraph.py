@@ -22,6 +22,7 @@ namespace detail {
 
 		auto vec = py::class_<T>(m, name)
 			.def(py::init<>())
+			.def(py::init<const T&>())
 
 			.def(py::self + py::self)
 			.def(py::self - py::self)
