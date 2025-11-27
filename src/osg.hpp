@@ -34,6 +34,13 @@ namespace detail {
 	template<typename T>
 	void kwargs_init(T& self, const py::kwargs& kwargs) {}
 
+	/* template<typename T, typename... Args>
+	static T* kwargs_ctor(py::kwargs& kwargs, Args&&... args) {
+		auto* obj = new T(std::forward<Args>(args)...);
+		init_kwargs(obj, kw);
+		return obj;
+	} */
+
 #if 0
 	template<typename Container, typename ElementPtr, typename Adder>
 	void init_iterable(
@@ -136,11 +143,13 @@ void bind(py::module_& m);
 
 void bind_Notify(py::module_& m);
 void bind_Vec(py::module_& m);
+void bind_Bound(py::module_& m);
 void bind_Object(py::module_& m);
 void bind_Node(py::module_& m);
 void bind_NodeVisitor(py::module_& m);
 void bind_NodeCallback(py::module_& m);
 void bind_Group(py::module_& m);
+void bind_Shape(py::module_& m);
 void bind_View(py::module_& m);
 
 }
