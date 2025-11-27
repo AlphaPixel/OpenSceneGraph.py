@@ -67,7 +67,6 @@ namespace detail {
 			})
 
 			.def("__repr__", [name](const T& v) {
-				py::gil_scoped_acquire gil;
 				py::list items;
 
 				for(size_t i = 0; i < N; i++) {
