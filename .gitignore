@@ -1,5 +1,6 @@
 test/__pycache__
 etc/__pycache__
+BUILD-*
 
 # Prerequisites
 *.d
