@@ -11,7 +11,6 @@ namespace pyosg {
 namespace detail {
 	template<size_t N, std::integral... Args>
 	constexpr void assert_indices(Args... args) {
-		// if(!((args >= 0 && args < static_cast<int>(N)) && ...)) {
 		if(!((args >= 0 && args < N) && ...)) {
 			throw py::index_error("indices not in range 0-"s + std::to_string(N - 1));
 		}
@@ -129,82 +128,19 @@ namespace detail {
 				double, double,
 				double, double
 			>(&T::makeOrtho))
-			/* .def("getOrtho", py::overload_cast<
-				value_type&, value_type&,
-				value_type&, value_type&,
-				value_type&, value_type&
-			>(&T::getOrtho)) */
-
-#if 0
-			void makeOrtho(double left,   double right,
-				double bottom, double top,
-				double zNear,  double zFar);
-
-			bool getOrtho(double& left,   double& right,
-				double& bottom, double& top,
-				double& zNear,  double& zFar) const;
-
-			bool getOrtho(float& left,   float& right,
-				float& bottom, float& top,
-				float& zNear,  float& zFar) const;
-
-			inline void makeOrtho2D(double left,   double right,
-				double bottom, double top)
-
-			void makeFrustum(double left,   double right,
-				double bottom, double top,
-				double zNear,  double zFar);
-
-			bool getFrustum(double& left,   double& right,
-				double& bottom, double& top,
-				double& zNear,  double& zFar) const;
-
-			bool getFrustum(float& left,   float& right,
-				float& bottom, float& top,
-				float& zNear,  float& zFar) const;
-
-			void makePerspective(double fovy,  double aspectRatio,
-				double zNear, double zFar);
-
-			bool getPerspective(double& fovy,  double& aspectRatio,
-				double& zNear, double& zFar) const;
-
-			bool getPerspective(float& fovy,  float& aspectRatio,
-				float& zNear, float& zFar) const;
-
-			void makeLookAt(const Vec3d& eye,const Vec3d& center,const Vec3d& up);
-
-			void getLookAt(Vec3f& eye,Vec3f& center,Vec3f& up,
-				value_type lookDistance=1.0f) const;
-
-			void getLookAt(Vec3d& eye,Vec3d& center,Vec3d& up,
-				value_type lookDistance=1.0f) const;
-
-			inline bool invert( const Matrixf& rhs)
-
-			bool invert_4x3( const Matrixf& rhs);
-
-			bool invert_4x4( const Matrixf& rhs);
-
-			bool transpose(const Matrixf&rhs);
-
-			bool transpose3x3(const Matrixf&rhs);
-
-			void orthoNormalize(const Matrixf& rhs);
-#endif
-
-			/* .def("decompose", py::overload_cast<
-				osg::Vec3f&,
-				osg::Quat&,
-				osg::Vec3f&,
-				osg::Quat&
-			>(&T::decompose, py::const_))
-			.def("decompose", py::overload_cast<
-				osg::Vec3d&,
-				osg::Quat&,
-				osg::Vec3d&,
-				osg::Quat&
-			>(&T::decompose, py::const_)) */
+			.def("makeOrtho2D", py::overload_cast<
+				double, double,
+				double, double
+			>(&T::makeOrtho2D))
+			.def("makeFrustum", &T::makeFrustum)
+			.def("makePerspective", &T::makePerspective)
+			.def("makeLookAt", &T::makeLookAt)
+			.def("invert", &T::invert)
+			.def("invert_4x3", &T::invert_4x3)
+			.def("invert_4x4", &T::invert_4x4)
+			.def("transpose", &T::transpose)
+			.def("transpose3x3", &T::transpose3x3)
+			.def("orthoNormalize", &T::orthoNormalize)
 
 			.def("decompose", [](const T& self) {
 				typename MatrixTraits<T>::Vec3 translation, scale;
@@ -213,6 +149,34 @@ namespace detail {
 				self.decompose(translation, rotation, scale, so);
 
 				return py::make_tuple(translation, rotation, scale, so);
+			})
+			.def("getOrtho", [](const T& self) {
+				value_type left, right, bottom, top, near, far;
+
+				self.getOrtho(left, right, bottom, top, near, far);
+
+				return py::make_tuple(left, right, bottom, top, near, far);
+			})
+			.def("getFrustum", [](const T& self) {
+				value_type left, right, bottom, top, near, far;
+
+				self.getFrustum(left, right, bottom, top, near, far);
+
+				return py::make_tuple(left, right, bottom, top, near, far);
+			})
+			.def("getPerspective", [](const T& self) {
+				value_type fovy, ar, near, far;
+
+				self.getPerspective(fovy, ar, near, far);
+
+				return py::make_tuple(fovy, ar, near, far);
+			})
+			.def("getLookAt", [](const T& self, value_type distance=static_cast<value_type>(1.0)) {
+				typename MatrixTraits<T>::Vec3 eye, center, up;
+
+				self.getLookAt(eye, center, up, distance);
+
+				return py::make_tuple(eye, center, up);
 			})
 
 			.def_static("identity", &T::identity)
@@ -256,11 +220,20 @@ namespace detail {
 			.def_static("inverse", &T::inverse)
 			.def_static("orthoNormal", &T::orthoNormal)
 
-			// .def_static("ortho", &T::ortho)
-			// .def_static("ortho2D", &T::ortho2D)
-			// .def_static("frustum", &T::frustum)
-			// .def_static("perspective", &T::perspective)
-			// .def_static("lookAt", &T::lookAt)
+			.def_static("ortho", &T::ortho)
+			.def_static("ortho2D", &T::ortho2D)
+			.def_static("frustum", &T::frustum)
+			.def_static("perspective", &T::perspective)
+			.def_static("lookAt", py::overload_cast<
+				const osg::Vec3f&,
+				const osg::Vec3f&,
+				const osg::Vec3f&
+			>(&T::lookAt))
+			.def_static("lookAt", py::overload_cast<
+				const osg::Vec3d&,
+				const osg::Vec3d&,
+				const osg::Vec3d&
+			>(&T::lookAt))
 		;
 	}
 }
