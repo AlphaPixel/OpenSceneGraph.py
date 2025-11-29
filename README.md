@@ -1,3 +1,17 @@
+# TLDR
+
+If you don't want to [read the Overview](Overview), if something is misbehaving
+it's USUALLY one of these things:
+
+- Are you using `py::return_value_policy::referenced` correctly when returning a
+  pointer/reference to another wrapped object?
+- If you're ACCEPTING a wrapped object, are you using `py::keep_alive<>` (if
+  necessary)?
+- If an instance is constructed in C++ but needs to support virtual method
+  override by derived classes in Python, you must make use of a "trampoline." In
+  some cases simply calling `PYBIND_OVERRIDE{_PURE}` will be enough; if not,
+  [refer to the comments](src/osg.hpp#84) of `pyosg::detail::call_override`.
+
 # Overview
 
 Slowly migrating existing research/code/attempts into this repository to build a

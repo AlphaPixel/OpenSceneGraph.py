@@ -119,8 +119,8 @@ void bind_Notify(py::module_& m) {
 			osg::setNotifyHandler(detail::notifyHandler.get());
 		})
 		.def("getNotifyLevel", &osg::getNotifyLevel)
-		.def("setNotifyLevel", [](osg::NotifySeverity level) {
-			osg::setNotifyLevel(level);
+		.def("setNotifyLevel", [](osg::NotifySeverity severity) {
+			osg::setNotifyLevel(severity);
 		}, py::arg("severity"))
 		.def("isNotifyEnabled", &osg::isNotifyEnabled)
 		.def("always", [](const char* msg) { OSG_ALWAYS << msg << std::endl; })

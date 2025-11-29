@@ -11,7 +11,9 @@ void bind(py::module_& m) {
 	bind_Node(m);
 	bind_NodeVisitor(m);
 	bind_NodeCallback(m);
+	bind_Drawable(m);
 	bind_Group(m);
+	bind_Geode(m);
 	bind_Shape(m);
 	bind_View(m);
 }

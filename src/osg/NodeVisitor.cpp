@@ -1,4 +1,3 @@
-#include "../OpenSceneGraph-python.hpp"
 #include "../osg.hpp"
 
 PYOSG_DISABLE_WARNINGS
@@ -96,8 +95,7 @@ void bind_NodeVisitor(py::module_& m) {
 		/* .def("apply", [](osg::NodeVisitor& self, osg::Node& node) {
 			return self.apply(node);
 		}) */
-		.def("apply", (void (osg::NodeVisitor::*)(osg::Node&)) &osg::NodeVisitor::apply)
-		// .def("apply", (void (osg::NodeVisitor::*)(osg::Group&)) &osg::NodeVisitor::apply)
+		.def("apply", static_cast<void (osg::NodeVisitor::*)(osg::Node&)>(&osg::NodeVisitor::apply))
 		.def_property("traversalMask", &osg::NodeVisitor::getTraversalMask, &osg::NodeVisitor::setTraversalMask)
 		.def_property("traversalMode", &osg::NodeVisitor::getTraversalMode, &osg::NodeVisitor::setTraversalMode)
 	;

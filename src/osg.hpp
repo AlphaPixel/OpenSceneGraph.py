@@ -57,30 +57,6 @@ namespace detail {
 		return obj;
 	} */
 
-#if 0
-	template<typename Container, typename ElementPtr, typename Adder>
-	void init_iterable(
-		Container& obj,
-		const py::kwargs& kw,
-		const char* key,
-		Adder add // lambda taking (Container&, ElementPtr)
-	) {
-		if(!kw.contains(key)) return;
-
-		py::object seq = kw[key];
-
-		for(py::handle item : seq) {
-			auto element = item.cast<ElementPtr>();
-
-			add(obj, element);
-		}
-	}
-
-	init_iterable<osg::Group, osg::Node*>(g, kw, "children", [](osg::Group& group, osg::Node* n) {
-		group.addChild(n);
-	});
-#endif
-
 	// Unified helper used by all trampoline classes to safely invoke a Python override for a
 	// virtual C++ method; we need this because PYBIND11_OVERRIDE doesn't really jive that well
 	// with OSG code. :(
@@ -112,7 +88,7 @@ namespace detail {
 	//
 	// This behavior allows trampoline code to make clear decisions:
 	//
-	//       if (auto r = call_override<bool>(...)) { ... }
+	//       if(auto r = call_override<bool>(...)) { ... }
 	//       bool was_called = call_override<void>(...)
 	//
 	// Python returning None is treated as “no opinion/use default behavior”. This (mostly) matches
@@ -146,10 +122,10 @@ namespace detail {
 
 		// Ret != void
 		else {
-			// Python returned None → treat as “no value” (default C++ behavior).
+			// Python returned None: treat as “no value” (default C++ behavior).
 			if(result.is_none()) return std::optional<Ret>{};
 
-			// Concrete return → forward it to caller.
+			// Concrete return: send it back to caller.
 			return std::optional<Ret>(result.template cast<Ret>());
 		}
 	}
@@ -165,7 +141,9 @@ void bind_Object(py::module_& m);
 void bind_Node(py::module_& m);
 void bind_NodeVisitor(py::module_& m);
 void bind_NodeCallback(py::module_& m);
+void bind_Drawable(py::module_& m);
 void bind_Group(py::module_& m);
+void bind_Geode(py::module_& m);
 void bind_Shape(py::module_& m);
 void bind_View(py::module_& m);
 

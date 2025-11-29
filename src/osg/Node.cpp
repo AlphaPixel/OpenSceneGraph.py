@@ -11,7 +11,7 @@ namespace pyosg {
 namespace detail {
 	template<>
 	void kwargs_init(osg::Node& self, const py::kwargs& kwargs) {
-		if(kwargs.contains("name")) self.setName(kwargs["name"].cast<std::string>());
+		kwargs_init(static_cast<osg::Object&>(self), kwargs);
 	}
 }
 
