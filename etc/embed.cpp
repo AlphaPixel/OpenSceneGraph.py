@@ -1,23 +1,14 @@
-// This is just a simple embedded interpreter for help generating Valgrind/ASAN/LSAN suppressions.
-
-#include <Python.h>
-
-#include <iostream>
+#include "osg.hpp"
 
 int main(int argc, char** argv) {
-	Py_Initialize();
+	pyosg::Interpreter::init();
 
-	if(!Py_IsInitialized()) {
-		std::cerr << "Failed to initialize Python" << std::endl;
+	pyosg::Interpreter py;
 
-		return 1;
-	}
+	auto osg = py.osg();
+	auto node = osg.attr("Node")();
 
-	// Run any Python code here that you want to subject to Valgrind/ASAN sanity checks!
-	// PyRun_SimpleString("print('HelloWorld')");
-
-	// per CPython docs: nonzero if finalize fails
-	if(Py_FinalizeEx() < 0) return 2;
+	if(node) std::cout << "YES" << std::endl;
 
 	return 0;
 }

@@ -6,6 +6,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/operators.h>
+#include <pybind11/embed.h>
 
 #define PYOSG_DISABLE_WARNINGS \
 	_Pragma("GCC diagnostic push") \
@@ -34,6 +35,11 @@ using namespace std::string_literals;
 // Tell pybind11 that osg::ref_ptr<T> is a holder type for T.  The 3rd argument = true because
 // osg::ref_ptr<T> can safely be constructed from a raw T* (intrusive refcounting).
 PYBIND11_DECLARE_HOLDER_TYPE(T, osg::ref_ptr<T>, true);
+
+// Forward-declare the pybind11-generated init function.
+extern "C" PyObject* PyInit_OpenSceneGraph();
+
+#define OPENSCENEGRAPH_PYTHON_MODULE "OpenSceneGraph"
 
 #ifdef _MSC_VER
 	// Make MSVC run our function before any global/static initializers

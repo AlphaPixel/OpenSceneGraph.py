@@ -4,6 +4,10 @@
 #include "osgGA.hpp"
 #include "osgViewer.hpp"
 
+#ifdef PYOSG_EMBEDDED
+	extern "C" PYBIND11_EXPORT PyObject* PyInit_OpenSceneGraph();
+#endif
+
 PYOSG_CONSTRUCTOR(pyosg_preinit) {
 	// OSG_INFO << "PYOSG_CONSTRUCTOR: You can do your static init here..." << std::endl;
 }

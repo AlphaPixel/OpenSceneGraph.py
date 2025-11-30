@@ -81,7 +81,9 @@ find_package(OpenSceneGraph REQUIRED
 	# osgText
 )
 
-pybind11_add_module(OpenSceneGraph
+option(PYOSG_EMBEDDED "Build OpenSceneGraph bindings for embedding" OFF)
+
+set(PYOSG_SOURCES
 	"src/OpenSceneGraph-python.cpp"
 	"src/osg.cpp"
 	"src/osg/Notify.cpp"
@@ -102,6 +104,16 @@ pybind11_add_module(OpenSceneGraph
 	"src/osgGA.cpp"
 	"src/osgViewer.cpp"
 )
+
+if(NOT PYOSG_EMBEDDED)
+	pybind11_add_module(OpenSceneGraph ${PYOSG_SOURCES})
+
+else()
+	add_library(OpenSceneGraph STATIC ${PYOSG_SOURCES})
+
+    target_compile_definitions(OpenSceneGraph PUBLIC PYOSG_EMBEDDED=1)
+	target_link_libraries(OpenSceneGraph PRIVATE pybind11::embed)
+endif()
 
 target_link_libraries(OpenSceneGraph PRIVATE
 	Python3::Python

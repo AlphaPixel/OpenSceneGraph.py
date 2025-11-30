@@ -205,6 +205,58 @@ namespace detail {
 	};
 }
 
+class Interpreter {
+public:
+	// TODO: This needs MORE LOGIC go guard against people creating instances of this object WITHOUT
+	// having first called this method!
+	static void init() {
+		PyImport_AppendInittab(OPENSCENEGRAPH_PYTHON_MODULE, &PyInit_OpenSceneGraph);
+	}
+
+	explicit Interpreter():
+	_guard{} {
+		try {
+			_root = py::module_::import(OPENSCENEGRAPH_PYTHON_MODULE);
+		}
+
+		catch(const py::error_already_set &e) {
+			throw;
+		}
+	}
+
+	py::module_& root() {
+		if(!_root) throw std::runtime_error(OPENSCENEGRAPH_PYTHON_MODULE " not imported");
+
+		return _root;
+	}
+
+	py::module_ osg() { return root().attr("osg"); }
+	py::module_ osgDB() { return root().attr("osgDB"); }
+	py::module_ osgGA() { return root().attr("osgGA"); }
+	py::module_ osgViewer() { return root().attr("osgViewer"); }
+
+	void exec(const std::string& code) {
+		py::exec(code);
+	}
+
+	py::object eval(const std::string& expr) {
+		return py::eval(expr);
+	}
+
+	void exec(const std::string& code, py::dict locals) {
+		py::exec(code, py::globals(), locals);
+	}
+
+	template<class T>
+	py::object to_py(T&& value) {
+		return py::cast(std::forward<T>(value));
+	}
+
+private:
+	py::scoped_interpreter _guard;
+	py::module_ _root;
+};
+
 void bind(py::module_& m);
 
 void bind_Notify(py::module_& m);
