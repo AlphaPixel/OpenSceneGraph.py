@@ -27,11 +27,19 @@ namespace detail {
 		}
 
 		osg::BoundingSphere computeBound() const override {
-			return osg::BoundingSphere();
+			PYBIND11_OVERRIDE(
+				osg::BoundingSphere,
+				osg::Drawable,
+				computeBound
+			);
 		}
 
 		osg::BoundingBox computeBoundingBox() const override {
-			return osg::BoundingBox();
+			PYBIND11_OVERRIDE(
+				osg::BoundingBox,
+				osg::Drawable,
+				computeBoundingBox
+			);
 		}
 	};
 }
@@ -61,8 +69,8 @@ void bind_Drawable(py::module_& m) {
 		.def("drawImplementation", [](osg::Drawable& self, osg::RenderInfo& ri) {
 			self.drawImplementation(ri);
 		})
-		// .def("computeBound")
-		// .def("computeBoundingBox")
+		.def("computeBound", &osg::Drawable::computeBound)
+		.def("computeBoundingBox", &osg::Drawable::computeBoundingBox)
 	;
 }
 

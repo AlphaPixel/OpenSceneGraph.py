@@ -12,7 +12,8 @@ namespace detail {
 	template<size_t N, std::integral... Args>
 	constexpr void assert_indices(Args... args) {
 		if(!((args >= 0 && args < N) && ...)) {
-			throw py::index_error("indices not in range 0-"s + std::to_string(N - 1));
+			// throw py::index_error("indices not in range 0-"s + std::to_string(N - 1));
+			index_error(N - 1);
 		}
 	}
 

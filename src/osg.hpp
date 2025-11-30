@@ -7,6 +7,7 @@ namespace pyosg {
 namespace detail {
 	// This is only useful for raising exceptions pybind11 doesn't ALREADY support or any CUSTOM
 	// exceptions you create/bind in C++.
+	//
 	// TODO: I want to get better about using stuff like: [[noreturn]]
 	inline void raise_error(PyObject* exc_type, const std::string& msg) {
 		PyErr_SetString(exc_type, msg.c_str());
@@ -15,9 +16,18 @@ namespace detail {
 	}
 
 	// For some reason, pybind11 wraps MOST exceptions EXCEPT this one. Weird.
+	//
 	// TODO: See above! [[noreturn]]
 	inline void file_not_found(const std::string& msg) {
 		raise_error(PyExc_FileNotFoundError, msg.c_str());
+	}
+
+	// This is just a simple helper for generating consistent, more informative `py::index_error`
+	// messages.
+	//
+	// TODO: See above! [[noreturn]]
+	inline void index_error(auto i) {
+		throw py::index_error("not in range 0-"s + std::to_string(i));
 	}
 
 	template<size_t N, typename Getter>
@@ -129,6 +139,70 @@ namespace detail {
 			return std::optional<Ret>(result.template cast<Ret>());
 		}
 	}
+
+	// This is used to unify sequence-like access to `Group.children`, `Geode.drawable`, etc.
+	template<typename T>
+	struct ContainerTraits;
+
+	// This might look intimdating at first, BUT FEAR NOT! It is used in conjuction with the above
+	// in order to simplify/unify Pythonic access to sequences of objects. To see an example of it
+	// "in action", have a look at the source for Group or Geode.
+	template<typename T>
+	struct ContainerProxy {
+		using traits = ContainerTraits<T>;
+		using element_type = typename traits::element_type;
+
+		T* obj = nullptr;
+
+		explicit ContainerProxy(T* o): obj(o) {}
+
+		size_t size() const {
+			return traits::size(obj);
+		}
+
+		size_t _index(int index) const {
+			const int n = static_cast<int>(size());
+
+			if(index < 0) index += n;
+			if(index < 0 || index >= n) index_error(n);
+
+			return static_cast<size_t>(index);
+		}
+
+		element_type* get(int index) const {
+			return traits::get(obj, _index(index));
+		}
+
+		void set(int index, element_type* elem) {
+			traits::set(obj, _index(index), elem);
+		}
+
+		void del(int index) {
+			traits::remove(obj, _index(index));
+		}
+
+		void append(element_type* elem) {
+			// Call Python-level `add*` for `keep_alive<>` behavior.
+			py::cast(obj).attr(traits::add_method)(elem);
+		}
+
+		void extend(py::object iterable) {
+			for(py::handle item : iterable) {
+				append(item.cast<element_type*>());
+			}
+		}
+
+		static void bind(py::handle parent, const char* name) {
+			py::class_<ContainerProxy<T>>(parent, name, py::module_local())
+				.def("__len__", &ContainerProxy<T>::size)
+				.def("__getitem__", &ContainerProxy<T>::get)
+				.def("__setitem__", &ContainerProxy<T>::set)
+				.def("__delitem__", &ContainerProxy<T>::del)
+				.def("append", &ContainerProxy<T>::append)
+				.def("extend", &ContainerProxy<T>::extend)
+			;
+		}
+	};
 }
 
 void bind(py::module_& m);
@@ -146,5 +220,6 @@ void bind_Group(py::module_& m);
 void bind_Geode(py::module_& m);
 void bind_Shape(py::module_& m);
 void bind_View(py::module_& m);
+void bind_State(py::module_& m);
 
 }

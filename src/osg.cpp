@@ -16,6 +16,7 @@ void bind(py::module_& m) {
 	bind_Geode(m);
 	bind_Shape(m);
 	bind_View(m);
+	bind_State(m);
 }
 
 }

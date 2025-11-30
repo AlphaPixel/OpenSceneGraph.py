@@ -1,7 +1,7 @@
 # TLDR
 
-If you don't want to [read the Overview](Overview), if something is misbehaving
-it's USUALLY one of these things:
+If something is misbehaving and you don't want to [read the Overview](Overview),
+it's likely one of these things:
 
 - Are you using `py::return_value_policy::referenced` correctly when returning a
   pointer/reference to another wrapped object?
@@ -70,7 +70,7 @@ OpenSceneGraph.so module and the hypothetical osgAcme.so module).
 - [ ] Math
   - [x] Vec
   - [ ] Quat
-  - [ ] Matrix
+  - [x] Matrix
 - [x] GUIEventHandler
 - [x] NodeCallback
 - [ ] Drawable/DrawCallback (tricky due to rendering pipeline and non-copyable args)
@@ -86,3 +86,10 @@ This is going to be a HUGE headache, no matter WHAT we do. For now, we should
 multithreaded processing, we'll need to utilize some kind of "event queue" or
 similar; Python has LONG be notorious for very poor paralellism when interacting
 with C/C++ extension modules.
+
+## TODO (Secondary Demo)
+
+Python bindings are great on their own, but a **really** great feature to have
+would be exposing an API that also *embeds* the Python interpreter directly into
+an existing application in a seamless manner, removing the need to rely on any
+external Python installation environments.

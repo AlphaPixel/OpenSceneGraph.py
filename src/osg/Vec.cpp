@@ -110,13 +110,13 @@ namespace detail {
 
 			vec
 				.def("__getitem__", [](const T& v, size_t i) {
-					if(i >= N) throw py::index_error();
+					if(i >= N) index_error(N - 1);
 
 					return v[i];
 				})
 
 				.def("__setitem__", [](T& v, size_t i, value_type val){
-					if(i >= N) throw py::index_error();
+					if(i >= N) index_error(N - 1);
 
 					v[i] = val;
 				})

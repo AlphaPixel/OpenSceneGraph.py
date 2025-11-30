@@ -20,6 +20,7 @@ namespace detail {
 		}
 	}
 
+#if 0
 	struct ChildrenProxy {
 		osg::Group* g = nullptr;
 
@@ -62,19 +63,51 @@ namespace detail {
 			}
 		}
 	};
+#endif
+
+	template<>
+	struct ContainerTraits<osg::Group> {
+		using element_type = osg::Node;
+
+		static size_t size(const osg::Group* g) {
+			return g->getNumChildren();
+		}
+
+		static element_type* get(osg::Group* g, size_t i) {
+			return g->getChild(static_cast<unsigned int>(i));
+		}
+
+		static void set(osg::Group* g, size_t i, element_type* n) {
+			g->replaceChild(g->getChild(static_cast<unsigned int>(i)), n);
+		}
+
+		static void remove(osg::Group* g, size_t i) {
+			g->removeChild(static_cast<unsigned int>(i));
+		}
+
+		static void append(osg::Group* g, element_type* n) {
+			g->addChild(n);
+		}
+
+		static constexpr const char* add_method = "addChild";
+	};
+
+	using ChildrenProxy = ContainerProxy<osg::Group>;
 }
 
 void bind_Group(py::module_& m) {
 	auto group = py::class_<osg::Group, osg::Node, osg::ref_ptr<osg::Group>>(m, "Group");
 
-	py::class_<detail::ChildrenProxy>(group, "_Children", py::module_local())
+	/* py::class_<detail::ChildrenProxy>(group, "_Children", py::module_local())
 		.def("__len__", &detail::ChildrenProxy::size)
 		.def("__getitem__", &detail::ChildrenProxy::get)
 		.def("__setitem__", &detail::ChildrenProxy::set)
 		.def("__delitem__", &detail::ChildrenProxy::del)
 		.def("append", &detail::ChildrenProxy::append)
 		.def("extend", &detail::ChildrenProxy::extend)
-	;
+	; */
+
+	detail::ChildrenProxy::bind(group, "_Children");
 
 	group
 		.def(py::init<>())

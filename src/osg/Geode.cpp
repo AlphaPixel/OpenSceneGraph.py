@@ -9,79 +9,58 @@ PYOSG_ENABLE_WARNINGS
 namespace pyosg {
 
 namespace detail {
-	/* template<>
+	template<>
 	void kwargs_init(osg::Geode& self, const py::kwargs& kwargs) {
-		kwargs_init(static_cast<osg::Node&>(self), kwargs);
+		kwargs_init(static_cast<osg::Group&>(self), kwargs);
 
-		if(kwargs.contains("children")) {
-			for(py::handle child : kwargs["children"]) {
-				self.addChild(child.cast<osg::Node*>());
+		if(kwargs.contains("drawables")) {
+			for(py::handle child : kwargs["drawables"]) {
+				self.addDrawable(child.cast<osg::Drawable*>());
 			}
 		}
 	}
 
-	struct ChildrenProxy {
-		osg::Geode* g = nullptr;
+	template<>
+	struct ContainerTraits<osg::Geode> {
+		using element_type = osg::Drawable;
 
-		explicit ChildrenProxy(osg::Geode* group): g(group) {}
-
-		size_t size() const {
-			return g->getNumChildren();
+		static size_t size(const osg::Geode* g) {
+			return g->getNumDrawables();
 		}
 
-		constexpr auto _index(int index) const {
-			auto n = static_cast<int>(g->getNumChildren());
-
-			if(index < 0) index += n;
-			if(index < 0 || index >= n) throw py::index_error();
-
-			return static_cast<unsigned int>(index);
+		static element_type* get(osg::Geode* g, size_t i) {
+			return g->getDrawable(static_cast<unsigned int>(i));
 		}
 
-		osg::Node* get(int index) const {
-			return g->getChild(_index(index));
+		static void set(osg::Geode* g, size_t i, element_type* d) {
+			g->replaceDrawable(g->getDrawable(static_cast<unsigned int>(i)), d);
 		}
 
-		void set(int index, osg::Node* n) {
-			g->replaceChild(g->getChild(_index(index)), n);
+		static void remove(osg::Geode* g, size_t i) {
+			g->removeDrawables(static_cast<unsigned int>(i));
 		}
 
-		void del(int index) {
-			g->removeChild(_index(index));
+		static void append(osg::Geode* g, element_type* d) {
+			g->addDrawable(d);
 		}
 
-		void append(osg::Node* n) {
-			// We call the PYTHON METHOD to make sure `keep_alive` is applied.
-			py::cast(g).attr("addChild")(n);
-		}
+		static constexpr const char* add_method = "addDrawable";
+	};
 
-		void extend(py::object iterable) {
-			for(py::handle item : iterable) {
-				// See `append` above.
-				py::cast(g).attr("addChild")(item.cast<osg::Node*>());
-			}
-		}
-	}; */
+	using DrawablesProxy = ContainerProxy<osg::Geode>;
 }
 
 void bind_Geode(py::module_& m) {
 	auto geode = py::class_<osg::Geode, osg::Group, osg::ref_ptr<osg::Geode>>(m, "Geode");
 
-	/* py::class_<detail::ChildrenProxy>(group, "_Children", py::module_local())
-		.def("__len__", &detail::ChildrenProxy::size)
-		.def("__getitem__", &detail::ChildrenProxy::get)
-		.def("__setitem__", &detail::ChildrenProxy::set)
-		.def("__delitem__", &detail::ChildrenProxy::del)
-		.def("append", &detail::ChildrenProxy::append)
-		.def("extend", &detail::ChildrenProxy::extend)
-	; */
+	detail::DrawablesProxy::bind(geode, "_Drawables");
 
 	geode
 		.def(py::init<>())
 		.def(py::init([](py::args args, py::kwargs kwargs) {
 			osg::ref_ptr<osg::Geode> g = new osg::Geode();
 
-			// detail::kwargs_init(*g, kwargs);
+			detail::kwargs_init(*g, kwargs);
 
 			return g;
 		}))
@@ -121,15 +100,10 @@ void bind_Geode(py::module_& m) {
 
 			return count;
 		},
-		"Add one or more children. Returns number of children added.")
-		// This is the more Pythonic way ot interacting with child nodes; people will EXPECT IT.
-		// However, it does introduce "identity" errors, since it returns a new instance every call;
-		// this means code like the following will fail: `g.children[0] is g.children[0]`, but it's
-		// unlikely people will actually check against identity like that. Much more frequently will
-		// be checks for EQUALITY (and those will SUCCEED).
-		.def_property_readonly("children", [](osg::Geode& self) {
-			return detail::ChildrenProxy(&self);
-		}) */
+		"Add one or more children. Returns number of children added.") */
+		.def_property_readonly("drawables", [](osg::Geode& self) {
+			return detail::DrawablesProxy(&self);
+		})
 	;
 }
 

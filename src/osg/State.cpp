@@ -6,6 +6,8 @@ PYOSG_DISABLE_WARNINGS
 
 PYOSG_ENABLE_WARNINGS
 
+#include <sstream>
+
 namespace pyosg {
 
 // namespace detail {}
@@ -42,15 +44,19 @@ void bind_State(py::module_& m) {
 			py::overload_cast<>(&osg::State::getFrameStamp, py::const_),
 			py::return_value_policy::reference
 		)
-		/* .def("setUseModelViewAndProjectionUniforms",
+		.def("setUseModelViewAndProjectionUniforms",
 			&osg::State::setUseModelViewAndProjectionUniforms
 		)
 		.def("setUseVertexAttributeAliasing",
 			&osg::State::setUseVertexAttributeAliasing
 		)
-		.def("checkGLErrors",
-			py::overload_cast<const char*>(&osg::State::checkGLErrors)
-		) */
+		.def("__repr__", [](const osg::State& self) {
+			std::ostringstream oss;
+
+			self.print(oss);
+
+			return py::str(oss.str());
+		})
 	;
 }
 
