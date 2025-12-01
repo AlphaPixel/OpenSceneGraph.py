@@ -34,9 +34,7 @@ void bind_Shape(py::module_& m) {
 
 			return s;
 		})) */
-		.def("__bool__", [](const osg::Sphere& self) {
-			return self.valid();
-		})
+		.def("__bool__", [](const osg::Sphere& self) { return self.valid(); })
 		.def("__repr__", [](const osg::Sphere& self) {
 			return py::str("Sphere(center={}, radius={})").format(
 				self.getCenter(),

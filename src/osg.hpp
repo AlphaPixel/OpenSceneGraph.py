@@ -130,7 +130,7 @@ namespace detail {
 		// Ret = void: override did run.
 		if constexpr(std::is_void_v<Ret>) return true;
 
-		// Ret != void
+		// Ret != void, so...
 		else {
 			// Python returned None: treat as “no value” (default C++ behavior).
 			if(result.is_none()) return std::optional<Ret>{};
@@ -214,17 +214,21 @@ public:
 	}
 
 	explicit Interpreter():
-	_guard{} {
-		try {
+	_guard{},
+	_globals(py::dict(py::globals())) {
+		/* try {
 			_root = py::module_::import(OPENSCENEGRAPH_PYTHON_MODULE);
 		}
 
 		catch(const py::error_already_set &e) {
 			throw;
-		}
+		} */
+
+		// import into our persistent namespace
+		_globals["OpenSceneGraph"] = py::module_::import("OpenSceneGraph");
 	}
 
-	py::module_& root() {
+	/* py::module_& root() {
 		if(!_root) throw std::runtime_error(OPENSCENEGRAPH_PYTHON_MODULE " not imported");
 
 		return _root;
@@ -233,19 +237,19 @@ public:
 	py::module_ osg() { return root().attr("osg"); }
 	py::module_ osgDB() { return root().attr("osgDB"); }
 	py::module_ osgGA() { return root().attr("osgGA"); }
-	py::module_ osgViewer() { return root().attr("osgViewer"); }
+	py::module_ osgViewer() { return root().attr("osgViewer"); } */
 
 	void exec(const std::string& code) {
-		py::exec(code);
+		py::exec(code, _globals, _globals);
 	}
 
 	py::object eval(const std::string& expr) {
-		return py::eval(expr);
+		return py::eval(expr, _globals, _globals);
 	}
 
-	void exec(const std::string& code, py::dict locals) {
+	/* void exec(const std::string& code, py::dict locals) {
 		py::exec(code, py::globals(), locals);
-	}
+	} */
 
 	template<class T>
 	py::object to_py(T&& value) {
@@ -254,7 +258,8 @@ public:
 
 private:
 	py::scoped_interpreter _guard;
-	py::module_ _root;
+	py::dict _globals;
+	// py::module_ _root;
 };
 
 void bind(py::module_& m);

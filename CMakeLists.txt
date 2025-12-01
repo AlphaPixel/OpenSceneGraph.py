@@ -112,16 +112,25 @@ else()
 	add_library(OpenSceneGraph STATIC ${PYOSG_SOURCES})
 
     target_compile_definitions(OpenSceneGraph PUBLIC PYOSG_EMBEDDED=1)
-	target_link_libraries(OpenSceneGraph PRIVATE pybind11::embed)
+	target_link_libraries(OpenSceneGraph PUBLIC pybind11::embed)
 endif()
 
-target_link_libraries(OpenSceneGraph PRIVATE
+target_link_libraries(OpenSceneGraph PUBLIC
 	Python3::Python
 	${OPENSCENEGRAPH_LIBRARIES}
 )
 target_compile_features(OpenSceneGraph PUBLIC cxx_std_20)
 target_compile_options(OpenSceneGraph PRIVATE ${PYOSG_COMPILE_OPTIONS})
 target_include_directories(OpenSceneGraph PRIVATE ${OPENSCENEGRAPH_INCLUDE_DIRS})
+
+if(PYOSG_EMBEDDED)
+	add_executable(embed "etc/embed.cpp")
+	target_link_libraries(embed PRIVATE OpenSceneGraph)
+	target_include_directories(embed PRIVATE
+		${OPENSCENEGRAPH_INCLUDE_DIRS}
+		"${CMAKE_SOURCE_DIR}/src"
+	)
+endif()
 
 # pybind11_add_module(osgEarth
 # 	"src/osgEarth-python.cpp"
