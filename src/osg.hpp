@@ -273,6 +273,7 @@ void bind_Node(py::module_& m);
 void bind_NodeVisitor(py::module_& m);
 void bind_NodeCallback(py::module_& m);
 void bind_Drawable(py::module_& m);
+void bind_Geometry(py::module_& m);
 void bind_Group(py::module_& m);
 void bind_Geode(py::module_& m);
 void bind_Shape(py::module_& m);

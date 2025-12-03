@@ -95,6 +95,7 @@ set(PYOSG_SOURCES
 	"src/osg/NodeCallback.cpp"
 	"src/osg/NodeVisitor.cpp"
 	"src/osg/Drawable.cpp"
+	"src/osg/Geometry.cpp"
 	"src/osg/Group.cpp"
 	"src/osg/Geode.cpp"
 	"src/osg/Shape.cpp"

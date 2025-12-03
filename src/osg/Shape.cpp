@@ -1,5 +1,7 @@
 #include "../osg.hpp"
 
+using namespace py::literals;
+
 PYOSG_DISABLE_WARNINGS
 
 #include <osg/ShapeDrawable>
@@ -16,6 +18,62 @@ namespace detail {
 
 void bind_Shape(py::module_& m) {
 	py::class_<osg::Shape, osg::Object, osg::ref_ptr<osg::Shape>>(m, "Shape");
+
+	auto th = py::class_<
+		osg::TessellationHints,
+		osg::Object,
+		osg::ref_ptr<osg::TessellationHints>
+	>(m, "TessellationHints")
+		.def(py::init<>())
+	;
+
+	py::enum_<osg::TessellationHints::TessellationMode>(th, "TessellationMode")
+		.value("USE_SHAPE_DEFAULTS", osg::TessellationHints::TessellationMode::USE_SHAPE_DEFAULTS)
+		.value("USE_TARGET_NUM_FACES", osg::TessellationHints::TessellationMode::USE_TARGET_NUM_FACES)
+	;
+
+	th
+		.def_property("tessellationMode",
+			&osg::TessellationHints::getTessellationMode,
+			&osg::TessellationHints::setTessellationMode
+		)
+		.def_property("detailRatio",
+			&osg::TessellationHints::getDetailRatio,
+			&osg::TessellationHints::setDetailRatio
+		)
+		.def_property("targetNumFaces",
+			&osg::TessellationHints::getTargetNumFaces,
+			&osg::TessellationHints::setTargetNumFaces
+		)
+		.def_property("createFrontFace",
+			&osg::TessellationHints::getCreateFrontFace,
+			&osg::TessellationHints::setCreateFrontFace
+		)
+		.def_property("createBackFace",
+			&osg::TessellationHints::getCreateBackFace,
+			&osg::TessellationHints::setCreateBackFace
+		)
+		.def_property("createNormals",
+			&osg::TessellationHints::getCreateNormals,
+			&osg::TessellationHints::setCreateNormals
+		)
+		.def_property("createTextureCoords",
+			&osg::TessellationHints::getCreateTextureCoords,
+			&osg::TessellationHints::setCreateTextureCoords
+		)
+		.def_property("createTop",
+			&osg::TessellationHints::getCreateTop,
+			&osg::TessellationHints::setCreateTop
+		)
+		.def_property("createBottom",
+			&osg::TessellationHints::getCreateBottom,
+			&osg::TessellationHints::setCreateBottom
+		)
+		.def_property("createBody",
+			&osg::TessellationHints::getCreateBody,
+			&osg::TessellationHints::setCreateBody
+		)
+	;
 
 	py::class_<osg::Sphere, osg::Shape, osg::ref_ptr<osg::Sphere>>(m, "Sphere")
 		.def(py::init<>())
@@ -70,7 +128,7 @@ void bind_Shape(py::module_& m) {
 			return self.valid();
 		})
 		.def("__repr__", [](const osg::Box& self) {
-			return py::str("Sphere(center={}, halfLengths={})").format(
+			return py::str("Box(center={}, halfLengths={})").format(
 				self.getCenter(),
 				self.getHalfLengths()
 			);
@@ -89,6 +147,35 @@ void bind_Shape(py::module_& m) {
 	// Cylinder
 	// Capsule
 	// InfinitePlane
+
+	py::class_<osg::ShapeDrawable, osg::Geometry, osg::ref_ptr<osg::ShapeDrawable>>(m, "ShapeDrawable")
+		.def(py::init<>())
+		// NOTE: The following WOULDN'T be safe, because there's no `keep_alive` call.
+		// .def(py::init<osg::Shape*, osg::TessellationHints*>())
+		.def(py::init([](osg::Shape* shape, osg::TessellationHints* hints) {
+			osg::ref_ptr<osg::ShapeDrawable> s = new osg::ShapeDrawable(shape, hints);
+
+			// detail::kwargs_init(static_cast<osg::Object&>(*s), kwargs);
+
+			return s;
+		}),
+			"shape"_a,
+			"hints"_a = nullptr,
+			py::keep_alive<1, 2>(),
+			py::keep_alive<1, 3>()
+		)
+		// TODO: I discovered that THIS could be a potential alternative to all the `py::keep_alive`
+		// stuff we normally have to deal with; it needs testing and confirmation!
+		/* .def(py::init([](
+			const osg::ref_ptr<osg::Shape>& shape,
+			const osg::ref_ptr<osg::TessellationHints>& hints
+		) {
+			osg::ref_ptr<osg::ShapeDrawable> s = new osg::ShapeDrawable(shape, hints);
+
+			return s;
+		}), "shape"_a, "hints"_a = nullptr) */
+		.def("build", &osg::ShapeDrawable::build)
+	;
 }
 
 }

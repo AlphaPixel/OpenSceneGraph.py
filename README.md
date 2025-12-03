@@ -71,6 +71,8 @@ OpenSceneGraph.so module and the hypothetical osgAcme.so module).
   - [x] Vec
   - [ ] Quat
   - [x] Matrix
+- [ ] Array interfaces
+- [ ] Geometry
 - [x] GUIEventHandler
 - [x] NodeCallback
 - [ ] Drawable/DrawCallback (tricky due to rendering pipeline and non-copyable args)

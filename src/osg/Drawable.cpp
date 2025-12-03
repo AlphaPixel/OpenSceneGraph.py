@@ -58,7 +58,7 @@ void bind_Drawable(py::module_& m) {
 	;
 
 	py::class_<osg::Drawable, osg::Node, detail::Drawable, osg::ref_ptr<osg::Drawable>>(m, "Drawable")
-		.def(py::init<>())
+		.def(py::init_alias<>())
 		/* .def(py::init([](py::kwargs kwargs) {
 			osg::ref_ptr<osg::Drawable> d = new osg::Drawable();
 
