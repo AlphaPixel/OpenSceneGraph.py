@@ -30,8 +30,7 @@ void bind(py::module_& m) {
 		.def_property(
 			"done",
 			&osgViewer::ViewerBase::done,
-			&osgViewer::ViewerBase::setDone,
-			"TODO"
+			&osgViewer::ViewerBase::setDone
 		)
 		.def("frame", [](osgViewer::ViewerBase& self) {
 			py::gil_scoped_release release;
@@ -43,12 +42,19 @@ void bind(py::module_& m) {
 	py::class_<osgViewer::Viewer, osgViewer::ViewerBase, osgViewer::View, osg::ref_ptr<osgViewer::Viewer>>(m, "Viewer")
 		.def(py::init<>())
 		// TODO: This is where I put stuff I NEED to call, but haven't wrapped (YET)!
-		.def("test", [](osgViewer::Viewer& self) {
-			OSG_NOTICE << std::endl << "Doing test setup" << std::endl << std::endl;
-
+		.def("unwrappedSetup", [](osgViewer::Viewer& self) {
 			// self.setUpViewInWindow(1970, 50, 800, 600);
 			self.setThreadingModel(osgViewer::Viewer::SingleThreaded);
 			self.setCameraManipulator(new osgGA::TrackballManipulator());
+		})
+		.def("close", [](osgViewer::Viewer& self) {
+			if(auto* gc = self.getCamera()->getGraphicsContext(); gc) {
+				OSG_WARN << "Calling (Python-only) close!" << std::endl;
+
+				self.setDone(true);
+
+				gc->closeImplementation();
+			}
 		})
 	;
 }
