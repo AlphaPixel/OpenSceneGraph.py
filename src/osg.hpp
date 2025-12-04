@@ -67,25 +67,24 @@ namespace detail {
 		return obj;
 	} */
 
-	// Unified helper used by all trampoline classes to safely invoke a Python override for a
+	// Unified helper used by trampoline classes to safely invoke a Python override for a
 	// virtual C++ method; we need this because PYBIND11_OVERRIDE doesn't really jive that well
-	// with OSG code. :(
-	//
-	// It performs the following steps:
+	// with OSG code. It does exactly what PYBIND11_OVERRIDE does, while adding a few extra bits:
 	//
 	// - Acquires the GIL and calls the Python override if one exists.
 	// - Never re-enters Python from inside Python (recursion guard safe).
 	// - Correctly supports return types:
-	//   - Ret = void, return bool (override called or not)
-	//   - Ret != void, return std::optional<Ret>
+	//   - If Ret == void, return bool (override called or not)
+	//   - If Ret != void, return std::optional<Ret>
 	// - Distinguishes between:
-	//   - override exists
-	//   - override exists but returns None
+	//   - The override exists
+	//   - The override exists but returns None
 	//   - override does not exist
-	// - Preserve default C++ behavior when Python returns None or does not override the method.
+	// - Preserves default C++ behavior when Python returns None or does not override the method.
 	// - Ensures Python receives reference-wrapped arguments, not copies.
 	//
-	// Return-value rules:
+	// Return-value rules are as follows:
+	//
 	//   Ret = void
 	//       returns bool
 	//           true = override exists and was called
@@ -121,10 +120,11 @@ namespace detail {
 		}
 
 		// Call the Python override with reference-return semantics.
-		// py::object result = ovr(
+		// TODO: Is this version NOT using `py::cast` equivalent?
+		//
+		// auto result = ovr(std::forward<Args>(args)...);
 		auto result = ovr(
-			py::cast(std::forward<Args>(args),
-			py::return_value_policy::reference)...
+			py::cast(std::forward<Args>(args), py::return_value_policy::reference)...
 		);
 
 		// Ret = void: override did run.
@@ -268,6 +268,8 @@ void bind_Notify(py::module_& m);
 void bind_Vec(py::module_& m);
 void bind_Matrix(py::module_& m);
 void bind_Bound(py::module_& m);
+void bind_Buffer(py::module_& m);
+void bind_Array(py::module_& m);
 void bind_Object(py::module_& m);
 void bind_Node(py::module_& m);
 void bind_NodeVisitor(py::module_& m);

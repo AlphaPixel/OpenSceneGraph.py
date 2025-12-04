@@ -90,6 +90,8 @@ set(PYOSG_SOURCES
 	"src/osg/Vec.cpp"
 	"src/osg/Matrix.cpp"
 	"src/osg/Bound.cpp"
+	"src/osg/Buffer.cpp"
+	"src/osg/Array.cpp"
 	"src/osg/Object.cpp"
 	"src/osg/Node.cpp"
 	"src/osg/NodeCallback.cpp"

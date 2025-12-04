@@ -31,6 +31,7 @@ PYOSG_ENABLE_WARNINGS
 namespace py = pybind11;
 
 using namespace std::string_literals;
+using namespace py::literals;
 
 // Tell pybind11 that osg::ref_ptr<T> is a holder type for T.  The 3rd argument = true because
 // osg::ref_ptr<T> can safely be constructed from a raw T* (intrusive refcounting).

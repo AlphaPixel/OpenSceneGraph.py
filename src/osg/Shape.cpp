@@ -1,7 +1,5 @@
 #include "../osg.hpp"
 
-using namespace py::literals;
-
 PYOSG_DISABLE_WARNINGS
 
 #include <osg/ShapeDrawable>
