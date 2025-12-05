@@ -7,9 +7,9 @@ void bind(py::module_& m) {
 	bind_Vec(m);
 	bind_Matrix(m);
 	bind_Bound(m);
+	bind_Object(m);
 	bind_Buffer(m);
 	bind_Array(m);
-	bind_Object(m);
 	bind_Node(m);
 	bind_NodeVisitor(m);
 	bind_NodeCallback(m);
