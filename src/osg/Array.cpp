@@ -10,12 +10,74 @@ namespace pyosg {
 
 namespace detail {
 	template<typename T>
+	class ArraySlice {
+	public:
+		using Element = typename T::ElementDataType;
+
+		Element* data; // Pointer to first element in slice
+		size_t length;
+		T* parent; // raw pointer to parent array (no ownership)
+
+		ArraySlice(Element* ptr, size_t len, T* p):
+		data(ptr),
+		length(len),
+		parent(p) {}
+
+		size_t size() const { return length; }
+
+		Element& operator[](size_t i) { return data[i]; }
+		const Element& operator[](size_t i) const { return data[i]; }
+	};
+
+	template<typename T>
+	void bind_ArraySlice(py::module_& m, const char* name) {
+		using Slice = ArraySlice<T>;
+		using Element = typename T::ElementDataType;
+
+		py::class_<Slice>(m, name)
+			.def("__len__", &Slice::size)
+
+			.def("__getitem__", [](Slice& self, ssize_t index) {
+				if(index < 0) index += self.size();
+				if(index < 0 || static_cast<size_t>(index) >= self.size()) index_error(self.size());
+
+				return self[static_cast<size_t>(index)];
+			})
+
+			.def("__setitem__", [](Slice& self, ssize_t index, const Element& value) {
+				if(index < 0) index += self.size();
+				if(index < 0 || static_cast<size_t>(index) >= self.size()) index_error(self.size());
+
+				self[static_cast<size_t>(index)] = value;
+			})
+
+			.def("__iter__", [](Slice& self) {
+				return py::make_iterator(self.data, self.data + self.length);
+			}, py::keep_alive<0, 1>()
+		);
+	}
+
+	static std::unordered_map<
+		// decltype(std::declval<const osg::Array>().getDataType()),
+		GLenum,
+		std::pair<py::ssize_t, std::string>
+	> BufferInfo{
+		{GL_FLOAT, {sizeof(GLfloat), py::format_descriptor<GLfloat>::format()}},
+		{GL_DOUBLE, {sizeof(GLdouble), py::format_descriptor<GLdouble>::format()}},
+		{GL_BYTE, {sizeof(GLbyte), py::format_descriptor<GLbyte>::format()}},
+		{GL_INT, {sizeof(GLint), py::format_descriptor<GLint>::format()}},
+		{GL_UNSIGNED_INT, {sizeof(GLuint), py::format_descriptor<GLuint>::format()}}
+	};
+
+	template<typename T>
 	auto bind_Array(py::module_& m, const char* name) {
+		bind_ArraySlice<T>(m, (std::string(name) + "Slice").c_str());
+
 		return py::class_<T, osg::Array, osg::ref_ptr<T>>(m, name, py::buffer_protocol())
 			.def(py::init<>())
 			.def(py::init<size_t>(), py::arg("size"))
 
-			// .def("append", [](T& self, const osg::Vec3& v) { self.push_back(v); })
+			// .def("append", [](T& self, const T::ElementDataType& v) { self.push_back(v); })
 
 			// https://pybind11.readthedocs.io/en/stable/advanced/pycpp/numpy.html
 			.def_buffer([](T& self) -> py::buffer_info {
@@ -25,34 +87,12 @@ namespace detail {
 				// array of floats, 2 for Vec2, 3 for Vec3, etc.
 				auto comps = static_cast<py::ssize_t>(self.getDataSize());
 
-				py::ssize_t itemsize = 0;
-				std::string fmt;
-
-				// GL_FLOAT, GL_DOUBLE, GL_INT...
-				switch(self.getDataType()) {
-					case GL_FLOAT:
-						itemsize = sizeof(float);
-						fmt = py::format_descriptor<float>::format();
-						break;
-
-					case GL_DOUBLE:
-						itemsize = sizeof(double);
-						fmt = py::format_descriptor<double>::format();
-						break;
-
-					case GL_INT:
-						itemsize = sizeof(int);
-						fmt = py::format_descriptor<int>::format();
-						break;
-
-					case GL_UNSIGNED_INT:
-						itemsize = sizeof(unsigned);
-						fmt = py::format_descriptor<unsigned>::format();
-						break;
-
-					default:
-						throw std::runtime_error("Unsupported osg::Array data type");
+				// TODO: Why does this code SEGFAULT when this exception is thrown!? EVERY TIME.
+				if(!BufferInfo.contains(self.getDataType())) {
+					throw std::runtime_error("Unsupported osg::Array data type");
 				}
+
+				auto [itemsize, fmt] = BufferInfo[self.getDataType()];
 
 				if(comps == 1) return py::buffer_info(
 					const_cast<void*>(self.getDataPointer()),
@@ -81,7 +121,27 @@ namespace detail {
 				return self[static_cast<unsigned int>(index)];
 			})
 
-			.def("__setitem__", [](T& self, py::ssize_t index, const osg::Vec3& value) {
+			.def("__getitem__", [](T& self, const py::slice& slice) {
+				size_t start, stop, step, length;
+
+				if(!slice.compute(self.size(), &start, &stop, &step, &length))
+					throw py::error_already_set();
+
+				if(step != 1)
+					throw std::runtime_error("Vec3Array slicing only supports step=1");
+
+				using SliceType = ArraySlice<T>;
+
+				// return ArraySlice<T>(
+				return SliceType(
+					// self.data() + start,
+					reinterpret_cast<SliceType::Element*>(const_cast<void*>(self.getDataPointer())) + start,
+					length,
+					&self
+				);
+			}, py::keep_alive<0, 1>())
+
+			.def("__setitem__", [](T& self, py::ssize_t index, const T::ElementDataType& value) {
 				if(index < 0 || static_cast<size_t>(index) >= self.size()) index_error(self.size());
 
 				self[static_cast<unsigned int>(index)] = value;
@@ -90,29 +150,48 @@ namespace detail {
 			.def("__repr__", [name](const T& self) {
 				return py::str("{}(size={})").format(name, self.size());
 			})
+
+			.def("dump", [name](const T& self) {
+				py::list items;
+
+				size_t n = self.size();
+
+				// TODO: Why did this fail?
+				// items.reserve(n);
+
+				for(size_t i = 0; i < n; ++i) items.append(py::repr(py::cast(self[i])));
+
+				return py::str("{}({})").format( name, py::str(", ").attr("join")(items));
+			})
 		;
 	}
 }
 
 void bind_Array(py::module_& m) {
-	py::class_<
+	auto arr = py::class_<
 		osg::Array,
 		osg::BufferData,
 		osg::ref_ptr<osg::Array>
 	>(m, "Array")
-		// .def(py::init_alias<>())
-		// .def(py::init<const osg::BufferData&>())
-
-		// .def_propert("bufferObject"
-		// .def_propert("bufferIndex"
+		.def_property_readonly("type", &osg::Array::getType)
+		.def_property_readonly("dataSize", &osg::Array::getDataSize)
+		.def_property_readonly("dataType", &osg::Array::getDataType)
+		// .def_property("bufferObject"
+		// .def_property("bufferIndex"
 	;
 
-	detail::bind_Array<osg::Vec3Array>(m, "Vec3Array")
-		// .def_static("test", [](size_t size) -> osg::ref_ptr<osg::Vec3Array> {
-		.def_static("test", [](size_t size) {
-			return new osg::Vec3Array(size);
-		})
+	py::enum_<osg::Array::Type>(arr, "Type")
+		.value("ArrayType", osg::Array::ArrayType)
+		.value("ByteArrayType", osg::Array::ByteArrayType)
+		.value("Vec2ArrayType", osg::Array::Vec2ArrayType)
+		.value("Vec3ArrayType", osg::Array::Vec3ArrayType)
+		.value("Vec4ArrayType", osg::Array::Vec4ArrayType)
 	;
+
+	detail::bind_Array<osg::ByteArray>(m, "ByteArray");
+	detail::bind_Array<osg::Vec2Array>(m, "Vec2Array");
+	detail::bind_Array<osg::Vec3Array>(m, "Vec3Array");
+	detail::bind_Array<osg::Vec4Array>(m, "Vec4Array");
 }
 
 }
