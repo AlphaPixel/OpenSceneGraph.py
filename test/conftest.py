@@ -18,6 +18,22 @@ def f32(x: float) -> float:
 
 	return struct.unpack("!f", struct.pack("!f", x))[0]
 
+def floatif(integral: int, fractional: int) -> (float, float):
+	"""
+	Construct a decimal float from explicit integer + fractional components.
+
+	Returns:
+		(f, f32(f))
+	"""
+
+	# Fractional digit count
+	digits = len(str(fractional))
+
+	# Construct double first (Python float == IEEE-754 double)
+	f = integral + fractional / (10 ** digits)
+
+	return f, f32(f)
+
 @pytest.fixture
 def emit_notify():
 	def _emit_notify():
@@ -41,6 +57,10 @@ def vec3f():
 @pytest.fixture
 def vec3d():
 	return osg.Vec3d(1.1, 2.2, 3.3)
+
+@pytest.fixture
+def vec3a():
+	return osg.Vec3Array([osg.Vec3(i, i, i) for i in range(8)])
 
 @pytest.fixture
 def scene(Node, Group):

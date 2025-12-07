@@ -14,9 +14,9 @@ namespace detail {
 	public:
 		using Element = typename T::ElementDataType;
 
-		Element* data; // Pointer to first element in slice
+		Element* data;
 		size_t length;
-		T* parent; // raw pointer to parent array (no ownership)
+		T* parent;
 
 		ArraySlice(Element* ptr, size_t len, T* p):
 		data(ptr),
@@ -30,7 +30,7 @@ namespace detail {
 	};
 
 	template<typename T>
-	void bind_ArraySlice(py::module_& m, const char* name) {
+	void bind_ArraySlice(py::handle& m, const char* name) {
 		using Slice = ArraySlice<T>;
 		using Element = typename T::ElementDataType;
 
@@ -51,10 +51,47 @@ namespace detail {
 				self[static_cast<size_t>(index)] = value;
 			})
 
+			// This version supports BROADCAST assignment; that is, you can assigne ONE value to an
+			// ENTIRE RANGE of values. For example: `v3a[1:2][:] = osg.Vec3()`
+			.def("__setitem__", [](Slice& self, py::slice slice, const Element& value) {
+				size_t start, stop, step, length;
+
+				if(!slice.compute(self.size(), &start, &stop, &step, &length))
+					throw py::error_already_set();
+
+				if(step != 1) throw std::runtime_error("Slice assignment only supports step=1");
+
+				// Broadcast assignment over the slice range
+				for(size_t i = start; i < stop; i += step) {
+					self[i] = value;
+				}
+			})
+
+			// TODO: A version that supports NON-BROADCAST assignment!
+			// .def("__setitem__", [](Slice& self, py::slice slice, const Element& value) {
+
 			.def("__iter__", [](Slice& self) {
 				return py::make_iterator(self.data, self.data + self.length);
-			}, py::keep_alive<0, 1>()
-		);
+			}, py::keep_alive<0, 1>())
+
+			.def_property_readonly("ptr", [](Slice& self) {
+				return reinterpret_cast<uintptr_t>(self.data);
+			})
+
+			.def_property_readonly("stride", [](const Slice& self) {
+				// return sizeof(typename T::ElementDataType);
+				return sizeof(Element);
+			})
+
+			.def_property_readonly("shape", [](const Slice& self) {
+				return py::make_tuple(self.size(), self.parent->getDataSize());
+			})
+
+			.def_property_readonly("nbytes", [](const Slice& self) {
+				// return self.size() * sizeof(typename T::ElementDataType);
+				return self.size() * sizeof(Element);
+			})
+		;
 	}
 
 	static std::unordered_map<
@@ -64,18 +101,27 @@ namespace detail {
 	> BufferInfo{
 		{GL_FLOAT, {sizeof(GLfloat), py::format_descriptor<GLfloat>::format()}},
 		{GL_DOUBLE, {sizeof(GLdouble), py::format_descriptor<GLdouble>::format()}},
-		{GL_BYTE, {sizeof(GLbyte), py::format_descriptor<GLbyte>::format()}},
+		// {GL_BYTE, {sizeof(GLbyte), py::format_descriptor<GLbyte>::format()}},
 		{GL_INT, {sizeof(GLint), py::format_descriptor<GLint>::format()}},
 		{GL_UNSIGNED_INT, {sizeof(GLuint), py::format_descriptor<GLuint>::format()}}
 	};
 
 	template<typename T>
 	auto bind_Array(py::module_& m, const char* name) {
-		bind_ArraySlice<T>(m, (std::string(name) + "Slice").c_str());
+		auto arr = py::class_<T, osg::Array, osg::ref_ptr<T>>(m, name, py::buffer_protocol());
 
-		return py::class_<T, osg::Array, osg::ref_ptr<T>>(m, name, py::buffer_protocol())
+		// bind_ArraySlice<T>(arr, "_Slice");
+
+		arr
 			.def(py::init<>())
 			.def(py::init<size_t>(), py::arg("size"))
+			.def(py::init([](const std::vector<typename T::ElementDataType>& vec) {
+				auto a = new T();
+
+				a->assign(vec.begin(), vec.end());
+
+				return a;
+			}))
 
 			// .def("append", [](T& self, const T::ElementDataType& v) { self.push_back(v); })
 
@@ -90,6 +136,9 @@ namespace detail {
 				// TODO: Why does this code SEGFAULT when this exception is thrown!? EVERY TIME.
 				if(!BufferInfo.contains(self.getDataType())) {
 					throw std::runtime_error("Unsupported osg::Array data type");
+					// PyErr_SetString(PyExc_RuntimeError, "Unsupported Array data type");
+
+					// return py::buffer_info();
 				}
 
 				auto [itemsize, fmt] = BufferInfo[self.getDataType()];
@@ -130,12 +179,12 @@ namespace detail {
 				if(step != 1)
 					throw std::runtime_error("Vec3Array slicing only supports step=1");
 
-				using SliceType = ArraySlice<T>;
+				// using SliceType = ArraySlice<T>;
 
-				// return ArraySlice<T>(
-				return SliceType(
-					// self.data() + start,
-					reinterpret_cast<SliceType::Element*>(const_cast<void*>(self.getDataPointer())) + start,
+				// return SliceType(
+				return ArraySlice<T>(
+					// reinterpret_cast<SliceType::Element*>(const_cast<void*>(self.getDataPointer())) + start,
+					reinterpret_cast<ArraySlice<T>::Element*>(const_cast<void*>(self.getDataPointer())) + start,
 					length,
 					&self
 				);
@@ -146,6 +195,9 @@ namespace detail {
 
 				self[static_cast<unsigned int>(index)] = value;
 			})
+
+			// TODO: BROADCAST and NON-BROADCAST slice assignment!
+			// .def("__setitem__", [](T& self, py::ssize_t index, const T::ElementDataType& value) {
 
 			.def("__repr__", [name](const T& self) {
 				return py::str("{}(size={})").format(name, self.size());
