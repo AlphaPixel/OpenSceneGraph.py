@@ -1,4 +1,4 @@
-#include "../osg.hpp"
+#include "../pyosg.hpp"
 
 PYOSG_DISABLE_WARNINGS
 

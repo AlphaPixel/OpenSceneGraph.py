@@ -1,4 +1,4 @@
-#include "osg.hpp"
+#include "pyosg.hpp"
 
 #include <limits>
 

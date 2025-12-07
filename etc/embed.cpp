@@ -1,6 +1,10 @@
-#include "osg.hpp"
+#include "pyosg.hpp"
+
+PYOSG_DISABLE_WARNINGS
 
 #include <osg/Node>
+
+PYOSG_ENABLE_WARNINGS
 
 int main(int argc, char** argv) {
 	pyosg::Interpreter::init();

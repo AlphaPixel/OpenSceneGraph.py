@@ -84,8 +84,7 @@ find_package(OpenSceneGraph REQUIRED
 option(PYOSG_EMBEDDED "Build OpenSceneGraph bindings for embedding" OFF)
 
 set(PYOSG_SOURCES
-	"src/OpenSceneGraph-python.cpp"
-	"src/osg.cpp"
+	"src/pyosg.cpp"
 	"src/osg/Notify.cpp"
 	"src/osg/Vec.cpp"
 	"src/osg/Matrix.cpp"
@@ -103,36 +102,36 @@ set(PYOSG_SOURCES
 	"src/osg/Shape.cpp"
 	"src/osg/View.cpp"
 	"src/osg/State.cpp"
-	"src/osgDB.cpp"
-	"src/osgGA.cpp"
-	"src/osgViewer.cpp"
+	"src/pyosgDB.cpp"
+	"src/pyosgGA.cpp"
+	"src/pyosgViewer.cpp"
 )
 
-if(NOT PYOSG_EMBEDDED)
-	pybind11_add_module(OpenSceneGraph ${PYOSG_SOURCES})
+add_library(OpenSceneGraph_python STATIC ${PYOSG_SOURCES})
 
-else()
-	add_library(OpenSceneGraph STATIC ${PYOSG_SOURCES})
-
-    target_compile_definitions(OpenSceneGraph PUBLIC PYOSG_EMBEDDED=1)
-	target_link_libraries(OpenSceneGraph PUBLIC pybind11::embed)
-endif()
-
-target_link_libraries(OpenSceneGraph PUBLIC
+target_link_libraries(OpenSceneGraph_python PRIVATE
 	Python3::Python
 	${OPENSCENEGRAPH_LIBRARIES}
 )
-target_compile_features(OpenSceneGraph PUBLIC cxx_std_20)
-target_compile_options(OpenSceneGraph PRIVATE ${PYOSG_COMPILE_OPTIONS})
-target_include_directories(OpenSceneGraph PRIVATE ${OPENSCENEGRAPH_INCLUDE_DIRS})
+target_compile_features(OpenSceneGraph_python PUBLIC cxx_std_20)
+target_compile_options(OpenSceneGraph_python PRIVATE ${PYOSG_COMPILE_OPTIONS})
+target_include_directories(OpenSceneGraph_python PUBLIC ${OPENSCENEGRAPH_INCLUDE_DIRS})
+set_property(TARGET OpenSceneGraph_python PROPERTY POSITION_INDEPENDENT_CODE ON)
 
-if(PYOSG_EMBEDDED)
-	add_executable(embed "etc/embed.cpp")
-	target_link_libraries(embed PRIVATE OpenSceneGraph)
-	target_include_directories(embed PRIVATE
-		${OPENSCENEGRAPH_INCLUDE_DIRS}
-		"${CMAKE_SOURCE_DIR}/src"
+if(NOT PYOSG_EMBEDDED)
+	pybind11_add_module(OpenSceneGraph "src/OpenSceneGraph-python.cpp")
+
+	target_link_libraries(OpenSceneGraph PRIVATE OpenSceneGraph_python)
+
+else()
+	add_executable(embed
+		"src/OpenSceneGraph-python.cpp"
+		"etc/embed.cpp"
 	)
+
+	target_compile_definitions(embed PRIVATE PYOSG_EMBEDDED=1)
+	target_link_libraries(embed PRIVATE pybind11::embed OpenSceneGraph_python)
+	target_include_directories(embed PRIVATE "${CMAKE_SOURCE_DIR}/src")
 endif()
 
 # pybind11_add_module(osgEarth

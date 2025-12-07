@@ -1,6 +1,8 @@
 #pragma once
 
-namespace pyosgViewer {
+#include "pyosg.hpp"
+
+namespace pyosgGA {
 
 void bind(py::module_& m);
 

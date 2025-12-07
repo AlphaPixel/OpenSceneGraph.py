@@ -1,4 +1,4 @@
-#include "../osg.hpp"
+#include "../pyosg.hpp"
 
 PYOSG_DISABLE_WARNINGS
 
@@ -37,7 +37,7 @@ namespace detail {
 	// TODO: Since we'll likely use this technique in a few places, it makes sense to generalize at
 	// some point (osg::ArgumentParser, osg::DisplaySettings, etc); ANYTHING that OSG stores as
 	// static data and exposes via a singleton API.
-	class NotifyHandler: public osg::NotifyHandler {
+	class PYOSG_INTERNAL NotifyHandler: public osg::NotifyHandler {
 	public:
 		explicit NotifyHandler(py::object cb):
 		_cb(std::move(cb)) {}

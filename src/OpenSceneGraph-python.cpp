@@ -1,8 +1,7 @@
-#include "OpenSceneGraph-python.hpp"
-#include "osg.hpp"
-#include "osgDB.hpp"
-#include "osgGA.hpp"
-#include "osgViewer.hpp"
+#include "pyosg.hpp"
+#include "pyosgDB.hpp"
+#include "pyosgGA.hpp"
+#include "pyosgViewer.hpp"
 
 #include <osg/Version>
 

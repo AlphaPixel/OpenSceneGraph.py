@@ -1,5 +1,4 @@
-#include "OpenSceneGraph-python.hpp"
-#include "osgViewer.hpp"
+#include "pyosgViewer.hpp"
 
 PYOSG_DISABLE_WARNINGS
 

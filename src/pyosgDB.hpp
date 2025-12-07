@@ -1,6 +1,6 @@
 #pragma once
 
-#include "OpenSceneGraph-python.hpp"
+#include "pyosg.hpp"
 
 namespace pyosgDB {
 
