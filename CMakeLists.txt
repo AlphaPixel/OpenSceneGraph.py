@@ -3,7 +3,8 @@ cmake_minimum_required(VERSION 3.15)
 project(OpenSceneGraph-python LANGUAGES C CXX)
 
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
-find_package(pybind11 REQUIRED)
+# find_package(pybind11 REQUIRED)
+add_subdirectory("etc/pybind11")
 
 # # Step A — generate C++ from Cython
 # set(CYTHON_SRC ${CMAKE_CURRENT_SOURCE_DIR}/cython_part.pyx)
@@ -111,6 +112,7 @@ add_library(OpenSceneGraph_python STATIC ${PYOSG_SOURCES})
 
 target_link_libraries(OpenSceneGraph_python PRIVATE
 	Python3::Python
+	pybind11::module
 	${OPENSCENEGRAPH_LIBRARIES}
 )
 target_compile_features(OpenSceneGraph_python PUBLIC cxx_std_20)
