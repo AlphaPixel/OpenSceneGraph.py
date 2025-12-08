@@ -7,20 +7,27 @@ PYOSG_DISABLE_WARNINGS
 PYOSG_ENABLE_WARNINGS
 
 int main(int argc, char** argv) {
+	// TODO: Treat this line like osgEarth does with `GL3RealizeOperation`.
 	pyosg::Interpreter::init();
 
 	pyosg::Interpreter pi;
 
-	// auto osg = pi.osg();
-	// auto node = osg.attr("Node")();
+	// Bring an instance FROM Python INTO C++...
+	pi.exec(R"(pyn = OpenSceneGraph.osg.Node(name="n0"))");
 
-	// if(node) {
-		pi.exec(R"(n = OpenSceneGraph.osg.Node(name="n0"))");
+	auto pyn = pi.eval("pyn").cast<osg::ref_ptr<osg::Node>>();
 
-		auto n = pi.eval("n").cast<osg::ref_ptr<osg::Node>>();
+	std::cout << "Node name: " << pyn->getName() << std::endl;
 
-		std::cout << "Node name: " << n->getName() << std::endl;
-	// }
+	// Export an instance FROM C++ INTO Python...
+	auto* cppn = new osg::Node();
+
+	cppn->setName("n1");
+
+	pi.globals()["cppn"] = py::cast(cppn);
+
+	pi.exec(R"(print(cppn))");
+	pi.exec(R"(print(cppn.name))");
 
 	return 0;
 }
