@@ -9,14 +9,6 @@ PYOSG_ENABLE_WARNINGS
 namespace pyosg {
 
 namespace detail {
-	template<size_t N, std::integral... Args>
-	constexpr void assert_indices(Args... args) {
-		if(!((args >= 0 && args < N) && ...)) {
-			// throw py::index_error("indices not in range 0-"s + std::to_string(N - 1));
-			index_error(N - 1);
-		}
-	}
-
 	template<typename T> struct MatrixTraits;
 
 	template<> struct MatrixTraits<osg::Matrixf> {
@@ -54,27 +46,23 @@ namespace detail {
 			.def(py::self != py::self)
 
 			// Mirrors the OSG method of operator()(row, col) access.
-			.def("__call__", [](T& self, size_t row, size_t col) {
-				assert_indices<4>(row, col);
+			.def("__call__", [](T& self, py::ssize_t row, py::ssize_t col) {
+				auto [r, c] = n_indices<int>(4, row, col);
 
-				return self(static_cast<int>(row), static_cast<int>(col));
+				return self(r, c);
 			})
 
 			// A far more Pythonic interface where 2 indices are always specified.
 			.def("__getitem__", [](const T& self, std::pair<size_t, size_t> rc) {
-				auto [row, col] = rc;
+				auto [row, col] = n_indices<int>(4, rc.first, rc.second);
 
-				assert_indices<4>(row, col);
-
-				return self(static_cast<int>(row), static_cast<int>(col));
+				return self(row, col);
 			})
 
 			.def("__setitem__", [](T& self, std::pair<size_t, size_t> rc, value_type value) {
-				auto [row, col] = rc;
+				auto [row, col] = n_indices<int>(4, rc.first, rc.second);
 
-				assert_indices<4>(row, col);
-
-				self(static_cast<int>(row), static_cast<int>(col)) = value;
+				return self(row, col);
 			})
 
 			.def("__repr__", [name](const T& v) {

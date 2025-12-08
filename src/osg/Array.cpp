@@ -12,48 +12,42 @@ namespace detail {
 	template<typename T>
 	class ArraySlice {
 	public:
-		using Element = typename T::ElementDataType;
+		using element_type = typename T::ElementDataType;
 
-		Element* data;
+		element_type* data;
 		size_t length;
 		T* parent;
 
-		ArraySlice(Element* ptr, size_t len, T* p):
+		ArraySlice(element_type* ptr, size_t len, T* p):
 		data(ptr),
 		length(len),
 		parent(p) {}
 
 		size_t size() const { return length; }
 
-		Element& operator[](size_t i) { return data[i]; }
-		const Element& operator[](size_t i) const { return data[i]; }
+		element_type& operator[](size_t i) { return data[i]; }
+		const element_type& operator[](size_t i) const { return data[i]; }
 	};
 
 	template<typename T>
 	void bind_ArraySlice(py::handle& m, const char* name) {
 		using Slice = ArraySlice<T>;
-		using Element = typename T::ElementDataType;
+		using element_type = typename T::ElementDataType;
 
 		py::class_<Slice>(m, name)
 			.def("__len__", &Slice::size)
 
 			.def("__getitem__", [](Slice& self, ssize_t index) {
-				if(index < 0) index += self.size();
-				if(index < 0 || static_cast<size_t>(index) >= self.size()) index_error(self.size());
-
-				return self[static_cast<size_t>(index)];
+				return self[n_index(self.size(), index)];
 			})
 
-			.def("__setitem__", [](Slice& self, ssize_t index, const Element& value) {
-				if(index < 0) index += self.size();
-				if(index < 0 || static_cast<size_t>(index) >= self.size()) index_error(self.size());
-
-				self[static_cast<size_t>(index)] = value;
+			.def("__setitem__", [](Slice& self, ssize_t index, const element_type& value) {
+				self[n_index(self.size(), index)] = value;
 			})
 
 			// This version supports BROADCAST assignment; that is, you can assigne ONE value to an
 			// ENTIRE RANGE of values. For example: `v3a[1:2][:] = osg.Vec3()`
-			.def("__setitem__", [](Slice& self, py::slice slice, const Element& value) {
+			.def("__setitem__", [](Slice& self, py::slice slice, const element_type& value) {
 				size_t start, stop, step, length;
 
 				if(!slice.compute(self.size(), &start, &stop, &step, &length))
@@ -62,34 +56,28 @@ namespace detail {
 				if(step != 1) throw std::runtime_error("Slice assignment only supports step=1");
 
 				// Broadcast assignment over the slice range
-				for(size_t i = start; i < stop; i += step) {
-					self[i] = value;
-				}
+				for(size_t i = start; i < stop; i += step) self[i] = value;
 			})
 
 			// TODO: A version that supports NON-BROADCAST assignment!
-			// .def("__setitem__", [](Slice& self, py::slice slice, const Element& value) {
+			// .def("__setitem__", [](Slice& self, py::slice slice, const element_type& value) {
 
 			.def("__iter__", [](Slice& self) {
 				return py::make_iterator(self.data, self.data + self.length);
 			}, py::keep_alive<0, 1>())
 
+			// TODO: Move this into a traits-like wrapper?
 			.def_property_readonly("ptr", [](Slice& self) {
 				return reinterpret_cast<uintptr_t>(self.data);
 			})
-
 			.def_property_readonly("stride", [](const Slice& self) {
-				// return sizeof(typename T::ElementDataType);
-				return sizeof(Element);
+				return sizeof(element_type);
 			})
-
 			.def_property_readonly("shape", [](const Slice& self) {
 				return py::make_tuple(self.size(), self.parent->getDataSize());
 			})
-
 			.def_property_readonly("nbytes", [](const Slice& self) {
-				// return self.size() * sizeof(typename T::ElementDataType);
-				return self.size() * sizeof(Element);
+				return self.size() * sizeof(element_type);
 			})
 		;
 	}
@@ -110,7 +98,7 @@ namespace detail {
 	auto bind_Array(py::module_& m, const char* name) {
 		auto arr = py::class_<T, osg::Array, osg::ref_ptr<T>>(m, name, py::buffer_protocol());
 
-		// bind_ArraySlice<T>(arr, "_Slice");
+		bind_ArraySlice<T>(arr, "_Slice");
 
 		arr
 			.def(py::init<>())
@@ -165,9 +153,7 @@ namespace detail {
 			.def("__len__", [](const T& self) { return self.size(); })
 
 			.def("__getitem__", [](const T& self, py::ssize_t index) {
-				if(index < 0 || static_cast<size_t>(index) >= self.size()) index_error(self.size());
-
-				return self[static_cast<unsigned int>(index)];
+				return self[n_index(self.size(), index)];
 			})
 
 			.def("__getitem__", [](T& self, const py::slice& slice) {
@@ -179,21 +165,17 @@ namespace detail {
 				if(step != 1)
 					throw std::runtime_error("Vec3Array slicing only supports step=1");
 
-				// using SliceType = ArraySlice<T>;
-
-				// return SliceType(
 				return ArraySlice<T>(
-					// reinterpret_cast<SliceType::Element*>(const_cast<void*>(self.getDataPointer())) + start,
-					reinterpret_cast<ArraySlice<T>::Element*>(const_cast<void*>(self.getDataPointer())) + start,
+					reinterpret_cast<ArraySlice<T>::element_type*>(
+						const_cast<void*>(self.getDataPointer())
+					) + start,
 					length,
 					&self
 				);
 			}, py::keep_alive<0, 1>())
 
 			.def("__setitem__", [](T& self, py::ssize_t index, const T::ElementDataType& value) {
-				if(index < 0 || static_cast<size_t>(index) >= self.size()) index_error(self.size());
-
-				self[static_cast<unsigned int>(index)] = value;
+				self[n_index(self.size(), index)] = value;
 			})
 
 			// TODO: BROADCAST and NON-BROADCAST slice assignment!

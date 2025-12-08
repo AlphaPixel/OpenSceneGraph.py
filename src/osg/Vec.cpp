@@ -109,16 +109,12 @@ namespace detail {
 		PYOSG_DISABLE_WARNINGS
 
 			vec
-				.def("__getitem__", [](const T& v, size_t i) {
-					if(i >= N) index_error(N - 1);
-
-					return v[i];
+				.def("__getitem__", [](const T& v, py::ssize_t i) {
+					return v[n_index(N, i)];
 				})
 
-				.def("__setitem__", [](T& v, size_t i, value_type val){
-					if(i >= N) index_error(N - 1);
-
-					v[i] = val;
+				.def("__setitem__", [](T& v, py::ssize_t i, value_type val){
+					v[n_index(N, i)] = val;
 				})
 			;
 

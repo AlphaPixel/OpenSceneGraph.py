@@ -80,14 +80,6 @@ namespace detail {
 		raise_error(PyExc_FileNotFoundError, msg.c_str());
 	}
 
-	// This is just a simple helper for generating consistent, more informative `py::index_error`
-	// messages.
-	//
-	// TODO: See above! [[noreturn]]
-	inline void index_error(auto i) {
-		throw py::index_error("not in range 0-"s + std::to_string(i));
-	}
-
 	template<size_t N, typename Getter>
 	py::str seq_repr(const char* name, Getter get) {
 		py::list items;
@@ -102,6 +94,37 @@ namespace detail {
 			name,
 			py::str(", ").attr("join")(items)
 		);
+	}
+
+	// For standard Pythonic indexing, NEGATIVE INDICES should be allowed. This helper handles
+	// converting those (if possible) into positive index values usable by the caller, throwing
+	// `py::index_error` otherwise. In those cases where the caller needs something OTHER than a
+	// `size_t` type, the optional `R` template paramter can be used; this is extremely helpful in
+	// OSG, where each class seems to use ... whatever it wants. Frustrating.
+	template<typename R=std::size_t>
+	auto n_index(size_t size, py::ssize_t index) {
+		// Convert negatives to Python-style indexing.
+		if(index < 0) index += static_cast<py::ssize_t>(size);
+
+		if(index < 0 || static_cast<std::size_t>(index) >= size) throw py::index_error(
+			"Index " + std::to_string(index) +
+			" out of range for container of size " + std::to_string(size)
+		);
+
+		return static_cast<R>(index);
+	}
+
+	// A "concept" to enforce `py::ssize_t` constraints.
+	template<typename T>
+	concept PyIndex = std::convertible_to<T, py::ssize_t>;
+
+	// This is a helper for converting multiple indices at once; e.g.:
+	//
+	// `auto [nrow, ncol] = n_indices<unsigned int>(N, row, col);`
+	template<typename R=std::size_t, PyIndex... Indices>
+	auto n_indices(std::size_t size, Indices... idxs) {
+		// Normalize each index using the existing helper above!
+		return std::make_tuple(n_index<R>(size, static_cast<py::ssize_t>(idxs))...);
 	}
 
 	// Constructors for pybind11 types cannot call methods of that type until AFTER it is created
@@ -155,8 +178,8 @@ namespace detail {
 	//
 	// This behavior allows trampoline code to make clear decisions:
 	//
-	//       if(auto r = call_override<bool>(...)) { ... }
-	//       bool was_called = call_override<void>(...)
+	//   if(auto r = call_override<bool>(...)) { ... }
+	//   bool was_called = call_override<void>(...)
 	//
 	// Python returning None is treated as “no opinion/use default behavior”. This (mostly) matches
 	// OSG semantics in NodeVisitor, NodeCallback, GUIEventHandler, and all other OSG virtual-call
@@ -218,26 +241,13 @@ namespace detail {
 			return traits::size(obj);
 		}
 
-		size_t _index(int index) const {
-			const int n = static_cast<int>(size());
+		size_t _index(int index) const { return n_index(size(), index); }
 
-			if(index < 0) index += n;
-			if(index < 0 || index >= n) index_error(n);
+		element_type* get(int index) const { return traits::get(obj, _index(index)); }
 
-			return static_cast<size_t>(index);
-		}
+		void set(int index, element_type* elem) { traits::set(obj, _index(index), elem); }
 
-		element_type* get(int index) const {
-			return traits::get(obj, _index(index));
-		}
-
-		void set(int index, element_type* elem) {
-			traits::set(obj, _index(index), elem);
-		}
-
-		void del(int index) {
-			traits::remove(obj, _index(index));
-		}
+		void del(int index) { traits::remove(obj, _index(index)); }
 
 		void append(element_type* elem) {
 			// Call Python-level `add*` for `keep_alive<>` behavior.
@@ -263,7 +273,6 @@ namespace detail {
 	};
 }
 
-#if 1
 class PYOSG_INTERNAL Interpreter {
 public:
 	// TODO: This needs MORE LOGIC go guard against people creating instances of this object WITHOUT
@@ -315,12 +324,12 @@ public:
 		return py::cast(std::forward<T>(value));
 	}
 
+	auto& globals() { return _globals; }
+
 private:
 	py::scoped_interpreter _guard;
 	py::dict _globals;
-	// py::module_ _root;
 };
-#endif
 
 void bind(py::module_& m);
 

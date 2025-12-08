@@ -5,6 +5,8 @@
 
 #include <osg/Version>
 
+#include <limits>
+
 #ifdef PYOSG_EMBEDDED
 	extern "C" PYBIND11_EXPORT PyObject* PyInit_OpenSceneGraph();
 #endif
@@ -38,7 +40,7 @@ PYBIND11_MODULE(OpenSceneGraph, m) {
 		info["pybind"] = py::str("{}.{}.{}").format(
 			PYBIND11_VERSION_MAJOR,
 			PYBIND11_VERSION_MINOR,
-			PYBIND11_VERSION_PATCH
+			PYBIND11_VERSION_MICRO
 		);
 
 		info["date"] = __DATE__ " " __TIME__;
@@ -57,6 +59,14 @@ PYBIND11_MODULE(OpenSceneGraph, m) {
 
 		return info;
 	});
+
+	m.attr("F32_MIN") = std::numeric_limits<float>::min();
+	m.attr("F32_MAX") = std::numeric_limits<float>::max();
+	m.attr("F32_LOWEST") = std::numeric_limits<float>::lowest();
+
+	m.attr("F64_MIN") = std::numeric_limits<double>::min();
+	m.attr("F64_MAX") = std::numeric_limits<double>::max();
+	m.attr("F64_LOWEST") = std::numeric_limits<double>::lowest();
 
 	/* py::module_ atexit = py::module_::import("atexit");
 

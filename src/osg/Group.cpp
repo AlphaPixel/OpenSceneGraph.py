@@ -20,51 +20,6 @@ namespace detail {
 		}
 	}
 
-#if 0
-	struct ChildrenProxy {
-		osg::Group* g = nullptr;
-
-		explicit ChildrenProxy(osg::Group* group): g(group) {}
-
-		size_t size() const {
-			return g->getNumChildren();
-		}
-
-		constexpr auto _index(int index) const {
-			auto n = static_cast<int>(g->getNumChildren());
-
-			if(index < 0) index += n;
-			if(index < 0 || index >= n) throw py::index_error();
-
-			return static_cast<unsigned int>(index);
-		}
-
-		osg::Node* get(int index) const {
-			return g->getChild(_index(index));
-		}
-
-		void set(int index, osg::Node* n) {
-			g->replaceChild(g->getChild(_index(index)), n);
-		}
-
-		void del(int index) {
-			g->removeChild(_index(index));
-		}
-
-		void append(osg::Node* n) {
-			// We call the PYTHON METHOD to make sure `keep_alive` is applied.
-			py::cast(g).attr("addChild")(n);
-		}
-
-		void extend(py::object iterable) {
-			for(py::handle item : iterable) {
-				// See `append` above.
-				py::cast(g).attr("addChild")(item.cast<osg::Node*>());
-			}
-		}
-	};
-#endif
-
 	template<>
 	struct ContainerTraits<osg::Group> {
 		using element_type = osg::Node;
