@@ -86,6 +86,7 @@ option(PYOSG_EMBEDDED "Build OpenSceneGraph bindings for embedding" OFF)
 
 set(PYOSG_SOURCES
 	"src/pyosg.cpp"
+	"src/osg/ArgumentParser.cpp"
 	"src/osg/Notify.cpp"
 	"src/osg/Vec.cpp"
 	"src/osg/Matrix.cpp"
