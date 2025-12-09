@@ -21,7 +21,7 @@ namespace detail {
 	}
 
 	template<>
-	struct ContainerTraits<osg::Group> {
+	struct SequenceTraits<osg::Group> {
 		using element_type = osg::Node;
 
 		static size_t size(const osg::Group* g) {
@@ -47,7 +47,7 @@ namespace detail {
 		static constexpr const char* add_method = "addChild";
 	};
 
-	using ChildrenProxy = ContainerProxy<osg::Group>;
+	using ChildrenProxy = SequenceProxy<osg::Group>;
 }
 
 void bind_Group(py::module_& m) {

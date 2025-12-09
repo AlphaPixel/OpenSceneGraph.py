@@ -21,7 +21,7 @@ namespace detail {
 	}
 
 	template<>
-	struct ContainerTraits<osg::Geode> {
+	struct SequenceTraits<osg::Geode> {
 		using element_type = osg::Drawable;
 
 		static size_t size(const osg::Geode* g) {
@@ -47,7 +47,7 @@ namespace detail {
 		static constexpr const char* add_method = "addDrawable";
 	};
 
-	using DrawablesProxy = ContainerProxy<osg::Geode>;
+	using DrawablesProxy = SequenceProxy<osg::Geode>;
 }
 
 void bind_Geode(py::module_& m) {

@@ -223,19 +223,19 @@ namespace detail {
 
 	// This is used to unify sequence-like access to `Group.children`, `Geode.drawable`, etc.
 	template<typename T>
-	struct ContainerTraits;
+	struct SequenceTraits;
 
 	// This might look intimdating at first, BUT FEAR NOT! It is used in conjuction with the above
 	// in order to simplify/unify Pythonic access to sequences of objects. To see an example of it
 	// "in action", have a look at the source for Group or Geode.
 	template<typename T>
-	struct ContainerProxy {
-		using traits = ContainerTraits<T>;
+	struct SequenceProxy {
+		using traits = SequenceTraits<T>;
 		using element_type = typename traits::element_type;
 
 		T* obj = nullptr;
 
-		explicit ContainerProxy(T* o): obj(o) {}
+		explicit SequenceProxy(T* o): obj(o) {}
 
 		size_t size() const {
 			return traits::size(obj);
@@ -261,13 +261,13 @@ namespace detail {
 		}
 
 		static void bind(py::handle parent, const char* name) {
-			py::class_<ContainerProxy<T>>(parent, name, py::module_local())
-				.def("__len__", &ContainerProxy<T>::size)
-				.def("__getitem__", &ContainerProxy<T>::get)
-				.def("__setitem__", &ContainerProxy<T>::set)
-				.def("__delitem__", &ContainerProxy<T>::del)
-				.def("append", &ContainerProxy<T>::append)
-				.def("extend", &ContainerProxy<T>::extend)
+			py::class_<SequenceProxy<T>>(parent, name, py::module_local())
+				.def("__len__", &SequenceProxy<T>::size)
+				.def("__getitem__", &SequenceProxy<T>::get)
+				.def("__setitem__", &SequenceProxy<T>::set)
+				.def("__delitem__", &SequenceProxy<T>::del)
+				.def("append", &SequenceProxy<T>::append)
+				.def("extend", &SequenceProxy<T>::extend)
 			;
 		}
 	};
