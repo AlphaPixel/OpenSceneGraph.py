@@ -119,7 +119,15 @@ target_link_libraries(OpenSceneGraph_python PRIVATE
 target_compile_features(OpenSceneGraph_python PUBLIC cxx_std_20)
 target_compile_options(OpenSceneGraph_python PRIVATE ${PYOSG_COMPILE_OPTIONS})
 target_include_directories(OpenSceneGraph_python PUBLIC ${OPENSCENEGRAPH_INCLUDE_DIRS})
+# TODO: PCH didn't help much, but the "unity" build made the project go from
+# taking 3 full minutes to 30s or less. That's pretty incredible.
+# target_precompile_headers(OpenSceneGraph_python PRIVATE "src/pyosg_pch.hpp")
+# set_target_properties(OpenSceneGraph_python PROPERTIES
+# 	UNITY_BUILD ON
+# 	UNITY_BUILD_BATCH_SIZE 1000
+# )
 set_property(TARGET OpenSceneGraph_python PROPERTY POSITION_INDEPENDENT_CODE ON)
+# set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
 
 if(NOT PYOSG_EMBEDDED)
 	pybind11_add_module(OpenSceneGraph "src/OpenSceneGraph-python.cpp")
