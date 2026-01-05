@@ -39,10 +39,18 @@ void bind_Node(py::module_& m) {
 			self.traverse(*nv);
 		// }, py::keep_alive<2, 1>())
 		}) */
-		.def_property("nodeMask", &osg::Node::getNodeMask, &osg::Node::setNodeMask)
+		.def_property("stateSet",
+			[](osg::Node& self) { return self.getOrCreateStateSet(); },
+			[](osg::Node& self, osg::StateSet* ss) { self.setStateSet(ss); },
+			py::return_value_policy::reference
+		)
+		.def_property("nodeMask",
+			[](osg::Node& self) { return self.getNodeMask(); },
+			[](osg::Node& self, osg::Node::NodeMask mask) { self.setNodeMask(mask); }
+		)
 	;
 
-	node.attr("NodeMask") = py::int_();
+	node.attr("NodeMask") = detail::builtin_int();
 }
 
 }

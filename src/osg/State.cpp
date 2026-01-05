@@ -2,12 +2,15 @@
 
 PYOSG_DISABLE_WARNINGS
 
+#include <osg/Node>
 #include <osg/State>
 #include <osg/StateAttribute>
 
 PYOSG_ENABLE_WARNINGS
 
 #include <sstream>
+
+PYBIND11_MAKE_OPAQUE(osg::StateSet::ModeList);
 
 namespace pyosg {
 
@@ -71,6 +74,10 @@ void bind_State(py::module_& m) {
 		.def_property_readonly("member", &osg::StateAttribute::getMember)
 		.def_property_readonly("typeMember", &osg::StateAttribute::getTypeMemberPair)
 	;
+
+	sa.attr("GLMode") = detail::builtin_int();
+	sa.attr("GLModeValue") = detail::builtin_int();
+	sa.attr("OverrideValue") = detail::builtin_int();
 
 	py::enum_<osg::StateAttribute::Values>(sa, "Values")
 		.value("OFF", osg::StateAttribute::Values::OFF)
@@ -156,6 +163,14 @@ void bind_State(py::module_& m) {
 		.def(py::init<>())
 		.def(py::init<const osg::StateSet&>())
 	;
+
+	// This isn't really NECESSARY to have (as it's so unlikely to be used in common cases), but
+	// it's a great DEMO for how this kind of thing is done. NOTE the call to `PYBIND11_MAKE_OPAQUE`
+	// in the toplevel of this file.
+	py::bind_map<osg::StateSet::ModeList>(ss, "ModeList");
+
+	// TODO: So, this call COULD WORK ... with LOTS of caveats. Explain more!
+	// py::bind_vector<std::vector<osg::Node*>>(ss, "ParentList");
 
 	py::enum_<osg::StateSet::RenderingHint>(ss, "RenderingHint")
 		.value("DEFAULT_BIN", osg::StateSet::DEFAULT_BIN)
@@ -274,6 +289,10 @@ void bind_State(py::module_& m) {
 		.def("getTextureMode", &osg::StateSet::setTextureMode)
 		.def("setTextureMode", &osg::StateSet::setTextureMode)
 		.def("removeTextureMode", &osg::StateSet::removeTextureMode)
+		.def_property_readonly("parents", [](osg::StateSet& self) {
+			// return detail::make_list(self.getParents());
+			return detail::make_tuple(self.getParents());
+		}, py::return_value_policy::reference)
 	;
 }
 

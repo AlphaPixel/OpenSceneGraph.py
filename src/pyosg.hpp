@@ -5,6 +5,7 @@
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <pybind11/stl_bind.h>
 #include <pybind11/operators.h>
 #include <pybind11/embed.h>
 
@@ -33,7 +34,7 @@ namespace py = pybind11;
 using namespace std::string_literals;
 using namespace py::literals;
 
-// Tell pybind11 that osg::ref_ptr<T> is a holder type for T.  The 3rd argument = true because
+// Tell pybind11 that osg::ref_ptr<T> is a holder type for T. The 3rd argument is true because
 // osg::ref_ptr<T> can safely be constructed from a raw T* (intrusive refcounting).
 PYBIND11_DECLARE_HOLDER_TYPE(T, osg::ref_ptr<T>, true);
 
@@ -127,6 +128,37 @@ namespace detail {
 		return std::make_tuple(n_index<R>(size, static_cast<py::ssize_t>(idxs))...);
 	}
 
+	/* template<typename T>
+	concept OSGObject =
+		std::is_pointer_v<T> &&
+		std::is_base_of_v<osg::Object, std::remove_pointer_t<T>>
+	; */
+
+	template<typename T>
+	// requires OSGObject<typename T::value_type>
+	auto make_list(const T& seq) {
+		py::list list;
+
+		for(auto* obj : seq) list.append(obj);
+
+		return list;
+	}
+
+	template<typename T>
+	// requires OSGObject<typename T::value_type>
+	auto make_tuple(const T& seq) {
+		// TODO: This is a cleaner implementation, so investigate the COST later!
+		// return py::tuple(make_list(seq));
+
+		py::tuple tuple(seq.size());
+
+		size_t i = 0;
+
+		for(auto* obj : seq) tuple[i++] = obj;
+
+		return tuple;
+	}
+
 	// Constructors for pybind11 types cannot call methods of that type until AFTER it is created
 	// (obviously). We therefore need SOME unified, predictable way to create "chains" of
 	// initialization wherein each type/participant should add their supported keywords and then
@@ -147,6 +179,18 @@ namespace detail {
 		init_kwargs(obj, kw);
 		return obj;
 	} */
+
+	// Small helpers for creating ALIASES (usually) for types that are already built into Python;
+	// for example, if you had something like `using Foo = uint32_t` and wanted to expose the `Foo`
+	// type in your bindings, you'd call: `m.attr("Foo") = pyosg::detail::builtin_int()`.
+	inline py::handle builtin_type(const char* name) {
+		// return py::reinterpret_borrow<py::dict>(PyEval_GetBuiltins())[name];
+		return py::module_::import("builtins").attr(name);
+	}
+
+	inline py::handle builtin_int() { return builtin_type("int"); }
+	inline py::handle builtin_float() { return builtin_type("float"); }
+	inline py::handle builtin_bool() { return builtin_type("bool"); }
 
 	// Unified helper used by trampoline classes to safely invoke a Python override for a
 	// virtual C++ method; we need this because PYBIND11_OVERRIDE doesn't really jive that well
@@ -351,5 +395,7 @@ void bind_Geode(py::module_& m);
 void bind_Shape(py::module_& m);
 void bind_View(py::module_& m);
 void bind_State(py::module_& m);
+void bind_Shader(py::module_& m);
+void bind_Program(py::module_& m);
 
 }
