@@ -21,7 +21,7 @@ void bind_Camera(py::module_& m) {
 		.def(py::init<>())
 		.def_property(
 			"viewport",
-			py::overload_cast<>(&osg::Camera::getViewport),
+			py::overload_cast<>(&osg::Camera::getViewport, py::const_),
 			[](osg::Camera& self, const py::args& args) {
 				if(args.size() == 1) {
 					// camera.viewport = viewport
@@ -52,6 +52,7 @@ void bind_Camera(py::module_& m) {
 
 				throw py::type_error("viewport must be set to osg.Viewport or sequence");
 			},
+			py::return_value_policy::reference_internal,
 			py::doc(
 				"Get or set the camera viewport.\n\n"
 				"Setter accepts either:\n"

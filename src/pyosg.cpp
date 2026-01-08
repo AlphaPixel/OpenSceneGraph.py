@@ -23,6 +23,7 @@ void bind(py::module_& m) {
 	bind_Shape(m);
 	bind_View(m);
 	bind_State(m);
+	bind_StateAttributes(m);
 	bind_Shader(m);
 	bind_Program(m);
 }

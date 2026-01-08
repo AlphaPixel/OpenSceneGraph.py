@@ -70,6 +70,28 @@ void bind_State(py::module_& m) {
 	>(m, "StateAttribute")
 		// .def(py::init<>())
 		// .def(py::init<const osg::StateAttribute&>())
+
+		// TODO: OSG uses -1, 0, 1 to define more than just what Python calls true/false. How do we
+		// handle this in a Pythonic way, though?
+		/* .def("__eq__", [](const osg::StateAttribute& a, const osg::StateAttribute& b) {
+			// Different dynamic types are not equal! I think this might be the first time I've EVER
+			// used `typeid` in my OWN CODE!?
+			if(typeid(a) != typeid(b)) return false;
+
+			return a.compare(b) == 0;
+		})
+		.def("__ne__", [](const osg::StateAttribute& a, const osg::StateAttribute& b) {
+			if(typeid(a) != typeid(b)) return true;
+
+			return a.compare(b) != 0;
+		}); */
+
+		// TODO: Implement `.def(py::self < py::self)`, etc for these! However, I need to solve the
+		// `compare` issue above before I can address these...
+		// bool operator <  (const StateAttribute& rhs) const { return compare(rhs)<0; }
+		// bool operator == (const StateAttribute& rhs) const { return compare(rhs)==0; }
+		// bool operator != (const StateAttribute& rhs) const { return compare(rhs)!=0; }
+
 		.def_property_readonly("type", &osg::StateAttribute::getType)
 		.def_property_readonly("member", &osg::StateAttribute::getMember)
 		.def_property_readonly("typeMember", &osg::StateAttribute::getTypeMemberPair)

@@ -395,6 +395,7 @@ void bind_Geode(py::module_& m);
 void bind_Shape(py::module_& m);
 void bind_View(py::module_& m);
 void bind_State(py::module_& m);
+void bind_StateAttributes(py::module_& m);
 void bind_Shader(py::module_& m);
 void bind_Program(py::module_& m);
 
