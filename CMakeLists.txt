@@ -100,6 +100,8 @@ set(PYOSG_SOURCES
 	"src/osg/Drawable.cpp"
 	"src/osg/Geometry.cpp"
 	"src/osg/Group.cpp"
+	"src/osg/Transform.cpp"
+	"src/osg/Camera.cpp"
 	"src/osg/Geode.cpp"
 	"src/osg/Shape.cpp"
 	"src/osg/View.cpp"

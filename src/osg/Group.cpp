@@ -77,11 +77,13 @@ void bind_Group(py::module_& m) {
 			return self.addChild(child);
 		}, py::arg("child"), py::keep_alive<1, 2>())
 		.def("getChild",
+			// TODO: No py::overload_cast?
 			static_cast<osg::Node*(osg::Group::*)(unsigned int)>(&osg::Group::getChild),
 			py::return_value_policy::reference_internal
 		)
 		.def("getNumChildren", &osg::Group::getNumChildren)
 		.def("removeChild",
+			// TODO: No py::overload_cast? Why?
 			static_cast<bool(osg::Group::*)(osg::Node*)>(&osg::Group::removeChild),
 			py::arg("child")
 		)

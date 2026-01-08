@@ -3,6 +3,7 @@
 PYOSG_DISABLE_WARNINGS
 
 #include <osgGA/GUIEventHandler>
+#include <osgGA/EventQueue>
 
 PYOSG_ENABLE_WARNINGS
 
@@ -34,9 +35,12 @@ public:
 void bind(py::module_& m) {
 	py::class_<osgGA::GUIActionAdapter>(m, "GUIActionAdapter");
 
-	auto gea = py::class_<osgGA::GUIEventAdapter, osg::Object, osg::ref_ptr<osgGA::GUIEventAdapter>>(m, "GUIEventAdapter")
-		.def_property_readonly("eventType", &osgGA::GUIEventAdapter::getEventType)
-		.def_property_readonly("type", &osgGA::GUIEventAdapter::getEventType)
+	auto gea = py::class_<
+		osgGA::GUIEventAdapter,
+		osg::Object,
+		osg::ref_ptr<osgGA::GUIEventAdapter>
+	>(m, "GUIEventAdapter")
+		// TODO: Continue converting these down below!
 		.def_property_readonly("x", &osgGA::GUIEventAdapter::getX)
 		.def_property_readonly("y", &osgGA::GUIEventAdapter::getY)
 		.def_property_readonly("buttonMask", &osgGA::GUIEventAdapter::getButtonMask)
@@ -68,12 +72,91 @@ void bind(py::module_& m) {
 		.value("USER", osgGA::GUIEventAdapter::USER)
 	;
 
-	py::class_<osgGA::GUIEventHandler, GUIEventHandler, osg::Object, osg::ref_ptr<osgGA::GUIEventHandler>>(m, "GUIEventHandler")
+	py::enum_<osgGA::GUIEventAdapter::MouseYOrientation>(gea, "MouseYOrientation")
+		.value("Y_INCREASING_UPWARDS", osgGA::GUIEventAdapter::Y_INCREASING_UPWARDS)
+		.value("Y_INCREASING_DOWNWARDS", osgGA::GUIEventAdapter::Y_INCREASING_DOWNWARDS)
+	;
+
+	py::enum_<osgGA::GUIEventAdapter::ScrollingMotion>(gea, "ScrollingMotion")
+		.value("SCROLL_NONE", osgGA::GUIEventAdapter::SCROLL_NONE)
+		.value("SCROLL_LEFT", osgGA::GUIEventAdapter::SCROLL_LEFT)
+		.value("SCROLL_RIGHT", osgGA::GUIEventAdapter::SCROLL_RIGHT)
+		.value("SCROLL_UP", osgGA::GUIEventAdapter::SCROLL_UP)
+		.value("SCROLL_DOWN", osgGA::GUIEventAdapter::SCROLL_DOWN)
+		.value("SCROLL_2D", osgGA::GUIEventAdapter::SCROLL_2D)
+	;
+
+	gea
+		// TODO: Should this ACTUALLy be `eventType` instead?
+		.def_property(
+			"type",
+			&osgGA::GUIEventAdapter::getEventType,
+			&osgGA::GUIEventAdapter::setEventType
+		)
+		.def_property(
+			"mouseYOrientation",
+			&osgGA::GUIEventAdapter::getMouseYOrientation,
+			&osgGA::GUIEventAdapter::setMouseYOrientation
+		)
+	;
+
+	py::class_<
+		osgGA::GUIEventHandler,
+		GUIEventHandler,
+		osg::Object,
+		osg::ref_ptr<osgGA::GUIEventHandler>
+	>(m, "GUIEventHandler")
 		.def(py::init_alias<>())
-		// .def("handle", py::overload_cast<const osgGA::GUIEventAdapter&, osgGA::GUIActionAdapter&>(&osgGA::GUIEventHandler::handle))
-		.def("handle", [](osgGA::GUIEventHandler& self, const osgGA::GUIEventAdapter& ea, osgGA::GUIActionAdapter& aa) {
+		.def("handle", [](
+			osgGA::GUIEventHandler& self,
+			const osgGA::GUIEventAdapter& ea,
+			osgGA::GUIActionAdapter& aa
+		) {
 			return self.handle(ea, aa, nullptr, nullptr);
 		})
+	;
+
+	py::class_<
+		osgGA::EventQueue,
+		osg::Referenced,
+		osg::ref_ptr<osgGA::EventQueue>
+	>(m, "EventQueue")
+		.def("getCurrentEventState", py::overload_cast<>(&osgGA::EventQueue::getCurrentEventState))
+
+		.def("windowResize", py::overload_cast<
+			int, int, int, int
+		>(&osgGA::EventQueue::windowResize))
+		.def("windowResize", py::overload_cast<
+			int, int, int, int, double
+		>(&osgGA::EventQueue::windowResize))
+
+		.def("mouseButtonPress", py::overload_cast<
+			float, float, unsigned int
+		>(&osgGA::EventQueue::mouseButtonPress))
+		.def("mouseButtonPress", py::overload_cast<
+			float, float, unsigned int, double
+		>(&osgGA::EventQueue::mouseButtonPress))
+
+		.def("mouseButtonRelease", py::overload_cast<
+			float, float, unsigned int
+		>(&osgGA::EventQueue::mouseButtonRelease))
+		.def("mouseButtonRelease", py::overload_cast<
+			float, float, unsigned int, double
+		>(&osgGA::EventQueue::mouseButtonRelease))
+
+		.def("mouseMotion", py::overload_cast<
+			float, float
+		>(&osgGA::EventQueue::mouseMotion))
+		.def("mouseMotion", py::overload_cast<
+			float, float, double
+		>(&osgGA::EventQueue::mouseMotion))
+
+		.def("mouseScroll", py::overload_cast<
+			osgGA::GUIEventAdapter::ScrollingMotion
+		>(&osgGA::EventQueue::mouseScroll))
+		.def("mouseScroll", py::overload_cast<
+			osgGA::GUIEventAdapter::ScrollingMotion, double
+		>(&osgGA::EventQueue::mouseScroll))
 	;
 }
 
