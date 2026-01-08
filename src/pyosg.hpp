@@ -281,9 +281,7 @@ namespace detail {
 
 		explicit SequenceProxy(T* o): obj(o) {}
 
-		size_t size() const {
-			return traits::size(obj);
-		}
+		size_t size() const { return traits::size(obj); }
 
 		size_t _index(int index) const { return n_index(size(), index); }
 

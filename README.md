@@ -64,7 +64,7 @@ C++ and pybind11 correctly. The "shared core" mentioned above would provide both
 the headers AND the static library for linker resolution (used by both this
 OpenSceneGraph.so module and the hypothetical osgAcme.so module).
 
-# TODO
+# TODO (General)
 
 - [ ] Threading support (see below)
 - [ ] Math
@@ -80,6 +80,12 @@ OpenSceneGraph.so module and the hypothetical osgAcme.so module).
 - [ ] Operation
 - [x] Basic osgViewer::Viewer demo
 - [ ] Demo secondary bindings **BASED ON** these
+
+## TODO (Specific)
+
+- [ ] Make sure all `py::arg` use `""_a` syntax instead.
+- [ ] Make sure all `py::enum_` use `export_values()` if necessary.
+- [ ] Add docstrings!
 
 ## TODO (Threading) **IMPORTANT!!!**
 

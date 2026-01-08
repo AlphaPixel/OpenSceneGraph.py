@@ -21,6 +21,7 @@ void bind_Shader(py::module_& m) {
 		.value("FRAGMENT", osg::Shader::FRAGMENT)
 		.value("COMPUTE", osg::Shader::COMPUTE)
 		.value("UNDEFINED", osg::Shader::UNDEFINED)
+		.export_values()
 	;
 
 	shader
@@ -28,7 +29,7 @@ void bind_Shader(py::module_& m) {
 		.def(py::init<osg::Shader::Type, const std::string&>())
 		// .def(py::init<osg::Shader::Type, osg::ShaderBinary*>())
 		// .def(py::init<const osg::Shader&>())
-		.def_property_readonly("type", &osg::Shader::getType)
+		.def_property("type", &osg::Shader::getType, &osg::Shader::setType)
 		.def_property("file", &osg::Shader::getFileName, &osg::Shader::setFileName)
 		.def_property("source", &osg::Shader::getShaderSource, &osg::Shader::setShaderSource)
 	;
