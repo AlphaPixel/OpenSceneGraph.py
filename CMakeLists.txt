@@ -109,6 +109,7 @@ set(PYOSG_SOURCES
 	"src/osg/StateAttributes.cpp"
 	"src/osg/Shader.cpp"
 	"src/osg/Program.cpp"
+	"src/osg/GraphicsContext.cpp"
 	"src/pyosgDB.cpp"
 	"src/pyosgGA.cpp"
 	"src/pyosgViewer.cpp"

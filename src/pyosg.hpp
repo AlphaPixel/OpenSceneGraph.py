@@ -398,5 +398,6 @@ void bind_State(py::module_& m);
 void bind_StateAttributes(py::module_& m);
 void bind_Shader(py::module_& m);
 void bind_Program(py::module_& m);
+void bind_GraphicsContext(py::module_& m);
 
 }

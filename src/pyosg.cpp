@@ -26,6 +26,7 @@ void bind(py::module_& m) {
 	bind_StateAttributes(m);
 	bind_Shader(m);
 	bind_Program(m);
+	bind_GraphicsContext(m);
 }
 
 }

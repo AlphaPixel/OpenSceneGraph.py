@@ -10,6 +10,15 @@ PYOSG_ENABLE_WARNINGS
 namespace pyosgViewer {
 
 void bind(py::module_& m) {
+	// class OSGVIEWER_EXPORT GraphicsWindow : public osg::GraphicsContext, public osgGA::GUIActionAdapter
+	py::class_<
+		osgViewer::GraphicsWindow,
+		osg::GraphicsContext,
+		osgGA::GUIActionAdapter,
+		osg::ref_ptr<osgViewer::GraphicsWindow>
+	>(m, "GraphicsWindow")
+	;
+
 	// We LEAVE OUT osgGA::GUIActionAdapter here as a base class...
 	py::class_<osgViewer::View, osg::View, osg::ref_ptr<osgViewer::View>>(m, "View")
 		.def(py::init<>())
@@ -53,8 +62,7 @@ void bind(py::module_& m) {
 	>(m, "Viewer")
 		.def(py::init<>())
 
-		// .def("realize", &osgViewer::Viewer::realize)
-		// .def_property_readonly("realized", &osgViewer::Viewer::isRealized)
+		.def("setUpViewerAsEmbeddedInWindow", &osgViewer::Viewer::setUpViewerAsEmbeddedInWindow)
 
 		// TODO: This is where I put stuff I NEED to call, but haven't wrapped (YET)!
 		.def("unwrappedSetup", [](osgViewer::Viewer& self, bool glModern) {
