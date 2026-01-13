@@ -30,9 +30,13 @@ void bind(py::module_& m) {
 			self.addEventHandler(handler);
 		}, py::keep_alive<1, 2>())
 
-		/* .def("setSceneData", [](osgViewer::View& self, osg::Node* node) {
-			self.setSceneData(node);
-		}, py::keep_alive<1, 2>()) */
+		/* .def_property(
+			"sceneData",
+			[](osgViewer::View& self) { return self.getSceneData(); },
+			[](osgViewer::View& self, osg::Node* node) { self.setSceneData(node); },
+			py::return_value_policy::reference_internal,
+			py::keep_alive<1, 2>()
+		) */
 
 		.def_property(
 			"sceneData",
@@ -52,9 +56,6 @@ void bind(py::module_& m) {
 				[](osgViewer::View& self) { return self.getCameraManipulator(); },
 				py::return_value_policy::reference_internal
 			),
-			// Notice how we MUST include `"self"_a` here (where usually, we do not); this is
-			// because we're expclicitly using `py::cpp_funcion`, which forces us down a low-level
-			// pybind11 path.
 			py::cpp_function(
 				[](
 					osgViewer::View& self,
@@ -68,7 +69,7 @@ void bind(py::module_& m) {
 			)
 		)
 
-		/* .def_property(
+		.def_property(
 			"eventQueue",
 			py::cpp_function(
 				[](osgViewer::View& self) { return self.getEventQueue(); },
@@ -78,11 +79,10 @@ void bind(py::module_& m) {
 				[](osgViewer::View& self, osgGA::EventQueue* eq) { self.setEventQueue(eq); },
 				py::keep_alive<1, 2>()
 			)
-		) */
+		)
 
-		/* // TODO: def_property!
-		.def(
-			"getEventQueue",
+		/* .def_property_readonly(
+			"eventQueue",
 			py::overload_cast<>(&osgViewer::View::getEventQueue),
 			py::return_value_policy::reference_internal
 		) */

@@ -2,6 +2,7 @@
 
 PYOSG_DISABLE_WARNINGS
 
+#include <osg/View>
 #include <osg/Camera>
 
 PYOSG_ENABLE_WARNINGS
@@ -19,9 +20,27 @@ void bind_Camera(py::module_& m) {
 		osg::ref_ptr<osg::Camera>
 	>(m, "Camera")
 		.def(py::init<>())
+	;
+
+	py::enum_<osg::Camera::RenderOrder>(camera, "RenderOrder")
+		.value("PRE_RENDER", osg::Camera::PRE_RENDER)
+		.value("NESTED_RENDER", osg::Camera::NESTED_RENDER)
+		.value("POST_RENDER", osg::Camera::POST_RENDER)
+	;
+
+	camera
+		.def_property("renderOrder", &osg::Camera::getRenderOrder, &osg::Camera::setRenderOrder)
+		.def_property(
+			"view",
+			py::overload_cast<>(&osg::Camera::getView, py::const_),
+			&osg::Camera::setView,
+			py::return_value_policy::reference_internal
+		)
 		.def_property(
 			"viewport",
 			py::overload_cast<>(&osg::Camera::getViewport, py::const_),
+			// TODO: This should really just accept `osg.Viewpoint` (ONLY), but it's nice to know
+			// HOW to parse different types of args, so we'll leave it as an example...
 			[](osg::Camera& self, const py::args& args) {
 				if(args.size() == 1) {
 					// camera.viewport = viewport
@@ -60,7 +79,40 @@ void bind_Camera(py::module_& m) {
 				"  - (x, y, width, height) tuple"
 			)
 		)
-		// setProjectionMatrixAsPerspective
+
+		.def_property(
+			"projectionMatrix",
+			py::overload_cast<>(&osg::Camera::getProjectionMatrix, py::const_),
+			[](osg::Camera& self, py::handle matrix) {
+				if(py::isinstance<osg::Matrixd>(matrix)) self.setProjectionMatrix(
+					matrix.cast<osg::Matrixd>()
+				);
+
+				else if(py::isinstance<osg::Matrixf>(matrix)) self.setProjectionMatrix(
+					matrix.cast<osg::Matrixf>()
+				);
+
+				else throw py::type_error("projectionMatrix must be osg.Matrixd or osg.Matrixf");
+			},
+			py::return_value_policy::reference_internal
+		)
+
+		.def_property(
+			"viewMatrix",
+			py::overload_cast<>(&osg::Camera::getViewMatrix, py::const_),
+			[](osg::Camera& self, py::handle matrix) {
+				if(py::isinstance<osg::Matrixd>(matrix)) self.setViewMatrix(
+					matrix.cast<osg::Matrixd>()
+				);
+
+				else if(py::isinstance<osg::Matrixf>(matrix)) self.setViewMatrix(
+					matrix.cast<osg::Matrixf>()
+				);
+
+				else throw py::type_error("viewMatrix must be osg.Matrixd or osg.Matrixf");
+			},
+			py::return_value_policy::reference_internal
+		)
 	;
 }
 
