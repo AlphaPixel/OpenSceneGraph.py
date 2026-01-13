@@ -4,6 +4,7 @@ PYOSG_DISABLE_WARNINGS
 
 #include <osgGA/GUIEventHandler>
 #include <osgGA/EventQueue>
+#include <osgGA/TrackballManipulator>
 
 PYOSG_ENABLE_WARNINGS
 
@@ -157,6 +158,49 @@ void bind(py::module_& m) {
 		.def("mouseScroll", py::overload_cast<
 			osgGA::GUIEventAdapter::ScrollingMotion, double
 		>(&osgGA::EventQueue::mouseScroll))
+	;
+
+	// TODO: This WILL NEED a trampoline class in the `detail` namespace!
+	py::class_<
+		osgGA::CameraManipulator,
+		osgGA::GUIEventHandler,
+		osg::ref_ptr<osgGA::CameraManipulator>
+	>(m, "CameraManipulator")
+		// coordianteFrame
+		// sideVector
+		// frontVector
+		// upVector
+	;
+
+	auto sm = py::class_<
+		osgGA::StandardManipulator,
+		osgGA::CameraManipulator,
+		osg::ref_ptr<osgGA::StandardManipulator>
+	>(m, "StandardManipulator");
+
+	py::enum_<osgGA::StandardManipulator::UserInteractionFlags>(sm, "UserInteractionFlags")
+		.value("UPDATE_MODEL_SIZE", osgGA::StandardManipulator::UPDATE_MODEL_SIZE)
+		.value("COMPUTE_HOME_USING_BBOX", osgGA::StandardManipulator::COMPUTE_HOME_USING_BBOX)
+		.value("PROCESS_MOUSE_WHEEL", osgGA::StandardManipulator::PROCESS_MOUSE_WHEEL)
+		.value(
+			"SET_CENTER_ON_WHEEL_FORWARD_MOVEMENT",
+			osgGA::StandardManipulator::SET_CENTER_ON_WHEEL_FORWARD_MOVEMENT
+		)
+		.value("DEFAULT_SETTINGS", osgGA::StandardManipulator::DEFAULT_SETTINGS)
+	;
+
+	py::class_<
+		osgGA::OrbitManipulator,
+		osgGA::StandardManipulator,
+		osg::ref_ptr<osgGA::OrbitManipulator>
+	>(m, "OrbitManipulator");
+
+	py::class_<
+		osgGA::TrackballManipulator,
+		osgGA::CameraManipulator,
+		osg::ref_ptr<osgGA::TrackballManipulator>
+	>(m, "TrackballManipulator")
+		.def(py::init<int>(), "flags"_a=osgGA::StandardManipulator::DEFAULT_SETTINGS)
 	;
 }
 

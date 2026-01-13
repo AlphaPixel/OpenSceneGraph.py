@@ -26,6 +26,7 @@ void bind_GraphicsContext(py::module_& m) {
 		osg::Object,
 		osg::ref_ptr<osg::GraphicsContext>
 	>(m, "GraphicsContext")
+		.def("resized", &osg::GraphicsContext::resized)
 		.def("runOperations", &osg::GraphicsContext::runOperations)
 	;
 

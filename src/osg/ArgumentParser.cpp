@@ -60,8 +60,8 @@ namespace detail {
 			A thin adapter for OSG's legacy argc/argv-style ArgumentParser.
 
 			This exists *only* to support integration with OSG APIs that expect
-			an `osg::ArgumentParser` (e.g., plugin loaders, Viewer command-line
-			utilities, DisplaySettings::readCommandLine, and various osgDB helpers).
+			an `osg::ArgumentParser` (e.g., plugin loaders, `osgViewer` command-line
+			utilities, `DisplaySettings::readCommandLine`, and various osgDB helpers).
 
 			It is **not** intended to be a full-featured argument-parsing solution
 			for Python. Use Python's standard libraries (`argparse`, etc.) for real
