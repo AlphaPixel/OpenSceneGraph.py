@@ -3,11 +3,24 @@
 // TODO: Remove me!
 #include <iostream>
 
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-#include <pybind11/stl_bind.h>
-#include <pybind11/operators.h>
-#include <pybind11/embed.h>
+#include "pybind11/pybind11.h"
+#include "pybind11/stl.h"
+#include "pybind11/stl_bind.h"
+#include "pybind11/operators.h"
+#include "pybind11/embed.h"
+
+#if !defined(PYBIND11_VERSION_MAJOR) || \
+	!defined(PYBIND11_VERSION_MINOR) || \
+	!defined(PYBIND11_VERSION_MICRO)
+	#error "pybind11 version macros not found (wrong headers?)"
+#endif
+
+#if (PYBIND11_VERSION_MAJOR < 3) || \
+	(PYBIND11_VERSION_MAJOR == 3 && PYBIND11_VERSION_MINOR < 0) || \
+	(PYBIND11_VERSION_MAJOR == 3 && PYBIND11_VERSION_MINOR == 0 && PYBIND11_VERSION_MICRO < 2)
+
+	#error "pybind11 >= 3.0.2 is required"
+#endif
 
 #define PYOSG_DISABLE_WARNINGS \
 	_Pragma("GCC diagnostic push") \
