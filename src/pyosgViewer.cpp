@@ -19,6 +19,12 @@ void bind(py::module_& m) {
 		osg::ref_ptr<osgViewer::GraphicsWindow>
 	>(m, "GraphicsWindow");
 
+	py::class_<
+		osgViewer::GraphicsWindowEmbedded,
+		osgViewer::GraphicsWindow,
+		osg::ref_ptr<osgViewer::GraphicsWindowEmbedded>
+	>(m, "GraphicsWindowEmbedded");
+
 	// We LEAVE OUT osgGA::GUIActionAdapter here as a base class...
 	py::class_<osgViewer::View, osg::View, osg::ref_ptr<osgViewer::View>>(m, "View")
 		.def(py::init<>())
@@ -138,7 +144,11 @@ void bind(py::module_& m) {
 		.def(py::init<>())
 		.def(py::init<osg::ArgumentParser&>())
 
-		.def("setUpViewerAsEmbeddedInWindow", &osgViewer::Viewer::setUpViewerAsEmbeddedInWindow)
+		.def(
+			"setUpViewerAsEmbeddedInWindow",
+			&osgViewer::Viewer::setUpViewerAsEmbeddedInWindow,
+			py::return_value_policy::reference_internal
+		)
 
 		// TODO: This is where I put stuff I NEED to call, but haven't wrapped (YET)!
 		.def("TODO", [](osgViewer::Viewer& self, bool glModern) {

@@ -71,11 +71,13 @@ void bind(py::module_& m) {
 		.value("CLOSE_WINDOW", osgGA::GUIEventAdapter::CLOSE_WINDOW)
 		.value("QUIT_APPLICATION", osgGA::GUIEventAdapter::QUIT_APPLICATION)
 		.value("USER", osgGA::GUIEventAdapter::USER)
+		.export_values()
 	;
 
 	py::enum_<osgGA::GUIEventAdapter::MouseYOrientation>(gea, "MouseYOrientation")
 		.value("Y_INCREASING_UPWARDS", osgGA::GUIEventAdapter::Y_INCREASING_UPWARDS)
 		.value("Y_INCREASING_DOWNWARDS", osgGA::GUIEventAdapter::Y_INCREASING_DOWNWARDS)
+		.export_values()
 	;
 
 	py::enum_<osgGA::GUIEventAdapter::ScrollingMotion>(gea, "ScrollingMotion")
@@ -85,6 +87,7 @@ void bind(py::module_& m) {
 		.value("SCROLL_UP", osgGA::GUIEventAdapter::SCROLL_UP)
 		.value("SCROLL_DOWN", osgGA::GUIEventAdapter::SCROLL_DOWN)
 		.value("SCROLL_2D", osgGA::GUIEventAdapter::SCROLL_2D)
+		.export_values()
 	;
 
 	gea
@@ -122,7 +125,11 @@ void bind(py::module_& m) {
 		osg::Referenced,
 		osg::ref_ptr<osgGA::EventQueue>
 	>(m, "EventQueue")
-		.def("getCurrentEventState", py::overload_cast<>(&osgGA::EventQueue::getCurrentEventState))
+		.def_property_readonly(
+			"currentEventState",
+			py::overload_cast<>(&osgGA::EventQueue::getCurrentEventState),
+			py::return_value_policy::reference_internal
+		)
 
 		.def("windowResize", py::overload_cast<
 			int, int, int, int
@@ -187,6 +194,7 @@ void bind(py::module_& m) {
 			osgGA::StandardManipulator::SET_CENTER_ON_WHEEL_FORWARD_MOVEMENT
 		)
 		.value("DEFAULT_SETTINGS", osgGA::StandardManipulator::DEFAULT_SETTINGS)
+		.export_values()
 	;
 
 	py::class_<
