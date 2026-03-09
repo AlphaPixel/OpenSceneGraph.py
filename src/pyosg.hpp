@@ -12,6 +12,7 @@
 #if !defined(PYBIND11_VERSION_MAJOR) || \
 	!defined(PYBIND11_VERSION_MINOR) || \
 	!defined(PYBIND11_VERSION_MICRO)
+
 	#error "pybind11 version macros not found (wrong headers?)"
 #endif
 
@@ -22,6 +23,25 @@
 	#error "pybind11 >= 3.0.2 is required"
 #endif
 
+#if defined(__clang__)
+
+#define PYOSG_DISABLE_WARNINGS \
+	_Pragma("clang diagnostic push") \
+	_Pragma("clang diagnostic ignored \"-Wconversion\"") \
+	_Pragma("clang diagnostic ignored \"-Wsign-conversion\"") \
+	_Pragma("clang diagnostic ignored \"-Wdeprecated-copy\"") \
+	_Pragma("clang diagnostic ignored \"-Wfloat-conversion\"") \
+	_Pragma("clang diagnostic ignored \"-Wsign-compare\"") \
+	_Pragma("clang diagnostic ignored \"-Woverloaded-virtual\"") \
+	_Pragma("clang diagnostic ignored \"-Wshadow\"") \
+	_Pragma("clang diagnostic ignored \"-Wunused-but-set-variable\"") \
+	_Pragma("clang diagnostic ignored \"-Winconsistent-missing-override\"")
+
+#define PYOSG_ENABLE_WARNINGS \
+	_Pragma("clang diagnostic pop")
+
+#elif defined(__GNUC__)
+
 #define PYOSG_DISABLE_WARNINGS \
 	_Pragma("GCC diagnostic push") \
 	_Pragma("GCC diagnostic ignored \"-Wconversion\"") \
@@ -31,10 +51,20 @@
 	_Pragma("GCC diagnostic ignored \"-Wsign-compare\"") \
 	_Pragma("GCC diagnostic ignored \"-Woverloaded-virtual\"") \
 	_Pragma("GCC diagnostic ignored \"-Wshadow\"") \
-	_Pragma("GCC diagnostic ignored \"-Wunused-but-set-variable\"")
+	_Pragma("GCC diagnostic ignored \"-Wunused-but-set-variable\"") \
 
 #define PYOSG_ENABLE_WARNINGS \
 	_Pragma("GCC diagnostic pop")
+
+#endif
+
+// Everything I read assures me that this will be "optimized away" when it matters.
+#define PYOSG_SUPPRESS_WARNINGS(stmt) \
+	do { \
+		PYOSG_DISABLE_WARNINGS \
+		stmt; \
+		PYOSG_ENABLE_WARNINGS \
+	} while(0)
 
 PYOSG_DISABLE_WARNINGS
 

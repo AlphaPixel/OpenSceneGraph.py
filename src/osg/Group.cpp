@@ -75,29 +75,22 @@ void bind_Group(py::module_& m) {
 		}))
 		.def("addChild", [](osg::Group& self, osg::Node* child) {
 			return self.addChild(child);
-		}, py::arg("child"), py::keep_alive<1, 2>())
+		}, py::keep_alive<1, 2>())
 		.def("getChild",
-			// TODO: No py::overload_cast?
-			static_cast<osg::Node*(osg::Group::*)(unsigned int)>(&osg::Group::getChild),
+			py::overload_cast<unsigned int>(&osg::Group::getChild),
 			py::return_value_policy::reference_internal
 		)
 		.def("getNumChildren", &osg::Group::getNumChildren)
 		.def("removeChild",
-			// TODO: No py::overload_cast? Why?
-			static_cast<bool(osg::Group::*)(osg::Node*)>(&osg::Group::removeChild),
-			py::arg("child")
+			// TODO: No `py::overload_cast`?
+			 static_cast<bool(osg::Group::*)(osg::Node*)>(&osg::Group::removeChild)
+			// py::overload_cast<osg::Node*>(&osg::Group::removeChild)
 		)
-		.def("removeChildren",
-			&osg::Group::removeChildren,
-			py::arg("index"),
-			py::arg("numChildren")
-		)
+		.def("removeChildren", &osg::Group::removeChildren)
 		.def("replaceChild",
 			[](osg::Group& self, osg::Node* oldChild, osg::Node* newChild) {
 				return self.replaceChild(oldChild, newChild);
 			},
-			py::arg("oldChild"),
-			py::arg("newChild"),
 			py::keep_alive<1, 3>()
 		)
 		.def("addChildren", [](osg::Group& self, const py::args& args) {

@@ -20,14 +20,14 @@ namespace detail {
 		}
 
 		void apply(osg::Node& node) override {
-			// Optional logging: keep or delete.
+			/* // TODO: Optional logging: keep or delete.
 			OSG_INFO
 				<< "detail::NodeVisitor::apply(Node&)"
 				<< " this=" << this
 				<< " typeid=" << typeid(node).name()
 				<< " name=" << node.getName()
 				<< std::endl
-			;
+			; */
 
 			// Call Python override if present.
 			// Convention:
@@ -35,23 +35,20 @@ namespace detail {
 			//   - True  -> traverse
 			//   - False -> prune children
 			auto r = call_override<bool>("apply", this, &node);
-			auto do_traverse = r.value_or(true);
 
-			if (do_traverse) {
-				osg::NodeVisitor::traverse(node);
-			}
+			if(r.value_or(true)) osg::NodeVisitor::traverse(node);
 		}
 
 		// Keep Group overload ONLY to collapse to Node path.
 		// No logging, no Python dispatch here.
 		void apply(osg::Group& group) override {
-			OSG_INFO
+			/* OSG_INFO
 				<< "detail::NodeVisitor::apply(Geode&)"
 				<< " this=" << this
 				<< " typeid=" << typeid(group).name()
 				<< " name=" << group.getName()
 				<< std::endl
-			;
+			; */
 
 			apply(static_cast<osg::Node&>(group));
 		}
@@ -92,10 +89,9 @@ void bind_NodeVisitor(py::module_& m) {
 		.def("_traverse", [](detail::NodeVisitor& self, osg::Node& node) {
 			self._traverse(node);
 		})
-		/* .def("apply", [](osg::NodeVisitor& self, osg::Node& node) {
-			return self.apply(node);
-		}) */
-		.def("apply", static_cast<void (osg::NodeVisitor::*)(osg::Node&)>(&osg::NodeVisitor::apply))
+		// .def("apply", [](osg::NodeVisitor& self, osg::Node& node) { return self.apply(node); })
+		// .def("apply", static_cast<void (osg::NodeVisitor::*)(osg::Node&)>(&osg::NodeVisitor::apply))
+		.def("apply", py::overload_cast<osg::Node&>(&osg::NodeVisitor::apply))
 		.def_property("traversalMask", &osg::NodeVisitor::getTraversalMask, &osg::NodeVisitor::setTraversalMask)
 		.def_property("traversalMode", &osg::NodeVisitor::getTraversalMode, &osg::NodeVisitor::setTraversalMode)
 	;

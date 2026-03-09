@@ -159,11 +159,15 @@ namespace detail {
 			.def("__getitem__", [](T& self, const py::slice& slice) {
 				size_t start, stop, step, length;
 
-				if(!slice.compute(self.size(), &start, &stop, &step, &length))
-					throw py::error_already_set();
+				if(!slice.compute(
+					self.size(),
+					&start,
+					&stop,
+					&step,
+					&length
+				)) throw py::error_already_set();
 
-				if(step != 1)
-					throw std::runtime_error("Vec3Array slicing only supports step=1");
+				if(step != 1) throw std::runtime_error("Vec3Array slicing only supports step=1");
 
 				return ArraySlice<T>(
 					reinterpret_cast<ArraySlice<T>::element_type*>(

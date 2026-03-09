@@ -14,7 +14,7 @@ os.putenv("OSG_THREADING", "SingleThreaded")
 from OpenSceneGraph import *
 
 def f32(x: float) -> float:
-	"""Convert Python float → IEEE754 float32 → float64 again."""
+	"""Convert Python float -> IEEE754 float32 -> float64 again."""
 
 	return struct.unpack("!f", struct.pack("!f", x))[0]
 
@@ -33,6 +33,20 @@ def floatif(integral: int, fractional: int) -> (float, float):
 	f = integral + fractional / (10 ** digits)
 
 	return f, f32(f)
+
+def refcmp(obj: osg.Referenced, cpp: int, py: int) -> bool:
+	"""
+	Compare an object's C++ and Python reference counts.
+
+	The expected Python reference count is adjusted by +2 to account for:
+		1) CPython's temporary reference during attribute access, and
+		2) the reference held by passing `obj` into this function.
+
+	This helper allows tests to express *logical* ownership expectations
+	rather than raw CPython refcount mechanics.
+	"""
+
+	return obj.referenceCount == osg.RefCounts(cpp, py + 2)
 
 @pytest.fixture
 def emit_notify():

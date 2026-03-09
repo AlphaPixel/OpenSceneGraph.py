@@ -9,7 +9,44 @@ PYOSG_ENABLE_WARNINGS
 
 namespace pyosgViewer {
 
+namespace detail {
+	class ViewerBase: public osgViewer::ViewerBase {
+	public:
+		void frame(double simulationTime=USE_REFERENCE_TIME) override {
+			PYBIND11_OVERRIDE(void, osgViewer::ViewerBase, frame, simulationTime);
+		}
+
+		// void advance(double simulationTime=USE_REFERENCE_TIME) = 0;
+
+		// void eventTraversal() = 0;
+
+		// void updateTraversal() = 0;
+
+		// void renderingTraversals();
+
+		void viewerInit() override {
+			PYBIND11_OVERRIDE_PURE(void, osgViewer::ViewerBase, viewerInit);
+		}
+	};
+}
+
 void bind(py::module_& m) {
+	py::class_<osgViewer::Scene, osg::Referenced, osg::ref_ptr<osgViewer::Scene>>(m, "Scene")
+		.def_property(
+			"data",
+			py::cpp_function(
+				py::overload_cast<>(&osgViewer::Scene::getSceneData),
+				py::return_value_policy::reference_internal
+			),
+			&osgViewer::Scene::setSceneData
+		)
+
+		.def("updateSceneGraph", &osgViewer::Scene::updateSceneGraph)
+
+		// virtual bool requiresUpdateSceneGraph() const;
+		// virtual bool requiresRedraw() const;
+	;
+
 	py::class_<
 		osgViewer::GraphicsWindow,
 		osg::GraphicsContext,
@@ -43,6 +80,12 @@ void bind(py::module_& m) {
 			py::return_value_policy::reference_internal,
 			py::keep_alive<1, 2>()
 		) */
+
+		.def_property_readonly(
+			"scene",
+			py::overload_cast<>(&osgViewer::View::getScene),
+			py::return_value_policy::reference_internal
+		)
 
 		.def_property(
 			"sceneData",
@@ -96,9 +139,16 @@ void bind(py::module_& m) {
 
 	auto vb = py::class_<
 		osgViewer::ViewerBase,
+		detail::ViewerBase,
 		osg::Object,
 		osg::ref_ptr<osgViewer::ViewerBase>
-	>(m, "ViewerBase");
+	>(m, "ViewerBase")
+		.def("frame", [](osgViewer::ViewerBase& self) {
+			py::gil_scoped_release release;
+
+			self.frame();
+		})
+	;
 
 	py::enum_<osgViewer::ViewerBase::ThreadingModel>(vb, "ThreadingModel")
 		.value("SingleThreaded", osgViewer::ViewerBase::SingleThreaded)
@@ -128,11 +178,11 @@ void bind(py::module_& m) {
 			&osgViewer::ViewerBase::done,
 			&osgViewer::ViewerBase::setDone
 		)
-		.def("frame", [](osgViewer::ViewerBase& self) {
+		/* .def("frame", [](osgViewer::ViewerBase& self) {
 			py::gil_scoped_release release;
 
 			self.frame();
-		})
+		}) */
 	;
 
 	py::class_<

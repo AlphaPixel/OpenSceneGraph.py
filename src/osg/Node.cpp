@@ -25,10 +25,29 @@ void bind_Node(py::module_& m) {
 
 			return n;
 		}))
-		.def("setUpdateCallback", [](osg::Node& self, osg::NodeCallback* cb) {
+
+		/* .def("setUpdateCallback", [](osg::Node& self, osg::NodeCallback* cb) {
 			// TODO: What happens when cb is nullptr?
 			self.setUpdateCallback(cb);
 		}, py::keep_alive<1, 2>())
+		.def("getUpdateCallback", [](osg::Node& self) {
+			return self.getUpdateCallback();
+		}, py::return_value_policy::reference) */
+
+		.def_property(
+			"updateCallback",
+			py::cpp_function([](osg::Node& self) -> osg::Callback* {
+				return self.getUpdateCallback();
+			// }, py::return_value_policy::reference),
+			}, py::return_value_policy::reference_internal),
+			py::cpp_function([](osg::Node& self, osg::NodeCallback* cb) {
+				// py::cast(cb).inc_ref();
+
+				self.setUpdateCallback(cb);
+			}, py::keep_alive<1, 2>())
+			// })
+		)
+
 		// NOTE: We do NOT use py::keep_alive here, since the visitor will stay alive the entirety
 		// of this call, even IF you do something like: node.accept(PythonVistor()).
 		.def("accept", [](osg::Node& self, osg::NodeVisitor* nv) {
