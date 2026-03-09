@@ -64,6 +64,56 @@ C++ and pybind11 correctly. The "shared core" mentioned above would provide both
 the headers AND the static library for linker resolution (used by both this
 OpenSceneGraph.so module and the hypothetical osgAcme.so module).
 
+# Cheatsheet
+
+## keep_alive
+
+The pybind API calls the template parameters `py::keep_alive<Nurse, Patient>`.
+Once you understand *why* it uses these names (and understand WHAT the numeric
+indices refer to), using `py::keep_alive<>` becomes a lot easier: a `Nurse`
+keeps a `Patient` alive.
+
+### Indices
+
+| Index | Refers to                     |
+| ----- | ----------------------------- |
+| `0`   | the **return value** (if any) |
+| `1`   | `self` (for methods)          |
+| `2`   | first explicit argument       |
+| `3`   | second explicit argument      |
+| ...   | etc                           |
+
+### Common Usage
+
+| Pattern            | Meaning                | Typical Use                    |
+| ------------------ | ---------------------- | ------------------------------ |
+| `keep_alive<1, 2>` | self owns arg          | containers, graphs             |
+| `keep_alive<0, 1>` | return depends on self | views (arrays), internals      |
+| `keep_alive<2, 1>` | arg owns self          | rare / suspect                 |
+
+We could even come up with some aliases such as:
+
+```
+using KeepChildAlive = py::keep_alive<1, 2>;
+using KeepSelfAlive  = py::keep_alive<0, 1>;
+```
+## return_value_policy
+
+Use `reference_internal` when:
+
+- returning userData
+- returning parents / children
+- returning anything owned by self
+
+Use `reference` when:
+
+- returning globally-owned singletons
+- returning objects guaranteed to outlive Python
+- you want raw semantics
+
+Avoid `copy`, `move`, and `take_ownership` unless the C++ API explicitly
+documents ownership transfer.
+
 # TODO (General)
 
 - [ ] Threading support (see below)
