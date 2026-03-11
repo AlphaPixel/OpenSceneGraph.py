@@ -308,6 +308,14 @@ void bind_State(py::module_& m) {
 			"unit"_a,
 			"attr"_a
 		)
+		.def("addUniform", [](
+			osg::StateSet& self,
+			osg::Uniform* uniform,
+			osg::StateAttribute::OverrideValue value
+		) { self.addUniform(uniform, value); },
+			"uniform"_a,
+			"value"_a=osg::StateAttribute::ON
+		)
 		.def("getTextureMode", &osg::StateSet::setTextureMode)
 		.def("setTextureMode", &osg::StateSet::setTextureMode)
 		.def("removeTextureMode", &osg::StateSet::removeTextureMode)

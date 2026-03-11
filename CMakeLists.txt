@@ -107,6 +107,7 @@ set(PYOSG_SOURCES
 	"src/osg/Camera.cpp"
 	"src/osg/State.cpp"
 	"src/osg/StateAttributes.cpp"
+	"src/osg/Uniform.cpp"
 	"src/osg/Shader.cpp"
 	"src/osg/Program.cpp"
 	"src/osg/GraphicsContext.cpp"

@@ -24,6 +24,7 @@ void bind(py::module_& m) {
 	bind_Camera(m);
 	bind_State(m);
 	bind_StateAttributes(m);
+	bind_Uniform(m);
 	bind_Shader(m);
 	bind_Program(m);
 	bind_GraphicsContext(m);
