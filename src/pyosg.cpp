@@ -27,6 +27,7 @@ void bind(py::module_& m) {
 	bind_Uniform(m);
 	bind_Shader(m);
 	bind_Program(m);
+	bind_Texture(m);
 	bind_GraphicsContext(m);
 }
 

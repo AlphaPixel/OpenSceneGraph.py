@@ -28,6 +28,10 @@ namespace detail {
 
 		using osg::Object::Object;
 
+		explicit Object(): osg::Object() {
+			std::cout << "C++ CONSTRUCTION!" << std::endl;
+		}
+
 		~Object() override {
 			if(debug_del) std::cout << "C++ destruction!" << std::endl;
 
@@ -82,7 +86,7 @@ void bind_Object(py::module_& m) {
 	;
 
 	obj
-		.def(py::init<>())
+		.def(py::init_alias<>())
 		.def(py::init([](py::kwargs kwargs) {
 			osg::ref_ptr<osg::Object> o = new detail::Object();
 

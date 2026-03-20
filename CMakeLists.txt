@@ -110,6 +110,7 @@ set(PYOSG_SOURCES
 	"src/osg/Uniform.cpp"
 	"src/osg/Shader.cpp"
 	"src/osg/Program.cpp"
+	"src/osg/Texture.cpp"
 	"src/osg/GraphicsContext.cpp"
 	"src/pyosgDB.cpp"
 	"src/pyosgGA.cpp"

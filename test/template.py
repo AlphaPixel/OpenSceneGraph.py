@@ -9,6 +9,3 @@ def test_construction():
 
 def test_inheritance():
 	pass
-
-def test_userdata():
-	pass

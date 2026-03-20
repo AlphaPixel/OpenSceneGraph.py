@@ -4,12 +4,75 @@ PYOSG_DISABLE_WARNINGS
 
 #include <osg/View>
 #include <osg/Camera>
+#include <osg/RenderInfo>
 
 PYOSG_ENABLE_WARNINGS
 
 namespace pyosg {
 
-// namespace detail {}
+namespace detail {
+	class Camera: public osg::Camera {
+	public:
+		struct DrawCallback: osg::Camera::DrawCallback {
+			using osg::Camera::DrawCallback::DrawCallback;
+
+			void operator()(osg::RenderInfo& ri) const override {
+				PYBIND11_OVERRIDE(
+					void,
+					osg::Camera::DrawCallback,
+					operator(),
+					ri
+				);
+			}
+		};
+
+		// TODO: This is really just a simple helper for using ANYTHING callable, instead of
+		// being REQUIRED to override the "__call__" method.
+		class PYOSG_INTERNAL CallableDrawCallback: public osg::Camera::DrawCallback {
+		public:
+			explicit CallableDrawCallback(py::object fn): _fn(std::move(fn)) {}
+
+			void operator()(osg::RenderInfo& ri) const override {
+				py::gil_scoped_acquire gil;
+
+				_fn(ri);
+			}
+
+		private:
+			py::object _fn;
+		};
+	};
+
+	template<typename Getter>
+	auto getDrawCallback(Getter&& getter) {
+		return py::cpp_function(
+			std::forward<Getter>(getter),
+			py::return_value_policy::reference_internal
+		);
+	}
+
+	template<auto Setter>
+	auto setDrawCallback() {
+		return py::cpp_function(
+			[](osg::Camera& self, py::object obj) {
+				if(obj.is_none()) (self.*Setter)(nullptr);
+
+				else if(py::isinstance<osg::Camera::DrawCallback>(obj)) {
+					(self.*Setter)(obj.cast<osg::Camera::DrawCallback*>());
+				}
+
+				else if(PyCallable_Check(obj.ptr())) {
+					auto cb = new Camera::CallableDrawCallback(obj);
+
+					(self.*Setter)(cb);
+				}
+
+				else throw py::value_error("Expected DrawCallback, callable, or None");
+			},
+			py::keep_alive<1, 2>()
+		);
+	}
+}
 
 void bind_Camera(py::module_& m) {
 	auto camera = py::class_<
@@ -28,8 +91,28 @@ void bind_Camera(py::module_& m) {
 		.value("POST_RENDER", osg::Camera::POST_RENDER)
 	;
 
+	py::class_<
+		osg::Camera::DrawCallback,
+		detail::Camera::DrawCallback,
+		osg::Object,
+		osg::ref_ptr<osg::Camera::DrawCallback>
+	>(camera, "DrawCallback")
+		.def(py::init<>())
+		.def("__call__", [](osg::Camera::DrawCallback& self, osg::RenderInfo* ri) {
+			// Manual forwarding; ensures Python sees correct signature.
+			return;
+		})
+	;
+
 	camera
 		.def_property("renderOrder", &osg::Camera::getRenderOrder, &osg::Camera::setRenderOrder)
+		.def_property("clearMask", &osg::Camera::getClearMask, &osg::Camera::setClearMask)
+		.def_property("clearColor", &osg::Camera::getClearColor, &osg::Camera::setClearColor)
+		.def_property(
+			"allowEventFocus",
+			&osg::Camera::getAllowEventFocus,
+			&osg::Camera::setAllowEventFocus
+		)
 		.def_property(
 			"view",
 			py::overload_cast<>(&osg::Camera::getView, py::const_),
@@ -112,6 +195,27 @@ void bind_Camera(py::module_& m) {
 				else throw py::type_error("viewMatrix must be osg.Matrixd or osg.Matrixf");
 			},
 			py::return_value_policy::reference_internal
+		)
+
+		.def_property(
+			"initialDrawCallback",
+			detail::getDrawCallback(py::overload_cast<>(&osg::Camera::getInitialDrawCallback)),
+			detail::setDrawCallback<&osg::Camera::setInitialDrawCallback>()
+		)
+		.def_property(
+			"preDrawCallback",
+			detail::getDrawCallback(py::overload_cast<>(&osg::Camera::getPreDrawCallback)),
+			detail::setDrawCallback<&osg::Camera::setPreDrawCallback>()
+		)
+		.def_property(
+			"postDrawCallback",
+			detail::getDrawCallback(py::overload_cast<>(&osg::Camera::getPostDrawCallback)),
+			detail::setDrawCallback<&osg::Camera::setPostDrawCallback>()
+		)
+		.def_property(
+			"finalDrawCallback",
+			detail::getDrawCallback(py::overload_cast<>(&osg::Camera::getFinalDrawCallback)),
+			detail::setDrawCallback<&osg::Camera::setFinalDrawCallback>()
 		)
 	;
 }

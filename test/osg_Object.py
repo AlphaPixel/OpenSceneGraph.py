@@ -18,6 +18,15 @@ def test_construction():
 
 	assert refcmp(o, 1, 3)
 
+def test_destruction(capsys):
+	o = Object(name="bar")
+
+	o.debug_del = True
+
+	del o
+
+	assert capsys.readouterr() == "debug_del"
+
 def test_inheritance():
 	o = MyObject(name="foo", dataVariance=Object.DYNAMIC)
 

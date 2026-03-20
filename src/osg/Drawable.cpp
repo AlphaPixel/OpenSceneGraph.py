@@ -15,6 +15,19 @@ namespace detail {
 
 	class Drawable: public osg::Drawable {
 	public:
+		/* struct DrawCallback: public osg::Drawable::DrawCallback {
+			void drawImplementation(osg::RenderInfo& ri) const override {
+				py::gil_scoped_acquire gil;
+
+				PYBIND11_OVERRIDE(
+					void,
+					osg::Drawable,
+					drawImplementation,
+					ri
+				);
+			}
+		}; */
+
 		void drawImplementation(osg::RenderInfo& ri) const override {
 			py::gil_scoped_acquire gil;
 
@@ -46,15 +59,17 @@ namespace detail {
 
 void bind_Drawable(py::module_& m) {
 	py::class_<osg::RenderInfo>(m, "RenderInfo")
-		.def("getState",
+		.def_property_readonly("contextID", &osg::RenderInfo::getContextID)
+		// TODO: Add setter support!?
+		.def_property_readonly("state",
 			py::overload_cast<>(&osg::RenderInfo::getState),
 			py::return_value_policy::reference
 		)
-		.def("getView",
+		// TODO: Add setter support!?
+		.def_property_readonly("view",
 			py::overload_cast<>(&osg::RenderInfo::getView),
 			py::return_value_policy::reference
 		)
-		.def_property_readonly("contextID", &osg::RenderInfo::getContextID)
 	;
 
 	py::class_<osg::Drawable, osg::Node, detail::Drawable, osg::ref_ptr<osg::Drawable>>(m, "Drawable")
@@ -71,6 +86,16 @@ void bind_Drawable(py::module_& m) {
 		})
 		.def("computeBound", &osg::Drawable::computeBound)
 		.def("computeBoundingBox", &osg::Drawable::computeBoundingBox)
+		.def_property("initialBound",
+			py::cpp_function(
+				&osg::Drawable::getInitialBound,
+				py::return_value_policy::reference
+			),
+			py::cpp_function(
+				&osg::Drawable::setInitialBound,
+				py::keep_alive<1, 2>()
+			)
+		)
 	;
 }
 
