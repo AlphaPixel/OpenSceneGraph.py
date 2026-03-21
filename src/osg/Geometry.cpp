@@ -162,20 +162,46 @@ void bind_Geometry(py::module_& m) {
 	// virtual void setUseVertexBufferObjects(bool flag);
 	py::class_<osg::Geometry, osg::Drawable, osg::ref_ptr<osg::Geometry>>(m, "Geometry")
 		.def(py::init<>())
-        // void setVertexArray(Array* array);
-
-        // void setVertexAttribArray(unsigned int index, Array* array) { setVertexAttribArray(index, array, osg::Array::BIND_UNDEFINED); }
-        // void setVertexAttribArray(unsigned int index, Array* array, osg::Array::Binding binding);
-
-        // void setVertexAttribBinding(unsigned int index,AttributeBinding ab);
-
-        // void setVertexAttribNormalize(unsigned int index,GLboolean norm);
-
+		// void setVertexArray(Array* array);
+		// void setVertexAttribArray(unsigned int index, Array* array) { setVertexAttribArray(index, array, osg::Array::BIND_UNDEFINED); }
+		// void setVertexAttribArray(unsigned int index, Array* array, osg::Array::Binding binding);
+		// void setVertexAttribBinding(unsigned int index,AttributeBinding ab);
+		// void setVertexAttribNormalize(unsigned int index,GLboolean norm);
 		// TODO: TEMPORARY! (Until I can introduce my new SequenceProxy!
 		.def(
 			"addPrimitiveSet",
 			&osg::Geometry::addPrimitiveSet,
 			py::keep_alive<1, 2>()
+		)
+	;
+
+	m
+		.def(
+			"createTexturedQuadGeometry",
+			py::overload_cast<
+				const osg::Vec3&,
+				const osg::Vec3&,
+				const osg::Vec3&,
+				float,
+				float,
+				float,
+				float
+			>(&osg::createTexturedQuadGeometry)
+		)
+		.def(
+			"createTexturedQuadGeometry",
+			py::overload_cast<
+				const osg::Vec3&,
+				const osg::Vec3&,
+				const osg::Vec3&,
+				float,
+				float
+			>(&osg::createTexturedQuadGeometry),
+			"corner"_a,
+			"width"_a,
+			"height"_a,
+			"s"_a=1.0f,
+			"t"_a=1.0f
 		)
 	;
 }

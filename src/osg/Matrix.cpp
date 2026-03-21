@@ -23,19 +23,29 @@ namespace detail {
 	auto bind_Matrix(py::module_& m, const char* name) {
 		using value_type = typename T::value_type;
 
-		return py::class_<T>(m, name)
+		auto mat = py::class_<T>(m, name)
 			.def(py::init<>())
-			.def(py::init([](const std::array<value_type, 16>& vals) {
-				return T(vals.data());
-			}))
+			.def(py::init<const T&>())
+		;
+
+		// So, it turns out that constructor order IS IMPORTANT! There's really way around these
+		// checks on the "type" of `T` unless we moved the more aggressive `std::array`
+		// constructors OUT of this helper...
+		if constexpr(std::is_same_v<T, osg::Matrixf>) mat.def(py::init<const osg::Matrixd&>());
+
+		else if constexpr(std::is_same_v<T, osg::Matrixd>) mat.def(py::init<const osg::Matrixf&>());
+
+		mat
+			.def(py::init<const osg::Quat&>())
 			.def(py::init<
 				value_type, value_type, value_type, value_type,
 				value_type, value_type, value_type, value_type,
 				value_type, value_type, value_type, value_type,
 				value_type, value_type, value_type, value_type
 			>())
-			.def(py::init<const osg::Quat&>())
-			.def(py::init<const T&>())
+			.def(py::init([](const std::array<value_type, 16>& vals) {
+				return T(vals.data());
+			}))
 
 			// This is called by the operators below; it seems to return < 0 for "less than", equal
 			// to 0 for "equal to", and greater than 0 for "not equal." I think.
@@ -59,11 +69,64 @@ namespace detail {
 				return self(row, col);
 			})
 
+			/* .def("__getitem__", [](const T& self, py::object index) -> py::object {
+				// (row, col)
+				if (py::isinstance<py::tuple>(index)) {
+					auto rc = index.cast<std::pair<size_t, size_t>>();
+					auto [row, col] = n_indices<int>(4, rc.first, rc.second);
+					return py::cast(self(row, col));
+				}
+
+				// row
+				if (py::isinstance<py::int_>(index)) {
+					int row = index.cast<int>();
+					row = n_index<int>(4, row);
+
+					return py::cast(typename MatrixTraits<T>::Vec4(
+						self(row, 0),
+						self(row, 1),
+						self(row, 2),
+						self(row, 3)
+					));
+				}
+
+				throw py::type_error("Index must be int or (row, col)");
+			}) */
+
 			.def("__setitem__", [](T& self, std::pair<size_t, size_t> rc, value_type value) {
 				auto [row, col] = n_indices<int>(4, rc.first, rc.second);
 
-				return self(row, col);
+				return self(row, col) = value;
 			})
+
+			/* .def("__setitem__", [](T& self, py::object index, py::object value) {
+				// (row, col)
+				if (py::isinstance<py::tuple>(index)) {
+					auto rc = index.cast<std::pair<size_t, size_t>>();
+					auto [row, col] = n_indices<int>(4, rc.first, rc.second);
+
+					self(row, col) = value.cast<value_type>();
+					return;
+				}
+
+				// row
+				if (py::isinstance<py::int_>(index)) {
+					int row = index.cast<int>();
+					row = n_index<int>(4, row);
+
+					auto vec = value.cast<typename MatrixTraits<T>::Vec4>();
+
+					self(row, 0) = vec[0];
+					self(row, 1) = vec[1];
+					self(row, 2) = vec[2];
+					self(row, 3) = vec[3];
+					return;
+				}
+
+				throw py::type_error("Index must be int or (row, col)");
+			})
+
+			.def("__len__", [](const T&) { return 4; }) */
 
 			.def("__repr__", [name](const T& v) {
 				return seq_repr<16>(name, [&](size_t i) {
@@ -224,12 +287,14 @@ namespace detail {
 				const osg::Vec3d&
 			>(&T::lookAt))
 		;
+
+		return mat;
 	}
 }
 
 void bind_Matrix(py::module_& m) {
-	auto mf = detail::bind_Matrix<osg::Matrixf>(m, "Matrixf");
 	auto md = detail::bind_Matrix<osg::Matrixd>(m, "Matrixd");
+	auto mf = detail::bind_Matrix<osg::Matrixf>(m, "Matrixf");
 
 #ifdef OSG_USE_FLOAT_MATRIX
 	m.add_object("Matrix", mf);

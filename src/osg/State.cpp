@@ -39,6 +39,10 @@ void bind_State(py::module_& m) {
 	;
 
 	py::class_<osg::State, osg::Referenced, osg::ref_ptr<osg::State>>(m, "State")
+		.def_property_readonly("projectionMatrix",
+			&osg::State::getProjectionMatrix,
+			py::return_value_policy::reference_internal
+		)
 		.def_property_readonly("contextID", &osg::State::getContextID)
 		/* .def("getGraphicsContext",
 			&osg::State::getGraphicsContext,

@@ -23,11 +23,11 @@ namespace detail {
 		osg::Vec2d,
 		osg::Vec3d,
 		osg::Vec4d,
-		osg::Matrixf,
 		osg::Matrixd */
 		float,
 		double,
-		osg::Vec3
+		osg::Vec3,
+		osg::Matrixf
 	>;
 
 	py::object uniform_get(osg::Uniform& self, py::ssize_t index) {
@@ -60,6 +60,14 @@ namespace detail {
 				break;
 			}
 
+			case osg::Uniform::FLOAT_MAT4: {
+				value.emplace<osg::Matrixf>();
+
+				self.getElement(i, std::get<osg::Matrixf>(value));
+
+				break;
+			}
+
 			default: throw py::type_error("TODO: Unsupported underlying 'type'");
 		}
 
@@ -67,7 +75,17 @@ namespace detail {
 	}
 
 	void uniform_set(osg::Uniform& self, py::ssize_t index, py::object obj) {
-		UniformVariant value = obj.cast<UniformVariant>();
+		// UniformVariant value = obj.cast<UniformVariant>();
+
+		UniformVariant value;
+
+		try {
+			value = obj.cast<UniformVariant>();
+		}
+
+		catch(const py::cast_error&) {
+			throw py::type_error("Invalid type for Uniform assignment");
+		}
 
 		auto i = n_index<unsigned int>(self.getNumElements(), index);
 
@@ -75,7 +93,6 @@ namespace detail {
 			if(!self.setElement(i, v)) throw py::type_error("Uniform assignment failed");
 		}, value);
 	}
-
 
 	py::object uniform_get_array(osg::Uniform& self) {
 		if(auto* a = self.getFloatArray()) return py::cast(a);
@@ -330,6 +347,17 @@ void bind_Uniform(py::module_& m) {
 		.def_property("type", &osg::Uniform::getType, &osg::Uniform::setType)
 		.def_property("numElements", &osg::Uniform::getNumElements, &osg::Uniform::setNumElements)
 		.def_property_readonly("nameID", py::overload_cast<>(&osg::Uniform::getNameID, py::const_))
+
+		.def_property(
+			"value",
+			[](osg::Uniform& self) { return detail::uniform_get(self, 0); },
+			[](osg::Uniform& self, py::object obj) {
+				if(self.getNumElements() != 1)
+					throw py::value_error("value property only valid for single-element Uniforms");
+
+				detail::uniform_set(self, 0, obj);
+			}
+		)
 
 		// TODO: This needs lots of testing!
 		.def_property("array", &detail::uniform_get_array, &detail::uniform_set_array)

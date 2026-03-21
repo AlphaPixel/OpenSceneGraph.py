@@ -116,6 +116,7 @@ documents ownership transfer.
 
 # TODO (General)
 
+- [ ] Settle on a single `py::obect` vs `const py::args&` function argument style
 - [ ] Threading support (see below)
 - [ ] Math
   - [x] Vec

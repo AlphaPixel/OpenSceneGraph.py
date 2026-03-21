@@ -5,6 +5,8 @@
 
 #include <osg/Version>
 
+#include <GL/gl.h>
+
 #include <limits>
 
 #ifdef PYOSG_EMBEDDED
@@ -31,6 +33,29 @@ PYBIND11_MODULE(OpenSceneGraph, m) {
 	auto osgViewer = m.def_submodule("osgViewer", "osgViewer namespace");
 
 	pyosgViewer::bind(osgViewer);
+
+	// ============================================================================================
+	// TODO: I add these as I need them! Later, we need to add... all. :(
+	auto gl = m.def_submodule("GL");
+
+	gl.attr("GL_POINTS") = GL_POINTS;
+	gl.attr("GL_LINES") = GL_LINES;
+	gl.attr("GL_LINE_LOOP") = GL_LINE_LOOP;
+	gl.attr("GL_LINE_STRIP") = GL_LINE_STRIP;
+	gl.attr("GL_TRIANGLES") = GL_TRIANGLES;
+	gl.attr("GL_TRIANGLE_STRIP") = GL_TRIANGLE_STRIP;
+	gl.attr("GL_TRIANGLE_FAN") = GL_TRIANGLE_FAN;
+
+	gl.attr("GL_RGBA") = GL_RGBA;
+	gl.attr("GL_DEPTH_COMPONENT24") = GL_DEPTH_COMPONENT24;
+	gl.attr("GL_DEPTH_COMPONENT") = GL_DEPTH_COMPONENT;
+	gl.attr("GL_FLOAT") = GL_FLOAT;
+	gl.attr("GL_UNSIGNED_INT") = GL_UNSIGNED_INT;
+	gl.attr("GL_COLOR_BUFFER_BIT") = GL_COLOR_BUFFER_BIT;
+	gl.attr("GL_DEPTH_BUFFER_BIT") = GL_DEPTH_BUFFER_BIT;
+	gl.attr("GL_DEPTH_TEST") = GL_DEPTH_TEST;
+	gl.attr("GL_SCISSOR_TEST") = GL_SCISSOR_TEST;
+	// ============================================================================================
 
 	m.def("build_info", []() {
 		py::dict info;

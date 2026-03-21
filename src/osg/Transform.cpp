@@ -24,6 +24,7 @@ void bind_Transform(py::module_& m) {
 		.value("RELATIVE_RF", osg::Transform::RELATIVE_RF)
 		.value("ABSOLUTE_RF", osg::Transform::ABSOLUTE_RF)
 		.value("ABSOLUTE_RF_INHERIT_VIEWPOINT", osg::Transform::ABSOLUTE_RF_INHERIT_VIEWPOINT)
+		.export_values()
 	;
 
 	py::class_<

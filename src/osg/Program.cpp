@@ -10,6 +10,17 @@ namespace pyosg {
 
 namespace detail {
 	template<>
+	void kwargs_init(osg::Program& self, const py::kwargs& kwargs) {
+		kwargs_init(static_cast<osg::Object&>(self), kwargs);
+
+		if(kwargs.contains("shaders")) {
+			for(py::handle shader : kwargs["shaders"]) {
+				self.addShader(shader.cast<osg::Shader*>());
+			}
+		}
+	}
+
+	template<>
 	struct SequenceTraits<osg::Program> {
 		using element_type = osg::Shader;
 
@@ -49,6 +60,13 @@ void bind_Program(py::module_& m) {
 	>>(m, "Program")
 		.def(py::init<>())
 		// .def(py::init<const osg::Program&>())
+		.def(py::init([](py::args args, py::kwargs kwargs) {
+			osg::ref_ptr<osg::Program> p = new osg::Program();
+
+			detail::kwargs_init(*p, kwargs);
+
+			return p;
+		}))
 	;
 
 	detail::ShadersProxy::bind(program, "_Shaders");

@@ -81,6 +81,7 @@ void bind_Drawable(py::module_& m) {
 
 			return d;
 		})) */
+		// TODO: Do I use detail::Drawable here?
 		.def("drawImplementation", [](osg::Drawable& self, osg::RenderInfo& ri) {
 			self.drawImplementation(ri);
 		})
@@ -95,6 +96,14 @@ void bind_Drawable(py::module_& m) {
 				&osg::Drawable::setInitialBound,
 				py::keep_alive<1, 2>()
 			)
+		)
+		.def_property("useVertexBufferObjects",
+			&osg::Drawable::getUseVertexBufferObjects,
+			&osg::Drawable::setUseVertexBufferObjects
+		)
+		.def_property("useVertexArrayObject",
+			&osg::Drawable::getUseVertexArrayObject,
+			&osg::Drawable::setUseVertexArrayObject
 		)
 	;
 }
