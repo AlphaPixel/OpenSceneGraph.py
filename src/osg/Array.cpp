@@ -53,7 +53,7 @@ namespace detail {
 				if(!slice.compute(self.size(), &start, &stop, &step, &length))
 					throw py::error_already_set();
 
-				if(step != 1) throw std::runtime_error("Slice assignment only supports step=1");
+				if(step != 1) throw py::value_error("Slice assignment only supports step=1");
 
 				// Broadcast assignment over the slice range
 				for(size_t i = start; i < stop; i += step) self[i] = value;
@@ -94,6 +94,18 @@ namespace detail {
 		{GL_UNSIGNED_INT, {sizeof(GLuint), py::format_descriptor<GLuint>::format()}}
 	};
 
+	// I really HATE that this MUST EXIST! OSG, whyyyy!????
+	template<typename T>
+	inline size_t array_components() {
+		static auto comps = []{
+			osg::ref_ptr<T> tmp = new T();
+
+			return static_cast<size_t>(tmp->getDataSize());
+		}();
+
+		return comps;
+	}
+
 	template<typename T>
 	auto bind_Array(py::module_& m, const char* name) {
 		auto arr = py::class_<T, osg::Array, osg::ref_ptr<T>>(m, name, py::buffer_protocol());
@@ -107,6 +119,45 @@ namespace detail {
 				auto a = new T();
 
 				a->assign(vec.begin(), vec.end());
+
+				return a;
+			}))
+			.def(py::init([](py::buffer b) {
+				py::buffer_info info = b.request();
+
+				if(info.format != py::format_descriptor<float>::format()) throw py::type_error(
+					"Expected float32 buffer"
+				);
+
+				// HATE...
+				auto comps = static_cast<py::ssize_t>(array_components<T>());
+
+				if(info.ndim == 1) {
+					if(info.shape[0] % comps != 0) throw py::value_error(
+						"Flat array size must be divisible by component count"
+					);
+				}
+
+				else if(info.ndim == 2) {
+					if(info.shape[1] != comps) throw py::value_error(
+						"Expected shape (N, " + std::to_string(comps) + ")"
+					);
+				}
+
+				else throw py::type_error("Expected 1D or 2D buffer");
+
+				auto count = static_cast<unsigned int>(
+					(info.ndim == 1) ? info.shape[0] / comps : info.shape[0]
+				);
+
+				auto a = new T();
+				a->resize(count);
+
+				std::memcpy(
+					const_cast<void*>(a->getDataPointer()),
+					info.ptr,
+					count * sizeof(typename T::ElementDataType)
+				);
 
 				return a;
 			}))
@@ -124,6 +175,7 @@ namespace detail {
 				// TODO: Why does this code SEGFAULT when this exception is thrown!? EVERY TIME.
 				if(!BufferInfo.contains(self.getDataType())) {
 					throw std::runtime_error("Unsupported osg::Array data type");
+
 					// PyErr_SetString(PyExc_RuntimeError, "Unsupported Array data type");
 
 					// return py::buffer_info();
@@ -167,7 +219,7 @@ namespace detail {
 					&length
 				)) throw py::error_already_set();
 
-				if(step != 1) throw std::runtime_error("Vec3Array slicing only supports step=1");
+				if(step != 1) throw py::index_error("Vec3Array slicing only supports step=1");
 
 				return ArraySlice<T>(
 					reinterpret_cast<ArraySlice<T>::element_type*>(

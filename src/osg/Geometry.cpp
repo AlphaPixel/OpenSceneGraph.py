@@ -153,7 +153,12 @@ void bind_Geometry(py::module_& m) {
 
 	py::class_<osg::DrawArrays, osg::PrimitiveSet, osg::ref_ptr<osg::DrawArrays>>(m, "DrawArrays")
 		.def(py::init<GLenum>(), "mode"_a=0)
-		.def(py::init<GLenum, GLint, GLsizei, int>())
+		.def(py::init<GLenum, GLint, GLsizei, int>(),
+			"mode"_a,
+			"first"_a,
+			"count"_a,
+			"numInstances"_a=0
+		)
 		.def_property("first", &osg::DrawArrays::getFirst, &osg::DrawArrays::setFirst)
 		.def_property("count", &osg::DrawArrays::getCount, &osg::DrawArrays::setCount)
 	;
@@ -163,6 +168,21 @@ void bind_Geometry(py::module_& m) {
 	py::class_<osg::Geometry, osg::Drawable, osg::ref_ptr<osg::Geometry>>(m, "Geometry")
 		.def(py::init<>())
 		// void setVertexArray(Array* array);
+		.def(
+			"setVertexArray",
+			&osg::Geometry::setVertexArray,
+			py::keep_alive<1, 2>()
+		)
+		.def(
+			"setColorArray",
+			py::overload_cast<osg::Array*>(&osg::Geometry::setColorArray),
+			py::keep_alive<1, 2>()
+		)
+		.def(
+			"setColorArray",
+			py::overload_cast<osg::Array*, osg::Array::Binding>(&osg::Geometry::setColorArray),
+			py::keep_alive<1, 2>()
+		)
 		// void setVertexAttribArray(unsigned int index, Array* array) { setVertexAttribArray(index, array, osg::Array::BIND_UNDEFINED); }
 		// void setVertexAttribArray(unsigned int index, Array* array, osg::Array::Binding binding);
 		// void setVertexAttribBinding(unsigned int index,AttributeBinding ab);

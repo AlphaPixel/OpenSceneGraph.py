@@ -55,6 +55,15 @@ PYBIND11_MODULE(OpenSceneGraph, m) {
 	gl.attr("GL_DEPTH_BUFFER_BIT") = GL_DEPTH_BUFFER_BIT;
 	gl.attr("GL_DEPTH_TEST") = GL_DEPTH_TEST;
 	gl.attr("GL_SCISSOR_TEST") = GL_SCISSOR_TEST;
+
+	gl.attr("GL_BLEND") = GL_BLEND;
+	gl.attr("GL_DEPTH_TEST") = GL_DEPTH_TEST;
+	gl.attr("GL_VERTEX_PROGRAM_POINT_SIZE") = GL_VERTEX_PROGRAM_POINT_SIZE;
+	gl.attr("GL_PROGRAM_POINT_SIZE") = GL_PROGRAM_POINT_SIZE;
+	gl.attr("GL_POINT_SPRITE") = GL_POINT_SPRITE;
+	gl.attr("GL_SRC_ALPHA") = GL_SRC_ALPHA;
+	gl.attr("GL_ONE_MINUS_SRC_ALPHA") = GL_ONE_MINUS_SRC_ALPHA;
+	gl.attr("GL_ONE") = GL_ONE;
 	// ============================================================================================
 
 	m.def("build_info", []() {

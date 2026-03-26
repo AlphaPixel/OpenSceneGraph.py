@@ -4,10 +4,15 @@
 import os
 import time
 
+# You might want to tweak or override these for your environment. However,
+# modifying the `OSG_THREADING` variable isn't advised, as properly interacting
+# with the Python GIL is notoriously difficult to do. You'll have MUCH better
+# luck using Python's `async/await` support (and other examples demonstrate
+# doine exactly that).
 os.environ.update({
 	"OSG_WINDOW": "50 50 800 600",
 	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "2",
+	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
 	"OSG_GL_VERSION": "4.6",
 	"OSG_GL_CONTEXT_VERSION": "4.6"
 })
@@ -21,7 +26,6 @@ SCENE_VERTEX_SHADER = """
 in vec4 osg_Vertex;
 in vec4 osg_Color;
 in vec3 osg_Normal;
-in vec2 osg_TexCoord0;
 
 uniform mat4 osg_ModelViewProjectionMatrix;
 uniform mat4 osg_ModelViewMatrix;
@@ -31,8 +35,6 @@ uniform mat3 osg_NormalMatrix;
 out vec4 vColor;
 out vec3 vNormal;
 out vec3 vPosition;
-// out vec2 uv;
-out mat4 ProjectionMatrix;
 
 void main() {
 	vec4 posEye = osg_ModelViewMatrix * osg_Vertex;
@@ -40,8 +42,6 @@ void main() {
 	vPosition = posEye.xyz;
 	vNormal = normalize(osg_NormalMatrix * osg_Normal);
 	vColor = osg_Color;
-	// uv = osg_TexCoord0;
-	ProjectionMatrix = osg_ProjectionMatrix;
 
 	gl_Position = osg_ModelViewProjectionMatrix * osg_Vertex;
 }
@@ -82,19 +82,13 @@ void main() {
 HUD_VERTEX_SHADER = """
 #version 330 core
 
-// uniform mat4 osg_ProjectionMatrix;
-
 in vec4 osg_Vertex;
-// in vec2 osg_TexCoord0;
 in vec2 osg_MultiTexCoord0;
 
 out vec2 uv;
-// out mat4 ProjectionMatrix;
 
 void main() {
-	// uv = osg_TexCoord0;
 	uv = osg_MultiTexCoord0;
-	// ProjectionMatrix = osg_ProjectionMatrix;
 
 	gl_Position = osg_Vertex;
 }
@@ -110,7 +104,6 @@ uniform float zfar;
 uniform mat4 projMat;
 
 in vec2 uv;
-// in mat4 ProjectionMatrix;
 
 out vec4 color;
 
@@ -163,8 +156,7 @@ float visualizeAbsoluteDepth_test(float depth, mat4 proj) {
 }
 // ===============================================================================
 
-void main_depth_pos()
-{
+void main_depth_pos() {
 	float depth = texture(depthTex, uv).r;
 
 	vec4 clip = vec4(
@@ -199,6 +191,7 @@ void main() {
 	// Ignore background pixels
 	if (d >= 1.0) {
 		color = c;
+
 		return;
 	}
 
@@ -209,6 +202,10 @@ void main() {
 }
 """
 
+# Create the actual 3D scene you're interested in manipulating! This function has
+# no awareness of an RTT setup; it simply creates the scene and returns it. You
+# could, for example, set the returned `Node` as `viewer.sceneData` directly and
+# view it OUTSIDE of the RTT pipeline.
 def create_scene():
 	g = osg.Geode(drawables=(
 		osg.ShapeDrawable(osg.Sphere(osg.Vec3(0, 2.0, 0), 1.0)),
@@ -219,6 +216,9 @@ def create_scene():
 
 	p = osg.Program(name="sceneProgram")
 
+	# Similar to `Group.children`, MOST THINGS in OSG.py that "behave" like sequences
+	# in C++ are wrapped with sequence-like "proxies" in Python (and support all of
+	# the official "Sequence Protocol" behaviors a Python programmer would expect)!
 	p.shaders.append(osg.Shader(osg.Shader.VERTEX, SCENE_VERTEX_SHADER))
 	p.shaders.append(osg.Shader(osg.Shader.FRAGMENT, SCENE_FRAGMENT_SHADER))
 
@@ -226,62 +226,79 @@ def create_scene():
 
 	return g
 
-def create_rtt_camera():
-	s = 512
+# Create the RTT (Render To Texture) `Camera` instance using the specified width/height
+# dimensions. Any children attached to this instance will be rendered using the attached
+# color buffer and depth buffers, which we will later query in a secondary "HUD" `Camera`.
+#
+# NOTE: In addition to the `Camera`, this function also returns the color/depth buffer
+# `Texture` instances, which the "HUD" will need in order to directly "sample" from them
+# in its own shader pipeline.
+def create_rtt_camera(w=512, h=512):
 	cb = osg.Texture2D()
 	db = osg.Texture2D()
 
-	cb.size = (s, s)
+	cb.size = (w, h)
 	cb.internalFormat = GL_RGBA
 	cb.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
 
-	db.size = (s, s)
+	db.size = (w, h)
 	db.internalFormat = GL_DEPTH_COMPONENT24
 	db.sourceFormat = GL_DEPTH_COMPONENT
 	db.sourceType = GL_FLOAT
 	db.filter = (osg.Texture.NEAREST, osg.Texture.NEAREST)
 
-	rttCam = osg.Camera()
+	cam = osg.Camera()
 
-	rttCam.renderOrder = osg.Camera.PRE_RENDER
-	rttCam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
-	rttCam.clearMask = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT
-	rttCam.clearColor = osg.Vec4(0.1, 0.5, 0.2, 1.0)
-	rttCam.viewport = osg.Viewport(0, 0, s, s)
-	rttCam.name = "RTT Camera"
+	cam.renderOrder = osg.Camera.PRE_RENDER
+	cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
+	cam.clearMask = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT
+	cam.clearColor = osg.Vec4(0.1, 0.5, 0.2, 1.0)
+	cam.viewport = osg.Viewport(0, 0, w // 2, h // 2)
+	cam.name = "RTT Camera"
 
-	rttCam.attach(osg.Camera.COLOR_BUFFER, cb)
-	rttCam.attach(osg.Camera.DEPTH_BUFFER, db)
-	rttCam.children.append(create_scene())
+	cam.attach(osg.Camera.COLOR_BUFFER, cb)
+	cam.attach(osg.Camera.DEPTH_BUFFER, db)
 
-	return rttCam, cb, db
+	return cam, cb, db
 
+# Creates a special "HUD" `Camera` using the specified color/depth `Texture` arguments.
+# These types of cameras typically access one or more "sources" (the buffer/texture
+# attachments) to "composite" a scene within a screen-aligned, NDC quad. This process
+# forms the basis for "Render To Texture", and once your "HUD" `Camera` has access
+# to the raw buffers in its shader pipeline (via `sampler2d` or similar in GLSL), all
+# kinds of cool techniques open up!
 def create_hud_camera(cb, db):
-	hudCam = osg.Camera()
+	cam = osg.Camera()
 
-	hudCam.referenceFrame = osg.Transform.ABSOLUTE_RF
-	hudCam.renderOrder = osg.Camera.POST_RENDER
-	hudCam.clearMask = 0
-	hudCam.allowEventFocus = False
-	hudCam.projectionMatrix = osg.Matrix.identity()
-	hudCam.viewMatrix = osg.Matrix.identity()
-	hudCam.name = "HUD Camera"
+	cam.referenceFrame = osg.Transform.ABSOLUTE_RF
+	cam.renderOrder = osg.Camera.POST_RENDER
+	cam.clearMask = 0
+	cam.allowEventFocus = False
+	cam.projectionMatrix = osg.Matrix.identity()
+	cam.viewMatrix = osg.Matrix.identity()
+	cam.name = "HUD Camera"
 
 	g = osg.Geode()
 
+	# We use the OSG helper here, passing in width/height arguments that result in a
+	# screen aligned, full-sized NDC ("Normalized Device Coordinates") quad. This is
+	# sometimes referred to as "clip space", as well as a handful of other names.
 	g.drawables.append(osg.createTexturedQuadGeometry(
 		osg.Vec3(-1.0, -1.0, -1.0),
 		osg.Vec3(2.0, 0.0, 0.0),
 		osg.Vec3(0.0, 2.0, 0.0)
 	))
 
-	hudCam.children.append(g)
+	cam.children.append(g)
 
-	hudCam.stateSet.setTextureAttributeAndModes(0, cb)
-	hudCam.stateSet.setTextureAttributeAndModes(1, db)
-	hudCam.stateSet.addUniform(osg.Uniform("colorTex", 0));
-	hudCam.stateSet.addUniform(osg.Uniform("depthTex", 1));
+	cam.stateSet.setTextureAttributeAndModes(0, cb)
+	cam.stateSet.setTextureAttributeAndModes(1, db)
+	cam.stateSet.addUniform(osg.Uniform("colorTex", 0));
+	cam.stateSet.addUniform(osg.Uniform("depthTex", 1));
 
+	# Most properties on OSG.py objects can OPTIONALLY be set during creation using
+	# keyword arguments; key/value pairs are passed down the entire inheritance chain,
+	# and each object's constructor chooses which key/value pairs are appropriate for it.
 	p = osg.Program(name="hudProgram", shaders=(
 		osg.Shader(osg.Shader.VERTEX, HUD_VERTEX_SHADER),
 		osg.Shader(osg.Shader.FRAGMENT, HUD_FRAGMENT_SHADER)
@@ -289,7 +306,7 @@ def create_hud_camera(cb, db):
 
 	g.stateSet.setAttributeAndModes(p)
 
-	return hudCam
+	return cam
 
 if __name__ == "__main__":
 	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
@@ -300,16 +317,27 @@ if __name__ == "__main__":
 	rttCam, cb, db = create_rtt_camera()
 	hudCam = create_hud_camera(cb, db)
 
+	# This is how the RTT camera "knows" what to render...
+	rttCam.children.append(create_scene())
+
 	r.children.extend((rttCam, hudCam))
 
 	znear = osg.Uniform("znear", 0.0)
 	zfar = osg.Uniform("zfar", 0.0)
 	proj = osg.Uniform("projMat", osg.Matrixf.identity())
 
+	# TODO: Eventually, this will become something like `stateSet.uniforms.{append,extend}`.
 	hudCam.stateSet.addUniform(znear)
 	hudCam.stateSet.addUniform(zfar)
 	hudCam.stateSet.addUniform(proj)
 
+	# This function is used as the `Camera.DrawCallback` for the default `osgViewer.Viewer`
+	# camera, and injects the proper near/far Z values into our `Program` state every frame.
+	#
+	# OSG recomputes the znear/zfar every frame (based on its `CameraManipulator`) so that
+	# the resultant depth range has as much precision as possible. MANY post-processing
+	# techniques rely on being able to properly query and/or "linearize" depth values, so
+	# it's important that you're always working with accurate values.
 	def update_uniforms(ri):
 		pm = ri.state.projectionMatrix
 
@@ -335,11 +363,9 @@ if __name__ == "__main__":
 	v.cameraManipulator = osgGA.TrackballManipulator()
 	v.camera.preDrawCallback = update_uniforms
 
+	# You could just call `v.run()`, but it's informative to demonstrate different ways of
+	# "driving" the redraw/render process.
 	while not v.done:
 		v.frame()
 
 		time.sleep(0.1)
-
-# import IPython
-
-# IPython.embed()

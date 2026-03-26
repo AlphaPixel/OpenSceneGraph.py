@@ -3,6 +3,8 @@
 PYOSG_DISABLE_WARNINGS
 
 #include <osg/Viewport>
+#include <osg/BlendFunc>
+#include <osg/Depth>
 
 PYOSG_ENABLE_WARNINGS
 
@@ -55,6 +57,44 @@ void bind_StateAttributes(py::module_& m) {
 				self.height()
 			);
 		})
+	;
+
+	py::class_<
+		osg::BlendFunc,
+		osg::StateAttribute,
+		osg::ref_ptr<osg::BlendFunc>
+	>(m, "BlendFunc")
+		.def(py::init<>())
+		.def(py::init<GLenum, GLenum>())
+		.def(py::init<GLenum, GLenum, GLenum, GLenum>())
+	;
+
+	auto depth = py::class_<
+		osg::Depth,
+		osg::StateAttribute,
+		osg::ref_ptr<osg::Depth>
+	>(m, "Depth");
+
+
+	py::enum_<osg::Depth::Function>(depth, "Function")
+		.value("NEVER", osg::Depth::NEVER)
+		.value("LESS", osg::Depth::LESS)
+		.value("EQUAL", osg::Depth::EQUAL)
+		.value("LEQUAL", osg::Depth::LEQUAL)
+		.value("GREATER", osg::Depth::GREATER)
+		.value("NOTEQUAL", osg::Depth::NOTEQUAL)
+		.value("GEQUAL", osg::Depth::GEQUAL)
+		.value("ALWAYS", osg::Depth::ALWAYS)
+		.export_values()
+	;
+
+	depth
+		.def(py::init<osg::Depth::Function, double, double, bool>(),
+			"func"_a=osg::Depth::LESS,
+			"zNear"_a=0.0,
+			"zFar"_a=1.0,
+			"writeMask"_a=true
+		)
 	;
 }
 

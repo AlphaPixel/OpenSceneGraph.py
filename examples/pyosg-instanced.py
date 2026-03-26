@@ -7,7 +7,7 @@ import time
 os.environ.update({
 	"OSG_WINDOW": "50 50 800 600",
 	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "2",
+	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
 	"OSG_GL_VERSION": "4.6",
 	"OSG_GL_CONTEXT_VERSION": "4.6"
 })
@@ -70,10 +70,11 @@ if __name__ == "__main__":
 	g = osg.Geometry()
 
 	# TODO: Convert to SequenceProxy!
-	g.addPrimitiveSet(osg.DrawArrays(GL_TRIANGLE_FAN, 0, 4, 16 * 16))
+	# g.addPrimitiveSet(osg.DrawArrays(GL_TRIANGLE_FAN, 0, 4, 16 * 16))
+	g.addPrimitiveSet(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4, 16 * 16))
 
 	g.initialBound = osg.BoundingBox(-10, -10, -1, 10, 10, 1)
-	g.useVertexBufferObjects = True
+	#  g.useVertexBufferObjects = True
 
 	p = osg.Program(name="gl_InstanceID_DEMO", shaders=(
 		osg.Shader(osg.Shader.VERTEX, VERTEX_SHADER),

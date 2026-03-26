@@ -4,6 +4,7 @@ PYOSG_DISABLE_WARNINGS
 
 #include <osgGA/TrackballManipulator>
 #include <osgViewer/Viewer>
+#include <osgViewer/ViewerEventHandlers>
 
 PYOSG_ENABLE_WARNINGS
 
@@ -205,6 +206,7 @@ void bind(py::module_& m) {
 			// self.setUpViewInWindow(1970, 50, 800, 600);
 			// self.setThreadingModel(osgViewer::Viewer::SingleThreaded);
 			// self.setCameraManipulator(new osgGA::TrackballManipulator());
+			self.addEventHandler(new osgViewer::StatsHandler());
 
 			if(glModern) {
 				if(auto* state = self.getCamera()->getGraphicsContext()->getState(); state) {

@@ -116,6 +116,8 @@ documents ownership transfer.
 
 # TODO (General)
 
+- [ ] Add "buffer protocol" support for Vec/Matrix objects
+- [ ] Replace every instance of `std::runtime_error` with something... better
 - [ ] Settle on a single `py::obect` vs `const py::args&` function argument style
 - [ ] Threading support (see below)
 - [ ] Math
