@@ -75,7 +75,8 @@ void bind_Group(py::module_& m) {
 		}))
 		.def("addChild", [](osg::Group& self, osg::Node* child) {
 			return self.addChild(child);
-		}, py::keep_alive<1, 2>())
+		// }, py::keep_alive<1, 2>())
+		})
 		.def("getChild",
 			py::overload_cast<unsigned int>(&osg::Group::getChild),
 			py::return_value_policy::reference_internal

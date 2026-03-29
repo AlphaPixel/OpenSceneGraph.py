@@ -3,8 +3,11 @@
 PYOSG_DISABLE_WARNINGS
 
 #include <osg/Object>
+#include <osgDB/Registry>
 
 PYOSG_ENABLE_WARNINGS
+
+#include <sstream>
 
 namespace pyosg {
 
@@ -18,31 +21,23 @@ namespace detail {
 		);
 	}
 
+	// This class exists to permit Python code like: `o = osg.Object`.
 	class Object: public osg::Object {
 	public:
 		PYOSG_DISABLE_WARNINGS
 
-		META_Object(pyosg::detail, Object)
+		META_Object(osg, Object)
 
 		PYOSG_ENABLE_WARNINGS
 
 		using osg::Object::Object;
 
-		explicit Object(): osg::Object() {
-			std::cout << "C++ CONSTRUCTION!" << std::endl;
-		}
-
-		~Object() override {
-			if(debug_del) std::cout << "C++ destruction!" << std::endl;
-
-			else std::cout << "C++ destruction (WITHOUT debug_del)!" << std::endl;
-		}
+		explicit Object(): osg::Object() {}
+		// ~Object() override {}
 
 		// TODO: These are used often, and Python subclasses MIGHT need to override them!
-		// void resizeGLObjectBuffers(unsigned int /*maxSize*/) override
+		// void resizeGLObjectBuffers(unsigned int) override
 		// void releaseGLObjects(osg::State* = 0) const override
-
-		bool debug_del = false;
 	};
 }
 
@@ -94,12 +89,6 @@ void bind_Object(py::module_& m) {
 
 			return o;
 		}))
-		// .def_readwrite("debug_del", &detail::Object::debug_del)
-		.def_property(
-			"debug_del",
-			[](detail::Object& self) { return self.debug_del; },
-			[](detail::Object& self, bool dd) { self.debug_del = dd; }
-		)
 		.def_property(
 			"name",
 			&osg::Object::getName,
@@ -112,17 +101,17 @@ void bind_Object(py::module_& m) {
 		)
 		.def_property(
 			"userData",
-			py::overload_cast<>(&osg::Object::getUserData),
+			/* py::overload_cast<>(&osg::Object::getUserData),
 			[](osg::Object& self, osg::Referenced* data) { self.setUserData(data); },
-			py::return_value_policy::reference_internal
-			/* py::cpp_function(
+			py::return_value_policy::reference_internal */
+			py::cpp_function(
 				py::overload_cast<>(&osg::Object::getUserData),
 				py::return_value_policy::reference_internal
 			),
 			py::cpp_function(
-				[](osg::Object& self, osg::Referenced* data) { self.setUserData(data); },
-				py::keep_alive<1, 2>()
-			) */
+				[](osg::Object& self, osg::Referenced* data) { self.setUserData(data); }
+				// , py::keep_alive<1, 2>()
+			)
 		)
 		// TODO: This will be difficult to handle properly, and will likely end up using
 		// `py::capsule`. However, it's only really useful for C++ interop, as Python itself already
@@ -136,6 +125,35 @@ void bind_Object(py::module_& m) {
 		//
 		// userValue
 	;
+
+	/* obj.def("dumps", [](osg::Object& self) {
+		auto* rw = osgDB::Registry::instance()->getReaderWriterForExtension("osg");
+
+		if(!rw) throw std::runtime_error("Couldn't get ReaderWriter for 'osg' extension");
+
+		std::ostringstream oss;
+
+		auto result = rw->writeObject(self, oss, nullptr);
+
+		if(!result.success()) throw std::runtime_error(result.message());
+
+		return oss.str();
+	}); */
+
+	// TODO: This is a temporary debugging method; REMOVE IT (eventually).
+	obj.def("dumps", [](osg::Object& self, const std::string& ext) {
+		auto* rw = osgDB::Registry::instance()->getReaderWriterForExtension(ext);
+
+		if(!rw) throw std::runtime_error("No ReaderWriter for extension: " + ext);
+
+		std::ostringstream oss;
+
+		auto result = rw->writeObject(self, oss, nullptr);
+
+		if(!result.success()) throw std::runtime_error(result.message());
+
+		return py::bytes(oss.str());
+	}, "ext"_a="osg");
 }
 
 }

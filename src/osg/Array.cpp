@@ -151,6 +151,7 @@ namespace detail {
 				);
 
 				auto a = new T();
+
 				a->resize(count);
 
 				std::memcpy(
