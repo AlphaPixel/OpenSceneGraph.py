@@ -1,4 +1,5 @@
-#include "../pyosg.hpp"
+// #include "../pyosg.hpp"
+#include "callable.hpp"
 
 PYOSG_DISABLE_WARNINGS
 
@@ -25,54 +26,13 @@ namespace detail {
 				);
 			}
 		};
-
-		// TODO: This is really just a simple helper for using ANYTHING callable, instead of
-		// being REQUIRED to override the "__call__" method.
-		class PYOSG_INTERNAL CallableDrawCallback: public osg::Camera::DrawCallback {
-		public:
-			explicit CallableDrawCallback(py::object fn): _fn(std::move(fn)) {}
-
-			void operator()(osg::RenderInfo& ri) const override {
-				py::gil_scoped_acquire gil;
-
-				_fn(ri);
-			}
-
-		private:
-			py::object _fn;
-		};
 	};
-
-	template<typename Getter>
-	auto getDrawCallback(Getter&& getter) {
-		return py::cpp_function(
-			std::forward<Getter>(getter),
-			py::return_value_policy::reference_internal
-		);
-	}
-
-	template<auto Setter>
-	auto setDrawCallback() {
-		return py::cpp_function(
-			[](osg::Camera& self, py::object obj) {
-				if(obj.is_none()) (self.*Setter)(nullptr);
-
-				else if(py::isinstance<osg::Camera::DrawCallback>(obj)) {
-					(self.*Setter)(obj.cast<osg::Camera::DrawCallback*>());
-				}
-
-				else if(PyCallable_Check(obj.ptr())) {
-					auto cb = new Camera::CallableDrawCallback(obj);
-
-					(self.*Setter)(cb);
-				}
-
-				else throw py::value_error("Expected DrawCallback, callable, or None");
-			},
-			py::keep_alive<1, 2>()
-		);
-	}
 }
+
+using DrawCallable = detail::CallableCallback<
+	osg::Camera::DrawCallback,
+	void(osg::RenderInfo&) const
+>;
 
 void bind_Camera(py::module_& m) {
 	auto camera = py::class_<
@@ -255,23 +215,43 @@ void bind_Camera(py::module_& m) {
 
 		.def_property(
 			"initialDrawCallback",
-			detail::getDrawCallback(py::overload_cast<>(&osg::Camera::getInitialDrawCallback)),
-			detail::setDrawCallback<&osg::Camera::setInitialDrawCallback>()
+			detail::getCallback(py::overload_cast<>(&osg::Camera::getInitialDrawCallback)),
+			detail::setCallback<
+				static_cast<void (osg::Camera::*)(osg::Camera::DrawCallback*)>(
+					&osg::Camera::setInitialDrawCallback
+				),
+				DrawCallable
+			>()
 		)
 		.def_property(
 			"preDrawCallback",
-			detail::getDrawCallback(py::overload_cast<>(&osg::Camera::getPreDrawCallback)),
-			detail::setDrawCallback<&osg::Camera::setPreDrawCallback>()
+			detail::getCallback(py::overload_cast<>(&osg::Camera::getPreDrawCallback)),
+			detail::setCallback<
+				static_cast<void (osg::Camera::*)(osg::Camera::DrawCallback*)>(
+					&osg::Camera::setPreDrawCallback
+				),
+				DrawCallable
+			>()
 		)
 		.def_property(
 			"postDrawCallback",
-			detail::getDrawCallback(py::overload_cast<>(&osg::Camera::getPostDrawCallback)),
-			detail::setDrawCallback<&osg::Camera::setPostDrawCallback>()
+			detail::getCallback(py::overload_cast<>(&osg::Camera::getPostDrawCallback)),
+			detail::setCallback<
+				static_cast<void (osg::Camera::*)(osg::Camera::DrawCallback*)>(
+					&osg::Camera::setPostDrawCallback
+				),
+				DrawCallable
+			>()
 		)
 		.def_property(
 			"finalDrawCallback",
-			detail::getDrawCallback(py::overload_cast<>(&osg::Camera::getFinalDrawCallback)),
-			detail::setDrawCallback<&osg::Camera::setFinalDrawCallback>()
+			detail::getCallback(py::overload_cast<>(&osg::Camera::getFinalDrawCallback)),
+			detail::setCallback<
+				static_cast<void (osg::Camera::*)(osg::Camera::DrawCallback*)>(
+					&osg::Camera::setFinalDrawCallback
+				),
+				DrawCallable
+			>()
 		)
 
 		.def(

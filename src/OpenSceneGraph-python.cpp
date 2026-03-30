@@ -1,4 +1,5 @@
 #include "pyosg.hpp"
+#include "pyosgUtil.hpp"
 #include "pyosgDB.hpp"
 #include "pyosgGA.hpp"
 #include "pyosgViewer.hpp"
@@ -21,6 +22,10 @@ PYBIND11_MODULE(OpenSceneGraph, m) {
 	auto osg = m.def_submodule("osg", "osg namespace");
 
 	pyosg::bind(osg);
+
+	auto osgUtil = m.def_submodule("osgUtil", "osgUtil namespace");
+
+	pyosgUtil::bind(osgUtil);
 
 	auto osgDB = m.def_submodule("osgDB", "osgDB namespace");
 

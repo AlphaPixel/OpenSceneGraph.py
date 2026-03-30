@@ -1,4 +1,4 @@
-#include "../pyosg.hpp"
+#include "callable.hpp"
 
 PYOSG_DISABLE_WARNINGS
 
@@ -12,8 +12,17 @@ namespace detail {
 	template<>
 	void kwargs_init(osg::Node& self, const py::kwargs& kwargs) {
 		kwargs_init(static_cast<osg::Object&>(self), kwargs);
+
+		if(kwargs.contains("nodeMask")) self.setNodeMask(
+			kwargs["nodeMask"].cast<osg::Node::NodeMask>()
+		);
 	}
 }
+
+using NodeCallable = detail::CallableCallback<
+	osg::NodeCallback,
+	void(osg::Node*, osg::NodeVisitor*)
+>;
 
 void bind_Node(py::module_& m) {
 	auto node = py::class_<osg::Node, osg::Object, osg::ref_ptr<osg::Node>>(m, "Node")
@@ -26,47 +35,32 @@ void bind_Node(py::module_& m) {
 			return n;
 		}))
 
-		/* .def("setUpdateCallback", [](osg::Node& self, osg::NodeCallback* cb) {
-			// TODO: What happens when cb is nullptr?
-			self.setUpdateCallback(cb);
-		}, py::keep_alive<1, 2>())
-		.def("getUpdateCallback", [](osg::Node& self) {
-			return self.getUpdateCallback();
-		}, py::return_value_policy::reference) */
-
 		.def_property(
 			"updateCallback",
-			py::cpp_function([](osg::Node& self) -> osg::Callback* {
-				return self.getUpdateCallback();
-			// }, py::return_value_policy::reference),
-			}, py::return_value_policy::reference_internal),
-			py::cpp_function([](osg::Node& self, osg::NodeCallback* cb) {
-				// py::cast(cb).inc_ref();
-
-				self.setUpdateCallback(cb);
-			}, py::keep_alive<1, 2>())
-			// })
+			detail::getCallback(py::overload_cast<>(&osg::Node::getUpdateCallback)),
+			detail::setCallback<
+				static_cast<void (osg::Node::*)(osg::Callback*)>(
+					&osg::Node::setUpdateCallback
+				),
+				NodeCallable
+			>()
 		)
 
 		// NOTE: We do NOT use py::keep_alive here, since the visitor will stay alive the entirety
 		// of this call, even IF you do something like: node.accept(PythonVistor()).
 		.def("accept", [](osg::Node& self, osg::NodeVisitor* nv) {
 			self.accept(*nv);
-		// }, py::keep_alive<2, 1>())
 		})
-		/* .def("traverse", [](osg::Node& self, osg::NodeVisitor* nv) {
-			self.traverse(*nv);
-		// }, py::keep_alive<2, 1>())
-		}) */
+
 		.def_property("stateSet",
-			[](osg::Node& self) { return self.getOrCreateStateSet(); },
-			[](osg::Node& self, osg::StateSet* ss) { self.setStateSet(ss); },
-			py::return_value_policy::reference
+			py::cpp_function(
+				[](osg::Node& self) { return self.getOrCreateStateSet(); },
+				py::return_value_policy::reference
+			),
+			[](osg::Node& self, osg::StateSet* ss) { self.setStateSet(ss); }
 		)
-		.def_property("nodeMask",
-			[](osg::Node& self) { return self.getNodeMask(); },
-			[](osg::Node& self, osg::Node::NodeMask mask) { self.setNodeMask(mask); }
-		)
+
+		.def_property("nodeMask", &osg::Node::getNodeMask, &osg::Node::setNodeMask)
 	;
 
 	node.attr("NodeMask") = detail::builtin_int();

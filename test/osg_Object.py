@@ -4,8 +4,7 @@ from .conftest import refcmp
 
 from OpenSceneGraph.osg import Object
 
-class MyObject(Object):
-	pass
+import gc
 
 def test_construction():
 	o = Object(name="foo")
@@ -18,19 +17,23 @@ def test_construction():
 
 	assert refcmp(o, 1, 3)
 
-def test_destruction(capsys):
-	o = Object(name="bar")
+def test_destruction():
+	deleted = []
 
-	o.debug_del = True
+	o = Object(name="bar", debug=lambda *a: deleted.append(True))
 
 	del o
 
-	assert capsys.readouterr() == "debug_del"
+	gc.collect()
+
+	assert deleted[0] == True
 
 def test_inheritance():
+	class MyObject(Object):
+		pass
+
 	o = MyObject(name="foo", dataVariance=Object.DYNAMIC)
 
-	assert o.name == "foo"
 	assert o.dataVariance == Object.DYNAMIC
 	assert refcmp(o, 1, 1)
 

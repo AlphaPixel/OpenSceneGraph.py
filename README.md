@@ -3,7 +3,7 @@
 If something is misbehaving and you don't want to [read the Overview](Overview),
 it's likely one of these things:
 
-- Are you using `py::return_value_policy::referenced` correctly when returning a
+- Are you using `py::return_value_policy::reference*` correctly when returning a
   pointer/reference to another wrapped object?
 - If you're ACCEPTING a wrapped object, are you using `py::keep_alive<>` (if
   necessary)?
@@ -105,11 +105,19 @@ Use `reference_internal` when:
 - returning parents / children
 - returning anything owned by self
 
+Essentially, the returned object’s lifetime is tied to the parent (self) through
+`keep_alive<0, 1>()`.
+
 Use `reference` when:
 
 - returning globally-owned singletons
 - returning objects guaranteed to outlive Python
 - you want raw semantics
+
+The returned object is not dependent on self.
+
+A great example of `reference` vs `reference_internal` are the
+`Node.updateCallback` and `Node.stateSet` properties.
 
 Avoid `copy`, `move`, and `take_ownership` unless the C++ API explicitly
 documents ownership transfer.
