@@ -1,3 +1,4 @@
+#if 0
 #include "../pyosg.hpp"
 
 PYOSG_DISABLE_WARNINGS
@@ -19,27 +20,6 @@ namespace detail {
 			if(r.value_or(true)) osg::NodeCallback::operator()(node, nv);
 		}
 	};
-
-	/* // TODO: Test this!
-	class PYOSG_INTERNAL CallableNodeCallback: public osg::NodeCallback {
-	public:
-		explicit CallableNodeCallback(py::object fn): _fn(std::move(fn)) {}
-
-		void operator()(osg::Node* node, osg::NodeVisitor* nv) override {
-			py::gil_scoped_acquire gil;
-
-			py::object result = _fn(node, nv);
-
-			bool traverse = true;
-
-			if(!result.is_none()) traverse = result.cast<bool>();
-
-			if(traverse) osg::NodeCallback::operator()(node, nv);
-		}
-
-	private:
-		py::object _fn;
-	}; */
 }
 
 void bind_NodeCallback(py::module_& m) {
@@ -50,11 +30,90 @@ void bind_NodeCallback(py::module_& m) {
 		osg::ref_ptr<osg::NodeCallback>
 	>(m, "NodeCallback")
 		.def(py::init<>())
-		.def("__call__", [](osg::NodeCallback& self, osg::Node* node, osg::NodeVisitor* nv) {
+		/* .def("__call__", [](osg::NodeCallback& self, osg::Node* node, osg::NodeVisitor* nv) {
 			// Manual forwarding; ensures Python sees correct signature.
 			return;
-		})
+		}) */
 	;
 }
 
 }
+#endif
+
+#if 1
+#include "../pyosg.hpp"
+
+PYOSG_DISABLE_WARNINGS
+
+#include <osg/NodeVisitor>
+
+PYOSG_ENABLE_WARNINGS
+
+#include <iostream>
+
+namespace pyosg {
+
+namespace detail {
+	class NodeCallback: public osg::NodeCallback {
+	public:
+		using osg::NodeCallback::NodeCallback;
+
+		bool run(osg::Object* object, osg::Object* data) override {
+			/* std::cout
+				<< "[C++] run this=" << this
+				<< " object=" << object
+				<< " data=" << data
+				<< std::endl; */
+
+			// First, explicit Python `run` override...
+			if(auto r = call_override<bool>("run", this, object, data)) {
+				// std::cout << "[C++] run override found, returning " << *r << std::endl;
+
+				return *r;
+			}
+
+			// std::cout << "[C++] no run override, delegating to osg::NodeCallback::run()" << std::endl;
+
+			return osg::NodeCallback::run(object, data);
+		}
+
+		void operator()(osg::Node* node, osg::NodeVisitor* nv) override {
+			/* std::cout
+				<< "[C++] operator() this=" << this
+				<< " node=" << node
+				<< " name=" << (node ? node->getName() : std::string("<null>"))
+				<< std::endl; */
+
+			if (auto r = call_override<bool>("__call__", this, node, nv)) {
+				// std::cout << "[C++] __call__ override found, value_or(true)="
+				// << r.value_or(true) << std::endl;
+
+				if(r.value_or(true)) {
+					// std::cout << "[C++] delegating to osg::NodeCallback::operator() for traversal" << std::endl;
+
+					osg::NodeCallback::operator()(node, nv);
+				}
+
+				return;
+			}
+
+			// std::cout << "[C++] no __call__ override, using osg::NodeCallback::operator()" << std::endl;
+
+			osg::NodeCallback::operator()(node, nv);
+		}
+	};
+}
+
+void bind_NodeCallback(py::module_& m) {
+	py::class_<
+		osg::NodeCallback,
+		detail::NodeCallback,
+		osg::Object,
+		osg::ref_ptr<osg::NodeCallback>
+	>(m, "NodeCallback")
+		.def(py::init<>())
+	;
+}
+
+}
+#endif

@@ -31,7 +31,8 @@ namespace detail {
 
 using DrawCallable = detail::CallableCallback<
 	osg::Camera::DrawCallback,
-	void(osg::RenderInfo&) const
+	void(osg::RenderInfo&) const,
+	false
 >;
 
 void bind_Camera(py::module_& m) {
@@ -213,13 +214,15 @@ void bind_Camera(py::module_& m) {
 			py::return_value_policy::reference_internal
 		)
 
+#if 1
 		.def_property(
 			"initialDrawCallback",
 			detail::getCallback(py::overload_cast<>(&osg::Camera::getInitialDrawCallback)),
 			detail::setCallback<
-				static_cast<void (osg::Camera::*)(osg::Camera::DrawCallback*)>(
+				static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
 					&osg::Camera::setInitialDrawCallback
 				),
+				osg::Camera::DrawCallback,
 				DrawCallable
 			>()
 		)
@@ -227,9 +230,10 @@ void bind_Camera(py::module_& m) {
 			"preDrawCallback",
 			detail::getCallback(py::overload_cast<>(&osg::Camera::getPreDrawCallback)),
 			detail::setCallback<
-				static_cast<void (osg::Camera::*)(osg::Camera::DrawCallback*)>(
+				static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
 					&osg::Camera::setPreDrawCallback
 				),
+				osg::Camera::DrawCallback,
 				DrawCallable
 			>()
 		)
@@ -237,9 +241,10 @@ void bind_Camera(py::module_& m) {
 			"postDrawCallback",
 			detail::getCallback(py::overload_cast<>(&osg::Camera::getPostDrawCallback)),
 			detail::setCallback<
-				static_cast<void (osg::Camera::*)(osg::Camera::DrawCallback*)>(
+				static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
 					&osg::Camera::setPostDrawCallback
 				),
+				osg::Camera::DrawCallback,
 				DrawCallable
 			>()
 		)
@@ -247,12 +252,14 @@ void bind_Camera(py::module_& m) {
 			"finalDrawCallback",
 			detail::getCallback(py::overload_cast<>(&osg::Camera::getFinalDrawCallback)),
 			detail::setCallback<
-				static_cast<void (osg::Camera::*)(osg::Camera::DrawCallback*)>(
+				static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
 					&osg::Camera::setFinalDrawCallback
 				),
+				osg::Camera::DrawCallback,
 				DrawCallable
 			>()
 		)
+#endif
 
 		.def(
 			"attach",

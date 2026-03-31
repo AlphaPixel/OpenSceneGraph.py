@@ -1,18 +1,19 @@
-#include "../pyosg.hpp"
+// #include "../pyosg.hpp"
+#include "lifetime-probe.hpp"
 
 PYOSG_DISABLE_WARNINGS
 
-#include <osg/Object>
+// #include <osg/Object>
 #include <osgDB/Registry>
 
 PYOSG_ENABLE_WARNINGS
 
-#include <sstream>
+// #include <sstream>
 
 namespace pyosg {
 
 namespace detail {
-	class PYOSG_INTERNAL LifetimeProbe: public osg::Object {
+	/* class PYOSG_INTERNAL LifetimeProbe: public osg::Object {
 	public:
 		PYOSG_DISABLE_WARNINGS
 
@@ -45,7 +46,7 @@ namespace detail {
 
 							py::gil_scoped_acquire gil;
 
-							pyo(addr, name, type);
+							pyo(addr, type, name);
 						}
 
 						// TODO: Remove me!
@@ -88,7 +89,7 @@ namespace detail {
 		std::string type;
 
 		py::object pyo;
-	};
+	}; */
 
 	template<>
 	void kwargs_init(osg::Object& self, const py::kwargs& kwargs) {

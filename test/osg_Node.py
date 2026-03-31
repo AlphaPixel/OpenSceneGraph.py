@@ -2,11 +2,8 @@
 
 from .conftest import refcmp
 
-from OpenSceneGraph.osg import Object, Node, NodeCallback, StateSet
+from OpenSceneGraph.osg import Object, Node, NodeCallback, StateSet #, Callback
 from OpenSceneGraph.osgUtil import UpdateVisitor
-
-class MyNode(Node):
-	pass
 
 def test_construction():
 	n = Node(name="foo", nodeMask=0xdeadbeef)
@@ -20,7 +17,22 @@ def test_construction():
 
 	assert refcmp(n, 1, 3)
 
+def test_destruction():
+	deleted = []
+
+	n = Node(name="NODE", debug=lambda addr, cls, name: deleted.append(addr))
+	addr = n.addr
+
+	assert refcmp(n, 1, 1)
+
+	del n
+
+	assert deleted[-1] == addr
+
 def test_inheritance():
+	class MyNode(Node):
+		pass
+
 	n = MyNode(dataVariance=Object.STATIC)
 
 	assert n.dataVariance == Object.STATIC
@@ -29,15 +41,15 @@ def test_inheritance():
 def test_updatecallback():
 	updated = []
 
-	class UpdateCallback(NodeCallback):
+	class UpdateNodeCallback(NodeCallback):
 		def __call__(self, *args, **kwargs):
 			nonlocal updated
 
 			updated.append(1)
 
-	n = Node()
+	n = Node() # TODO: updateCallback=UpdateNodeCallback())
 
-	n.updateCallback = UpdateCallback()
+	n.updateCallback = UpdateNodeCallback()
 
 	# print(n.updateCallback.referenceCount)
 	# assert refcmp(n.updateCallback, 2, 1)
@@ -59,6 +71,18 @@ def test_updatecallback():
 
 	# It should STILL only have 2 values, since we removed the `updateCallback`.
 	assert len(updated) == 2
+
+	# class UpdateCallback(Callback):
+	# 	def run(self, obj, data):
+	# 		nonlocal updated
+    #
+	# 		updated.append(3)
+    #
+	# n.updateCallback = UpdateCallback()
+    #
+	# n.accept(UpdateVisitor())
+    #
+	# assert updated[-1] == 3
 
 def test_stateset():
 	n = Node()
