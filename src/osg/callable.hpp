@@ -2,6 +2,28 @@
 
 #include "../pyosg.hpp"
 
+// NOTE: OSG callback bindings
+//
+// OSG’s callback system mixes:
+//   - virtual inheritance (Callback)
+//   - derived callback types (NodeCallback, DrawCallback, etc.)
+//   - inconsistent pointer usage (Callback* vs derived*)
+//   - differing execution semantics (traversal vs non-traversal)
+//
+// Because of this, pointer identity is not stable across API boundaries
+// (e.g. NodeCallback* vs Callback* may refer to the same object but have
+// different addresses due to virtual inheritance).
+//
+// To ensure correct Python identity and behavior:
+//
+//   1. Callback conversion (None / instance / callable) is handled explicitly.
+//   2. PropertySlots are used to preserve Python object identity.
+//   3. Stored pointers are *canonicalized via the getter* (e.g. getUpdateCallback())
+//      before being cached, ensuring stable comparisons.
+//
+// This is not a workaround for a bug, but an adaptation to OSG’s design.
+// Do not "simplify" this without understanding pointer adjustment semantics.
+
 namespace pyosg {
 
 namespace detail {
@@ -76,53 +98,28 @@ namespace detail {
 	}
 
 	template<auto Setter, typename Callback, typename Wrapper, typename Self>
-	void applyCallback(Self& self, py::object obj) {
-		if (obj.is_none()) {
-			(self.*Setter)(nullptr);
-		}
+	Callback* applyCallback(Self& self, py::object obj) {
+		Callback* result = nullptr;
 
-		else if (py::isinstance<Callback>(obj)) {
-			auto* cb = obj.cast<Callback*>();
-			(self.*Setter)(cb);
-		}
+		if(obj.is_none()) result = nullptr;
 
-		else if (PyCallable_Check(obj.ptr())) {
-			auto* cb = new Wrapper(obj);
-			(self.*Setter)(cb);
-		}
+		else if(py::isinstance<Callback>(obj)) result = obj.cast<Callback*>();
+
+		else if(PyCallable_Check(obj.ptr())) result = new Wrapper(obj);
 
 		else {
 			throw py::value_error("Expected callback, callable, or None");
 		}
+
+		(self.*Setter)(result);
+
+		return result;
 	}
 
 	template<auto Setter, typename Callback, typename Wrapper>
 	auto setCallback() {
 		using traits_type = CallableCallbackTraits<decltype(Setter)>;
 		using self_type = typename traits_type::self_type;
-
-		/* return py::cpp_function(
-			[](self_type& self, py::object obj) {
-				if(obj.is_none()) (self.*Setter)(nullptr);
-
-				else if(py::isinstance<Callback>(obj)) {
-					auto* cb = obj.cast<Callback*>();
-
-					(self.*Setter)(cb);
-				}
-
-				else if(PyCallable_Check(obj.ptr())) {
-					auto* cb = new Wrapper(obj);
-
-					(self.*Setter)(cb);
-				}
-
-				else {
-					throw py::value_error("Expected callback, callable, or None");
-				}
-			},
-			py::keep_alive<1, 2>()
-		); */
 
 		return py::cpp_function(
 			[](self_type& self, py::object obj) {
