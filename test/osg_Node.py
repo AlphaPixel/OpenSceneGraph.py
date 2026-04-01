@@ -47,9 +47,7 @@ def test_updatecallback():
 
 			updated.append(1)
 
-	n = Node() # TODO: updateCallback=UpdateNodeCallback())
-
-	n.updateCallback = UpdateNodeCallback()
+	n = Node(updateCallback=UpdateNodeCallback())
 
 	# print(n.updateCallback.referenceCount)
 	# assert refcmp(n.updateCallback, 2, 1)

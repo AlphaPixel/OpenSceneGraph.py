@@ -8,7 +8,7 @@ import time
 # modifying the `OSG_THREADING` variable isn't advised, as properly interacting
 # with the Python GIL is notoriously difficult to do. You'll have MUCH better
 # luck using Python's `async/await` support (and other examples demonstrate
-# doine exactly that).
+# doing exactly that).
 os.environ.update({
 	"OSG_WINDOW": "50 50 800 600",
 	"OSG_THREADING": "SingleThreaded",
