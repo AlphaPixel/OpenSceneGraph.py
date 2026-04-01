@@ -2,24 +2,22 @@
 
 #include "../pyosg.hpp"
 
-// NOTE: OSG callback bindings
-//
 // OSG’s callback system mixes:
+//
 //   - virtual inheritance (Callback)
 //   - derived callback types (NodeCallback, DrawCallback, etc.)
 //   - inconsistent pointer usage (Callback* vs derived*)
 //   - differing execution semantics (traversal vs non-traversal)
 //
-// Because of this, pointer identity is not stable across API boundaries
-// (e.g. NodeCallback* vs Callback* may refer to the same object but have
-// different addresses due to virtual inheritance).
+// Because of this, pointer identity is not stable across API boundaries (e.g. NodeCallback* vs
+// Callback* may refer to the same object but have different addresses due to virtual inheritance).
 //
 // To ensure correct Python identity and behavior:
 //
 //   1. Callback conversion (None / instance / callable) is handled explicitly.
 //   2. PropertySlots are used to preserve Python object identity.
-//   3. Stored pointers are *canonicalized via the getter* (e.g. getUpdateCallback())
-//      before being cached, ensuring stable comparisons.
+//   3. Stored pointers are *canonicalized via the getter* (e.g. getUpdateCallback()) before being
+//      cached, ensuring stable comparisons.
 //
 // This is not a workaround for a bug, but an adaptation to OSG’s design.
 // Do not "simplify" this without understanding pointer adjustment semantics.
@@ -59,19 +57,41 @@ namespace detail {
 		}
 	};
 
+	template<typename Base>
+	struct CallbackMethod;
+
+	// Decides exactly what method is called (`operator(), run(), drawImplementation(), etc) by
+	// the `CallableCallback` wrapper class.
+	//
+	// See the source for `osg::Drawable::DrawCallback` for an example on how to specialize an
+	// an instance.
+	template<typename Base>
+	struct CallbackMethod {
+		template<typename Self, typename Fn, typename... Args>
+		static void invoke(Self* self, Fn& fn, Args&&... args) {
+			CallableImpl<Base, false>::call(self, fn, std::forward<Args>(args)...);
+		}
+	};
+
 	template<typename Base, typename... Args, bool Traverse>
 	class CallableCallback<Base, void(Args...), Traverse>: public Base {
 	public:
 		explicit CallableCallback(py::object fn): _fn(std::move(fn)) {}
 
 		void operator()(Args... args) override {
-			CallableImpl<Base, Traverse>::call(this, _fn, std::forward<Args>(args)...);
+			CallbackMethod<Base>::invoke(this, _fn, std::forward<Args>(args)...);
 		}
 
 	private:
 		py::object _fn;
 	};
 
+	// This is the actual wrapper class that makes it possible to use the traditional OSG API for
+	// your callback OR some other kind of more generic "callable" Python object. By default, this
+	// specialization expects to override `operator()`.
+	//
+	// If you use a specialized `CallbackMethod`, you will also need to specialize a corresponding
+	// version of this class as well.
 	template<typename Base, typename... Args, bool Traverse>
 	class CallableCallback<Base, void(Args...) const, Traverse>: public Base {
 	public:
@@ -108,7 +128,7 @@ namespace detail {
 		else if(PyCallable_Check(obj.ptr())) result = new Wrapper(obj);
 
 		else {
-			throw py::value_error("Expected callback, callable, or None");
+			throw py::value_error("Expected compatible callback, callable, or None");
 		}
 
 		(self.*Setter)(result);

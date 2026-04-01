@@ -9,9 +9,101 @@ PYOSG_DISABLE_WARNINGS
 
 PYOSG_ENABLE_WARNINGS
 
+#include "pybind11x.hpp"
+
+namespace pyx = pybind11x;
+
 namespace pyosg {
 
 namespace detail {
+	using CameraSlots = pyx::PropertySlots<osg::Camera, 4>;
+	using CameraStorage = pyx::ProxyStorageOSG<osg::Camera, CameraSlots>;
+
+	constexpr size_t InitialDrawCallbackSlot = 0;
+	constexpr size_t PreDrawCallbackSlot = 1;
+	constexpr size_t PostDrawCallbackSlot = 2;
+	constexpr size_t FinalDrawCallbackSlot = 3;
+
+	using DrawCallbackType = osg::Camera::DrawCallback;
+	using DrawCallbackWrapper = CallableCallback<
+		osg::Camera::DrawCallback,
+		void(osg::RenderInfo&) const,
+		false
+	>;
+
+	constexpr auto InitialDrawCallbackGetter =
+		static_cast<osg::Camera::DrawCallback*(osg::Camera::*)()>(
+			&osg::Camera::getInitialDrawCallback
+		)
+	;
+
+	constexpr auto InitialDrawCallbackSetter =
+		static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
+			&osg::Camera::setInitialDrawCallback
+		)
+	;
+
+	constexpr auto PreDrawCallbackGetter =
+		static_cast<osg::Camera::DrawCallback*(osg::Camera::*)()>(
+			&osg::Camera::getPreDrawCallback
+		)
+	;
+
+	constexpr auto PreDrawCallbackSetter =
+		static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
+			&osg::Camera::setPreDrawCallback
+		)
+	;
+
+	constexpr auto PostDrawCallbackGetter =
+		static_cast<osg::Camera::DrawCallback*(osg::Camera::*)()>(
+			&osg::Camera::getPostDrawCallback
+		)
+	;
+
+	constexpr auto PostDrawCallbackSetter =
+		static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
+			&osg::Camera::setPostDrawCallback
+		)
+	;
+
+	constexpr auto FinalDrawCallbackGetter =
+		static_cast<osg::Camera::DrawCallback*(osg::Camera::*)()>(
+			&osg::Camera::getFinalDrawCallback
+		)
+	;
+
+	constexpr auto FinalDrawCallbackSetter =
+		static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
+			&osg::Camera::setFinalDrawCallback
+		)
+	;
+
+	// Slot-backed callback setter. We canonicalize the stored pointer via the getter so SlotCache
+	// compares the same pointer representation the getter will later return.
+	template<size_t I, auto Setter, auto Getter, typename Callback, typename Wrapper>
+	auto callback_property_setter() {
+		return [](osg::Camera& self, py::object obj) {
+			applyCallback<Setter, Callback, Wrapper>(self, obj);
+
+			auto* ptr = (self.*Getter)();
+			auto& slots = CameraStorage::get(self)->template proxy<CameraSlots>();
+
+			slots.set(I, obj, ptr);
+		};
+	}
+
+	template<size_t I, auto Setter, auto Getter>
+	inline auto draw_callback_property_setter() {
+		return callback_property_setter<
+			I,
+			Setter,
+			Getter,
+			DrawCallbackType,
+			DrawCallbackWrapper
+		>();
+	}
+
 	class Camera: public osg::Camera {
 	public:
 		struct DrawCallback: osg::Camera::DrawCallback {
@@ -28,12 +120,6 @@ namespace detail {
 		};
 	};
 }
-
-using DrawCallable = detail::CallableCallback<
-	osg::Camera::DrawCallback,
-	void(osg::RenderInfo&) const,
-	false
->;
 
 void bind_Camera(py::module_& m) {
 	auto camera = py::class_<
@@ -93,10 +179,6 @@ void bind_Camera(py::module_& m) {
 		osg::ref_ptr<osg::Camera::DrawCallback>
 	>(camera, "DrawCallback")
 		.def(py::init<>())
-		.def("__call__", [](osg::Camera::DrawCallback& self, osg::RenderInfo* ri) {
-			// Manual forwarding; ensures Python sees correct signature.
-			return;
-		})
 	;
 
 	camera
@@ -214,52 +296,50 @@ void bind_Camera(py::module_& m) {
 			py::return_value_policy::reference_internal
 		)
 
-#if 1
 		.def_property(
 			"initialDrawCallback",
-			detail::getCallback(py::overload_cast<>(&osg::Camera::getInitialDrawCallback)),
-			detail::setCallback<
-				static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
-					&osg::Camera::setInitialDrawCallback
-				),
-				osg::Camera::DrawCallback,
-				DrawCallable
+			detail::CameraSlots::getter<detail::InitialDrawCallbackSlot>(
+				detail::InitialDrawCallbackGetter
+			),
+			detail::draw_callback_property_setter<
+				detail::InitialDrawCallbackSlot,
+				detail::InitialDrawCallbackSetter,
+				detail::InitialDrawCallbackGetter
 			>()
 		)
 		.def_property(
 			"preDrawCallback",
-			detail::getCallback(py::overload_cast<>(&osg::Camera::getPreDrawCallback)),
-			detail::setCallback<
-				static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
-					&osg::Camera::setPreDrawCallback
-				),
-				osg::Camera::DrawCallback,
-				DrawCallable
+			detail::CameraSlots::getter<detail::PreDrawCallbackSlot>(
+				detail::PreDrawCallbackGetter
+			),
+			detail::draw_callback_property_setter<
+				detail::PreDrawCallbackSlot,
+				detail::PreDrawCallbackSetter,
+				detail::PreDrawCallbackGetter
 			>()
 		)
 		.def_property(
 			"postDrawCallback",
-			detail::getCallback(py::overload_cast<>(&osg::Camera::getPostDrawCallback)),
-			detail::setCallback<
-				static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
-					&osg::Camera::setPostDrawCallback
-				),
-				osg::Camera::DrawCallback,
-				DrawCallable
+			detail::CameraSlots::getter<detail::PostDrawCallbackSlot>(
+				detail::PostDrawCallbackGetter
+			),
+			detail::draw_callback_property_setter<
+				detail::PostDrawCallbackSlot,
+				detail::PostDrawCallbackSetter,
+				detail::PostDrawCallbackGetter
 			>()
 		)
 		.def_property(
 			"finalDrawCallback",
-			detail::getCallback(py::overload_cast<>(&osg::Camera::getFinalDrawCallback)),
-			detail::setCallback<
-				static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
-					&osg::Camera::setFinalDrawCallback
-				),
-				osg::Camera::DrawCallback,
-				DrawCallable
+			detail::CameraSlots::getter<detail::FinalDrawCallbackSlot>(
+				detail::FinalDrawCallbackGetter
+			),
+			detail::draw_callback_property_setter<
+				detail::FinalDrawCallbackSlot,
+				detail::FinalDrawCallbackSetter,
+				detail::FinalDrawCallbackGetter
 			>()
 		)
-#endif
 
 		.def(
 			"attach",
