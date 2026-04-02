@@ -6,6 +6,7 @@ void bind(py::module_& m) {
 	bind_ArgumentParser(m);
 	bind_Notify(m);
 	bind_Vec(m);
+	bind_Quat(m);
 	bind_Matrix(m);
 	bind_Bound(m);
 	bind_Object(m);

@@ -421,6 +421,7 @@ void bind(py::module_& m);
 void bind_ArgumentParser(py::module_& m);
 void bind_Notify(py::module_& m);
 void bind_Vec(py::module_& m);
+void bind_Quat(py::module_& m);
 void bind_Matrix(py::module_& m);
 void bind_Bound(py::module_& m);
 void bind_Object(py::module_& m);

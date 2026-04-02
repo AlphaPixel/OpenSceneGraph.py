@@ -90,6 +90,7 @@ set(PYOSG_SOURCES
 	"src/osg/ArgumentParser.cpp"
 	"src/osg/Notify.cpp"
 	"src/osg/Vec.cpp"
+	"src/osg/Quat.cpp"
 	"src/osg/Matrix.cpp"
 	"src/osg/Bound.cpp"
 	"src/osg/Buffer.cpp"
