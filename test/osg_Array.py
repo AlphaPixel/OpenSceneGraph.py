@@ -1,4 +1,4 @@
-#vimrun! pytest -v ..
+#vimrun! pytest -sv ../test/osg_Array.py
 
 from .conftest import f32
 

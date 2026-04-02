@@ -18,6 +18,93 @@ PYOSG_CONSTRUCTOR(pyosg_preinit) {
 	// OSG_INFO << "PYOSG_CONSTRUCTOR: You can do your static init here..." << std::endl;
 }
 
+#include <atomic>
+#include <thread>
+#include <chrono>
+
+struct StopEvent {
+	std::atomic<bool> stop{false};
+};
+
+std::string load_heavy(int seconds, StopEvent* event=nullptr) { {
+		py::gil_scoped_release release;
+
+		int steps = seconds * 10;
+
+		for(int i = 0; i < steps; ++i) {
+			if(event && event->stop.load(std::memory_order_relaxed)) return "stopped";
+
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
+	}
+
+	return "result-from-cpp";
+}
+
+/* struct LoopQueueScope {
+public:
+	LoopQueueScope(py::object loop, py::object queue): _loop(loop), _queue(queue) {}
+
+	template<typename... Args>
+	void put_nowait(Args&&... args) {
+		py::gil_scoped_acquire gil;
+
+		_loop.attr("call_soon_threadsafe")(
+			_queue.attr("put_nowait"),
+			py::make_tuple(std::forward<Args>(args)...)
+		);
+	}
+
+private:
+	py::object _loop;
+	py::object _queue;
+} */
+
+template<typename... Args>
+void put_nowait(const py::object& loop, const py::object& queue, Args&&... args) {
+	py::gil_scoped_acquire gil;
+
+	// static py::object call_soon = loop.attr("call_soon_threadsafe");
+	// static py::object put = queue.attr("put_nowait");
+
+	loop.attr("call_soon_threadsafe")(
+		queue.attr("put_nowait"),
+		py::make_tuple(std::forward<Args>(args)...)
+	);
+}
+
+std::string load_heavy_loop_queue(
+	size_t seconds,
+	StopEvent* stop,
+	py::object loop,
+	py::object queue,
+	size_t job_id
+) {
+	py::gil_scoped_release release;
+
+	size_t steps = seconds * 10;
+
+	for(size_t i = 0; i < steps; ++i) {
+		if(stop && stop->stop.load(std::memory_order_relaxed)) {
+			std::cerr << "C++: detected stop" << std::endl;
+
+			put_nowait(loop, queue, "complete", job_id, "stopped");
+
+			return "stopped";
+		}
+
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+		auto progress = static_cast<float>(i + 1) / static_cast<float>(steps);
+
+		put_nowait(loop, queue, "progress", job_id, progress);
+	}
+
+	put_nowait(loop, queue, "complete", job_id, "result-from-cpp");
+
+	return "result-from-cpp";
+}
+
 PYBIND11_MODULE(OpenSceneGraph, m) {
 	auto osg = m.def_submodule("osg", "osg namespace");
 
@@ -109,8 +196,20 @@ PYBIND11_MODULE(OpenSceneGraph, m) {
 
 	/* py::module_ atexit = py::module_::import("atexit");
 
-	atexit.attr("register")(
-		py::cpp_function([]() {
-		})
-	); */
+	atexit.attr("register")( py::cpp_function([]() { })); */
+
+	py::class_<StopEvent>(m, "StopEvent")
+		.def(py::init<>())
+		.def("stop", [](StopEvent& t) { t.stop.store(true); })
+	;
+
+	m.def("load_heavy", &load_heavy, "seconds"_a, "stop_event"_a=nullptr);
+	m.def("load_heavy_loop_queue",
+		&load_heavy_loop_queue,
+		"seconds"_a,
+		"stop_event"_a,
+		"loop"_a,
+		"queue"_a,
+		"job_id"_a
+	);
 }
