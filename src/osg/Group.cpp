@@ -41,9 +41,6 @@ struct pyx::SequenceTraits<osg::Group> {
 	}
 };
 
-using ChildrenProxy = pyx::SequenceProxy<osg::Group>;
-using ChildrenStorage = pyx::ProxyStorageOSG<osg::Group, ChildrenProxy>;
-
 namespace pyosg {
 
 namespace detail {
@@ -57,12 +54,15 @@ namespace detail {
 			}
 		}
 	}
+
+	using ChildrenProxy = pyx::SequenceProxy<osg::Group>;
+	using ChildrenStorage = pyx::ProxyStorageOSG<osg::Group, ChildrenProxy>;
 }
 
 void bind_Group(py::module_& m) {
 	auto group = py::class_<osg::Group, osg::Node, osg::ref_ptr<osg::Group>>(m, "Group");
 
-	ChildrenProxy::bind(group, "_Children");
+	detail::ChildrenProxy::bind(group, "_Children");
 
 	group
 		.def(py::init<>())
@@ -73,8 +73,8 @@ void bind_Group(py::module_& m) {
 
 			return g;
 		}))
-		.def_property_readonly("children", [](osg::Group& self) -> ChildrenProxy& {
-			return ChildrenStorage::get(self)->template proxy<ChildrenProxy>();
+		.def_property_readonly("children", [](osg::Group& self) -> detail::ChildrenProxy& {
+			return detail::ChildrenStorage::get(self)->template proxy<detail::ChildrenProxy>();
 		}, py::return_value_policy::reference_internal)
 
 		.def_static("test_cpp", []() {

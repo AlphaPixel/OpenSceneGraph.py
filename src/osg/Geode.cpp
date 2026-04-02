@@ -6,6 +6,70 @@ PYOSG_DISABLE_WARNINGS
 
 PYOSG_ENABLE_WARNINGS
 
+#include "pybind11x.hpp"
+
+namespace pyx = pybind11x;
+
+/* template<>
+struct pyx::SequenceTraits<osg::Group> {
+	using element_type = osg::Node;
+	using value_type = element_type*;
+
+	static value_type from_python(py::handle h) {
+		return h.cast<value_type>();
+	}
+
+	static size_t size(const osg::Group* g) {
+		return g->getNumChildren();
+	}
+
+	static element_type* get(osg::Group* g, size_t i) {
+		return g->getChild(static_cast<unsigned int>(i));
+	}
+
+	static void set(osg::Group* g, size_t i, value_type n) {
+		g->replaceChild(g->getChild(static_cast<unsigned int>(i)), n);
+	}
+
+	static void del(osg::Group* g, size_t i) {
+		g->removeChild(static_cast<unsigned int>(i));
+	}
+
+	static void append(osg::Group* g, value_type n) {
+		g->addChild(n);
+	}
+}; */
+
+template<>
+struct pyx::SequenceTraits<osg::Geode> {
+	using element_type = osg::Drawable;
+	using value_type = element_type*;
+
+	static value_type from_python(py::handle h) {
+		return h.cast<value_type>();
+	}
+
+	static size_t size(const osg::Geode* g) {
+		return g->getNumDrawables();
+	}
+
+	static element_type* get(osg::Geode* g, size_t i) {
+		return g->getDrawable(static_cast<unsigned int>(i));
+	}
+
+	static void set(osg::Geode* g, size_t i, element_type* d) {
+		g->replaceDrawable(g->getDrawable(static_cast<unsigned int>(i)), d);
+	}
+
+	static void del(osg::Geode* g, size_t i) {
+		g->removeDrawables(static_cast<unsigned int>(i));
+	}
+
+	static void append(osg::Geode* g, element_type* d) {
+		g->addDrawable(d);
+	}
+};
+
 namespace pyosg {
 
 namespace detail {
@@ -20,34 +84,8 @@ namespace detail {
 		}
 	}
 
-	template<>
-	struct SequenceTraits<osg::Geode> {
-		using element_type = osg::Drawable;
-
-		static size_t size(const osg::Geode* g) {
-			return g->getNumDrawables();
-		}
-
-		static element_type* get(osg::Geode* g, size_t i) {
-			return g->getDrawable(static_cast<unsigned int>(i));
-		}
-
-		static void set(osg::Geode* g, size_t i, element_type* d) {
-			g->replaceDrawable(g->getDrawable(static_cast<unsigned int>(i)), d);
-		}
-
-		static void remove(osg::Geode* g, size_t i) {
-			g->removeDrawables(static_cast<unsigned int>(i));
-		}
-
-		static void append(osg::Geode* g, element_type* d) {
-			g->addDrawable(d);
-		}
-
-		static constexpr const char* add_method = "addDrawable";
-	};
-
-	using DrawablesProxy = SequenceProxy<osg::Geode>;
+	using DrawablesProxy = pyx::SequenceProxy<osg::Geode>;
+	using DrawablesStorage = pyx::ProxyStorageOSG<osg::Geode, DrawablesProxy>;
 }
 
 void bind_Geode(py::module_& m) {
@@ -64,46 +102,10 @@ void bind_Geode(py::module_& m) {
 
 			return g;
 		}))
-		.def("addDrawable", [](osg::Geode& self, osg::Drawable* drawable) {
-			return self.addDrawable(drawable);
-		}, py::arg("drawable"), py::keep_alive<1, 2>())
-		/* .def("getChild",
-			static_cast<osg::Node*(osg::Geode::*)(unsigned int)>(&osg::Geode::getChild),
-			py::return_value_policy::reference_internal
-		)
-		.def("getNumChildren", &osg::Geode::getNumChildren)
-		.def("removeChild",
-			static_cast<bool(osg::Geode::*)(osg::Node*)>(&osg::Geode::removeChild),
-			py::arg("child")
-		)
-		.def("removeChildren",
-			&osg::Geode::removeChildren,
-			py::arg("index"),
-			py::arg("numChildren")
-		)
-		.def("replaceChild",
-			[](osg::Geode& self, osg::Node* oldChild, osg::Node* newChild) {
-				return self.replaceChild(oldChild, newChild);
-			},
-			py::arg("oldChild"),
-			py::arg("newChild"),
-			py::keep_alive<1, 3>()
-		)
-		.def("addChildren", [](osg::Geode& self, const py::args& args) {
-			int count = 0;
 
-			for(auto item : args) {
-				auto* child = item.cast<osg::Node*>();
-
-				if(self.addChild(child)) count++;
-			}
-
-			return count;
-		},
-		"Add one or more children. Returns number of children added.") */
-		.def_property_readonly("drawables", [](osg::Geode& self) {
-			return detail::DrawablesProxy(&self);
-		})
+		.def_property_readonly("drawables", [](osg::Geode& self) -> detail::DrawablesProxy& {
+			return detail::DrawablesStorage::get(self)->template proxy<detail::DrawablesProxy>();
+		}, py::return_value_policy::reference_internal)
 	;
 }
 
