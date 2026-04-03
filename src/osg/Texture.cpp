@@ -121,24 +121,32 @@ void bind_Texture(py::module_& m) {
 				);
 			},
 			[](osg::Texture& self, py::object obj) {
-				using WP = osg::Texture::WrapParameter;
-				using WM = osg::Texture::WrapMode;
+				if(py::isinstance<osg::Texture::WrapMode>(obj)) {
+					auto v = obj.cast<osg::Texture::WrapMode>();
 
-				if(py::isinstance<WM>(obj)) {
-					auto v = obj.cast<WM>();
-
-					self.setWrap(WP::WRAP_S, v);
-					self.setWrap(WP::WRAP_T, v);
-					self.setWrap(WP::WRAP_R, v);
+					self.setWrap(osg::Texture::WrapParameter::WRAP_S, v);
+					self.setWrap(osg::Texture::WrapParameter::WRAP_T, v);
+					self.setWrap(osg::Texture::WrapParameter::WRAP_R, v);
 				}
 
 				else {
 					auto seq = obj.cast<py::sequence>();
 					auto n = seq.size();
 
-					if(n >= 1) self.setWrap(WP::WRAP_S, seq[0].cast<WM>());
-					if(n >= 2) self.setWrap(WP::WRAP_T, seq[1].cast<WM>());
-					if(n >= 3) self.setWrap(WP::WRAP_R, seq[2].cast<WM>());
+					if(n >= 1) self.setWrap(
+						osg::Texture::WrapParameter::WRAP_S,
+						seq[0].cast<osg::Texture::WrapMode>()
+					);
+
+					if(n >= 2) self.setWrap(
+						osg::Texture::WrapParameter::WRAP_T,
+						seq[1].cast<osg::Texture::WrapMode>()
+					);
+
+					if(n >= 3) self.setWrap(
+						osg::Texture::WrapParameter::WRAP_R,
+						seq[2].cast<osg::Texture::WrapMode>()
+					);
 				}
 			}
 		)
@@ -151,22 +159,26 @@ void bind_Texture(py::module_& m) {
 				);
 			},
 			[](osg::Texture& self, py::object obj) {
-				using FP = osg::Texture::FilterParameter;
-				using FM = osg::Texture::FilterMode;
+				if(py::isinstance<osg::Texture::FilterMode>(obj)) {
+					auto v = obj.cast<osg::Texture::FilterMode>();
 
-				if(py::isinstance<FM>(obj)) {
-					auto v = obj.cast<FM>();
-
-					self.setFilter(FP::MIN_FILTER, v);
-					self.setFilter(FP::MAG_FILTER, v);
+					self.setFilter(osg::Texture::FilterParameter::MIN_FILTER, v);
+					self.setFilter(osg::Texture::FilterParameter::MAG_FILTER, v);
 				}
 
 				else {
 					auto seq = obj.cast<py::sequence>();
 					auto n = seq.size();
 
-					if(n >= 1) self.setFilter(FP::MIN_FILTER, seq[0].cast<FM>());
-					if(n >= 2) self.setFilter(FP::MAG_FILTER, seq[1].cast<FM>());
+					if(n >= 1) self.setFilter(
+						osg::Texture::FilterParameter::MIN_FILTER,
+						seq[0].cast<osg::Texture::FilterMode>()
+					);
+
+					if(n >= 2) self.setFilter(
+						osg::Texture::FilterParameter::MAG_FILTER,
+						seq[1].cast<osg::Texture::FilterMode>()
+					);
 				}
 			}
 		)

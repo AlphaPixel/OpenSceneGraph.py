@@ -23,7 +23,9 @@ namespace detail {
 		auto vec = py::class_<T>(m, name)
 			.def(py::init<>())
 			.def(py::init<const T&>())
+		;
 
+		vec
 			.def(py::self + py::self)
 			.def(py::self - py::self)
 			.def(py::self * value_type())
@@ -126,11 +128,12 @@ namespace detail {
 		// First, we'll add some properties; everything has an `x`.
 		// vec.def_property("x", [](T& v){ return v[0]; }, [](T& v, value_type val){ v[0] = val; })
 		vec.def_property("x", vec_get<T, 0>(), vec_set<T, 0>());
+		vec.def_property("y", vec_get<T, 1>(), vec_set<T, 1>());
 
-		// Add a `y` when there's at least 2 elements.
+		/* // Add a `y` when there's at least 2 elements.
 		if constexpr(N > 1) {
 			vec.def_property("y", vec_get<T, 1>(), vec_set<T, 1>());
-		}
+		} */
 
 		// Add a `z` when there's at least 3 elements.
 		if constexpr(N > 2) {
@@ -145,10 +148,19 @@ namespace detail {
 		// Now we're going to add UNIQUE methods based on the number of elements...
 		if constexpr(N == 2) {
 			vec.def(py::init<value_type, value_type>());
+
+			if constexpr(std::is_same_v<T, osg::Vec2d>) vec.def(py::init<const osg::Vec2f>());
+
+			else if constexpr(std::is_same_v<T, osg::Vec2f>) vec.def(py::init<const osg::Vec2d&>());
 		}
 
 		else if constexpr(N == 3) {
 			vec.def(py::init<value_type, value_type, value_type>());
+
+			if constexpr(std::is_same_v<T, osg::Vec3d>) vec.def(py::init<const osg::Vec3f>());
+
+			else if constexpr(std::is_same_v<T, osg::Vec3f>) vec.def(py::init<const osg::Vec3d&>());
+
 			vec.def("cross", [](const T& a, const T& b) {
 				// OSG defines operator^(Vec3) as cross product...
 				return a ^ b;
@@ -164,6 +176,10 @@ namespace detail {
 
 		else if constexpr(N == 4) {
 			vec.def(py::init<value_type, value_type, value_type, value_type>());
+
+			if constexpr(std::is_same_v<T, osg::Vec4d>) vec.def(py::init<const osg::Vec4f>());
+
+			else if constexpr(std::is_same_v<T, osg::Vec4f>) vec.def(py::init<const osg::Vec4d&>());
 		}
 
 		return vec;

@@ -28,7 +28,6 @@ class EventType(Enum):
 
 @dataclass
 class Event:
-	# progress, complete, etc.
 	type: EventType
 	id: int
 	value: Any = None
@@ -41,7 +40,7 @@ class Event:
 			value=ev[2]
 		)
 
-async def faux_load(queue, job_id, seconds):
+async def task_py_example(queue, job_id, seconds):
 	steps = 10
 
 	for i in range(steps):
@@ -56,40 +55,14 @@ async def faux_load(queue, job_id, seconds):
 	await queue.put(Event(
 		type=EventType.COMPLETE,
 		id=job_id,
-		value=f"result-{job_id}"
+		value=f"result-from-python"
 	))
 
-async def cpp_load(queue, job_id, seconds):
-	stop = StopEvent()
-	task = asyncio.create_task(asyncio.to_thread(load_heavy, seconds, stop))
-
-	try:
-		result = await task
-
-		await queue.put(Event(
-			type=EventType.COMPLETE,
-			id=job_id,
-			value=result
-		))
-
-	except asyncio.CancelledError:
-		stop.stop()
-
-		task.cancel()
-
-		try:
-			await task
-
-		except asyncio.CancelledError:
-			pass
-
-		raise
-
-async def cpp_load_loop_queue(queue, job_id, seconds):
+async def task_cpp_example(queue, job_id, seconds):
 	stop = StopEvent()
 	loop = asyncio.get_running_loop()
 	task = asyncio.create_task(asyncio.to_thread(
-		load_heavy_loop_queue,
+		pyosg_async_task_example,
 		seconds,
 		stop,
 		loop,
@@ -100,7 +73,7 @@ async def cpp_load_loop_queue(queue, job_id, seconds):
 	try:
 		result = await task
 
-		# NOTE: completion already emitted from C++
+		# NOTE: The result was also pushed through queue.
 		return result
 
 	except asyncio.CancelledError:
@@ -109,6 +82,7 @@ async def cpp_load_loop_queue(queue, job_id, seconds):
 		stop.stop()
 
 		try:
+			# TODO: Investigate more about what `shield` actually does!
 			result = await asyncio.shield(task)
 
 			print("C++ exited with:", result)
@@ -130,7 +104,7 @@ def run(viewer):
 	async def heartbeat():
 		try:
 			while not viewer.done:
-				# print("heartbeat tick")
+				print("heartbeat tick")
 
 				await asyncio.sleep(1.0)
 
@@ -141,9 +115,8 @@ def run(viewer):
 
 	tasks = [
 		loop.create_task(heartbeat()),
-		loop.create_task(faux_load(queue, 0, 2)),
-		loop.create_task(cpp_load(queue, 1, 4)),
-		loop.create_task(cpp_load_loop_queue(queue, 2, 6))
+		loop.create_task(task_py_example(queue, 0, 2)),
+		loop.create_task(task_cpp_example(queue, 1, 5))
 	]
 
 	t = time.time()
@@ -163,13 +136,19 @@ def run(viewer):
 						ev = Event.from_tuple(ev)
 
 					try:
-						# print(f"{ev} {time.time() - t}")
+						elapsed = time.time() - t
 
 						if ev.type == EventType.PROGRESS:
-							print(f"[{ev.id}] {ev.value * 100:.0f}%")
+							print(f"[{ev.id}]({elapsed:.5f}s) {ev.value * 100:.0f}%")
 
 						elif ev.type == EventType.COMPLETE:
-							print(f"[{ev.id}] COMPLETE -> {ev.value}")
+							print(f"[{ev.id}]({elapsed:.5f}s) COMPLETE -> {ev.value}")
+
+							viewer.sceneData.drawables.append(
+								osg.ShapeDrawable(osg.Sphere(osg.Vec3(0, 2.0, 0), 1.0))
+							)
+
+							viewer.cameraManipulator.home(0.0)
 
 					except Exception as e:
 						print(f"EXCEPTION: {e}")
@@ -188,7 +167,7 @@ def run(viewer):
 		except asyncio.CancelledError:
 			pass
 
-		# flush pending callbacks from C++
+		# Flush pending callbacks from C++, if any.
 		loop.run_until_complete(asyncio.sleep(0))
 
 		loop.stop()
@@ -200,6 +179,6 @@ if __name__ == "__main__":
 	viewer = osgViewer.Viewer()
 
 	viewer.cameraManipulator = osgGA.TrackballManipulator()
-	viewer.sceneData = osgDB.readNodeFile("glsl_simple.osgt")
+	viewer.sceneData = osg.Geode() # osgDB.readNodeFile("glsl_simple.osgt")
 
 	run(viewer)

@@ -10,28 +10,123 @@ PYOSG_ENABLE_WARNINGS
 
 namespace pyosgGA {
 
-class GUIEventHandler: public osgGA::GUIEventHandler {
-public:
-	using osgGA::GUIEventHandler::GUIEventHandler;
+namespace detail {
+	class GUIEventHandler: public osgGA::GUIEventHandler {
+	public:
+		using osgGA::GUIEventHandler::GUIEventHandler;
 
-	bool handle(
-		const osgGA::GUIEventAdapter& ea,
-		osgGA::GUIActionAdapter& aa,
-		osg::Object* obj,
-		osg::NodeVisitor* nv
-	) override {
-		auto r = pyosg::detail::call_override<bool>("handle", this, &ea, &aa);
+		bool handle(
+			const osgGA::GUIEventAdapter& ea,
+			osgGA::GUIActionAdapter& aa,
+			osg::Object* obj,
+			osg::NodeVisitor* nv
+		) override {
+			auto r = pyosg::detail::call_override<bool>("handle", this, &ea, &aa);
 
-		// If a Python override exists and gave us a bool, check it.
-		if(r.has_value()) {
-			// If the event WAS HANDLED (returned True), we're done.
-			if(*r) return true;
+			// If a Python override exists and gave us a bool, check it.
+			if(r.has_value()) {
+				// If the event WAS HANDLED (returned True), we're done.
+				if(*r) return true;
+			}
+
+			// Python does not override OR returned None, so we should keep going.
+			return osgGA::GUIEventHandler::handle(ea, aa, obj, nv);
+		}
+	};
+
+	class CameraManipulator: public osgGA::CameraManipulator {
+	public:
+		using osgGA::CameraManipulator::CameraManipulator;
+
+		~CameraManipulator() override {}
+
+		void home(const osgGA::GUIEventAdapter& ea, osgGA::GUIActionAdapter& aa) override {
+			PYBIND11_OVERRIDE(void, osgGA::CameraManipulator, home, ea, aa);
 		}
 
-		// Python does not override OR returned None, so we should keep going.
-		return osgGA::GUIEventHandler::handle(ea, aa, obj, nv);
-	}
-};
+		void home(double t) override {
+			PYBIND11_OVERRIDE(void, osgGA::CameraManipulator, home, t);
+		}
+
+		void setAutoComputeHomePosition(bool flag) override {
+			PYBIND11_OVERRIDE(void, osgGA::CameraManipulator, setAutoComputeHomePosition, flag);
+		}
+
+		void getHomePosition(osg::Vec3d& eye, osg::Vec3d& center, osg::Vec3d& up) const override {
+			PYBIND11_OVERRIDE(
+				void,
+				osgGA::CameraManipulator,
+				getHomePosition,
+				eye,
+				center,
+				up
+			);
+		}
+
+		void setHomePosition(
+			const osg::Vec3d& eye,
+			const osg::Vec3d& center,
+			const osg::Vec3d& up,
+			bool autoComputeHomePosition=false
+		) {
+			PYBIND11_OVERRIDE(
+				void,
+				osgGA::CameraManipulator,
+				setHomePosition,
+				eye,
+				center,
+				up,
+				autoComputeHomePosition
+			);
+		}
+
+		osg::Matrixd getMatrix() const override {
+			std::cerr << "detail::CameraManipulator::getMatrix" << std::endl;
+
+			PYBIND11_OVERRIDE_PURE(
+				osg::Matrixd,
+				osgGA::CameraManipulator,
+				getMatrix
+			);
+		}
+
+		osg::Matrixd getInverseMatrix() const override {
+			std::cerr << "detail::CameraManipulator::getInverseMatrix" << std::endl;
+
+			PYBIND11_OVERRIDE_PURE(
+				osg::Matrixd,
+				osgGA::CameraManipulator,
+				getInverseMatrix
+			);
+		}
+
+		void setByMatrix(const osg::Matrixd& mat) override {
+			std::cerr << "detail::CameraManipulator::setByMatrix" << std::endl;
+
+			PYBIND11_OVERRIDE_PURE(
+				void,
+				osgGA::CameraManipulator,
+				setByMatrix,
+				mat
+			);
+		}
+
+		void setByInverseMatrix(const osg::Matrixd& mat) override {
+			std::cerr << "detail::CameraManipulator::setByInverseMatrix" << std::endl;
+
+			PYBIND11_OVERRIDE_PURE(
+				void,
+				osgGA::CameraManipulator,
+				setByInverseMatrix,
+				mat
+			);
+		}
+
+		/* void computeHomePosition(const osg::Camera* camera=nullptr, bool useBoundingBox=false) {
+			PYBIND11_OVERRIDE(void, osgGA::CameraManipulator, setAutoComputeHomePosition, flag);
+		} */
+	};
+}
 
 void bind(py::module_& m) {
 	py::class_<osgGA::GUIActionAdapter>(m, "GUIActionAdapter");
@@ -106,7 +201,7 @@ void bind(py::module_& m) {
 
 	py::class_<
 		osgGA::GUIEventHandler,
-		GUIEventHandler,
+		detail::GUIEventHandler,
 		osg::Object,
 		osg::ref_ptr<osgGA::GUIEventHandler>
 	>(m, "GUIEventHandler")
@@ -170,9 +265,58 @@ void bind(py::module_& m) {
 	// TODO: This WILL NEED a trampoline class in the `detail` namespace!
 	py::class_<
 		osgGA::CameraManipulator,
+		detail::CameraManipulator,
 		osgGA::GUIEventHandler,
 		osg::ref_ptr<osgGA::CameraManipulator>
 	>(m, "CameraManipulator")
+		.def(py::init_alias<>())
+		.def("home", py::overload_cast<
+			const osgGA::GUIEventAdapter&,
+			osgGA::GUIActionAdapter&
+		>(&osgGA::CameraManipulator::home))
+		.def("home", py::overload_cast<double>(&osgGA::CameraManipulator::home))
+		.def_property(
+			"homePosition",
+			py::cpp_function([](osgGA::CameraManipulator& self) {
+				osg::Vec3d eye, center, up;
+
+				self.getHomePosition(eye, center, up);
+
+				return py::make_tuple(eye, center, up);
+			}),
+			py::cpp_function([](osgGA::CameraManipulator& self, py::object obj) {
+				if(!py::isinstance<py::sequence>(obj)) throw py::type_error(
+					"Expected (eye, center, up) Vec3d sequence"
+				);
+
+				auto seq = obj.cast<py::sequence>();
+
+				if(seq.size() != 3) throw py::type_error(
+					"Expected Vec3d sequence of length 3 (eye, center, up)"
+				);
+
+				self.setHomePosition(
+					seq[0].cast<osg::Vec3d>(),
+					seq[1].cast<osg::Vec3d>(),
+					seq[2].cast<osg::Vec3d>()
+				);
+			})
+		)
+		.def_property(
+			"autoComputeHomePosition",
+			&osgGA::CameraManipulator::getAutoComputeHomePosition,
+			&osgGA::CameraManipulator::setAutoComputeHomePosition
+		)
+		.def_property(
+			"inverseMatrix",
+			&osgGA::CameraManipulator::getInverseMatrix,
+			&osgGA::CameraManipulator::setByInverseMatrix
+		)
+		.def_property(
+			"matrix",
+			&osgGA::CameraManipulator::getMatrix,
+			&osgGA::CameraManipulator::setByMatrix
+		)
 		// coordianteFrame
 		// sideVector
 		// frontVector

@@ -75,25 +75,29 @@ void bind_NodeVisitor(py::module_& m) {
 	;
 
 	nv
-		// .def(py::init_alias<>())
-		// .def(py::init<>())
-		// NodeVisitor(TraversalMode)
-		.def(py::init_alias<osg::NodeVisitor::TraversalMode>(), py::arg("traversalMode")=osg::NodeVisitor::TRAVERSE_NONE)
-		/* // NodeVisitor(VisitorType, TraversalMode)
-		.def(py::init_alias<osg::NodeVisitor::VisitorType, osg::NodeVisitor::TraversalMode>(),
-			py::arg("type"),
-			py::arg("traversalMode")=osg::NodeVisitor::TRAVERSE_NONE
-		) */
+		.def(
+			py::init_alias<osg::NodeVisitor::TraversalMode>(),
+			"traversalMode"_a=osg::NodeVisitor::TRAVERSE_NONE
+		)
 		.def("traverse", &osg::NodeVisitor::traverse, py::arg("node"))
-		// .def("_traverse", &detail::NodeVisitor::_traverse, py::arg("node"))
 		.def("_traverse", [](detail::NodeVisitor& self, osg::Node& node) {
 			self._traverse(node);
 		})
-		// .def("apply", [](osg::NodeVisitor& self, osg::Node& node) { return self.apply(node); })
-		// .def("apply", static_cast<void (osg::NodeVisitor::*)(osg::Node&)>(&osg::NodeVisitor::apply))
 		.def("apply", py::overload_cast<osg::Node&>(&osg::NodeVisitor::apply))
-		.def_property("traversalMask", &osg::NodeVisitor::getTraversalMask, &osg::NodeVisitor::setTraversalMask)
-		.def_property("traversalMode", &osg::NodeVisitor::getTraversalMode, &osg::NodeVisitor::setTraversalMode)
+		.def_property(
+			"traversalMask",
+			&osg::NodeVisitor::getTraversalMask,
+			&osg::NodeVisitor::setTraversalMask
+		)
+		.def_property(
+			"traversalMode",
+			&osg::NodeVisitor::getTraversalMode,
+			&osg::NodeVisitor::setTraversalMode
+		)
+		.def_property_readonly("frameStamp",
+			py::overload_cast<>(&osg::NodeVisitor::getFrameStamp, py::const_),
+			py::return_value_policy::reference
+		)
 	;
 }
 

@@ -26,21 +26,6 @@ struct StopEvent {
 	std::atomic<bool> stop{false};
 };
 
-std::string load_heavy(int seconds, StopEvent* event=nullptr) { {
-		py::gil_scoped_release release;
-
-		int steps = seconds * 10;
-
-		for(int i = 0; i < steps; ++i) {
-			if(event && event->stop.load(std::memory_order_relaxed)) return "stopped";
-
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-		}
-	}
-
-	return "result-from-cpp";
-}
-
 /* struct LoopQueueScope {
 public:
 	LoopQueueScope(py::object loop, py::object queue): _loop(loop), _queue(queue) {}
@@ -73,7 +58,7 @@ void put_nowait(const py::object& loop, const py::object& queue, Args&&... args)
 	);
 }
 
-std::string load_heavy_loop_queue(
+std::string pyosg_async_task_example(
 	size_t seconds,
 	StopEvent* stop,
 	py::object loop,
@@ -84,7 +69,7 @@ std::string load_heavy_loop_queue(
 
 	size_t steps = seconds * 10;
 
-	for(size_t i = 0; i < steps; ++i) {
+	for(size_t i = 0; i < steps; i++) {
 		if(stop && stop->stop.load(std::memory_order_relaxed)) {
 			std::cerr << "C++: detected stop" << std::endl;
 
@@ -203,9 +188,8 @@ PYBIND11_MODULE(OpenSceneGraph, m) {
 		.def("stop", [](StopEvent& t) { t.stop.store(true); })
 	;
 
-	m.def("load_heavy", &load_heavy, "seconds"_a, "stop_event"_a=nullptr);
-	m.def("load_heavy_loop_queue",
-		&load_heavy_loop_queue,
+	m.def("pyosg_async_task_example",
+		&pyosg_async_task_example,
 		"seconds"_a,
 		"stop_event"_a,
 		"loop"_a,

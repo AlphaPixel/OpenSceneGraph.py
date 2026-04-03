@@ -144,6 +144,7 @@ void bind(py::module_& m) {
 		osg::Object,
 		osg::ref_ptr<osgViewer::ViewerBase>
 	>(m, "ViewerBase")
+		// .def(py::init_alias<>())
 		.def("frame", [](osgViewer::ViewerBase& self) {
 			py::gil_scoped_release release;
 

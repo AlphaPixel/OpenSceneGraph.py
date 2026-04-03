@@ -11,7 +11,6 @@ namespace pyosg {
 void bind_View(py::module_& m) {
 	py::class_<osg::View, osg::Object, osg::ref_ptr<osg::View>>(m, "View")
 		.def(py::init<>())
-
 		.def_property(
 			"camera",
 			py::cpp_function(
@@ -22,6 +21,10 @@ void bind_View(py::module_& m) {
 				&osg::View::setCamera,
 				py::keep_alive<1, 2>()
 			)
+		)
+		.def_property_readonly("frameStamp",
+			py::overload_cast<>(&osg::View::getFrameStamp, py::const_),
+			py::return_value_policy::reference
 		)
 	;
 }

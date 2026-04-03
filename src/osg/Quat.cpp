@@ -108,61 +108,34 @@ void bind_Quat(py::module_& m) {
 
 				return py::make_tuple(angle, axis);
 			}
-
-			// osg::Vec3f axis;
-			// osg::Vec3d axis;
-
-			// self.getRotate(angle, axis);
-
-			// return py::make_tuple(angle, axis);
 		})
-	;
 
-#if 0
 		.def("__eq__", [](const osg::Quat& a, const osg::Quat& b) { return a == b; })
 
-		.def("__len__", [](const osg::Quat&){ return N; })
+		.def("__len__", [](const osg::Quat&){ return 4; })
 
 		.def("__iter__", [](const osg::Quat& v){
-			py::tuple t(N);
+			py::tuple t(4);
 
 			PYOSG_DISABLE_WARNINGS
 
-				for(size_t i = 0; i < N; i++) t[i] = v[i];
+				for(size_t i = 0; i < 4; i++) t[i] = v[i];
 
 			PYOSG_ENABLE_WARNINGS
 
 			return py::iter(t);
 		})
 
-		.def("__repr__", [name](const osg::Quat& v) {
-			return seq_repr<N>(name, [&](size_t i) {
+		.def("__repr__", [](const osg::Quat& v) {
+			return detail::seq_repr<4>("Quat", [&](size_t i) {
 				PYOSG_DISABLE_WARNINGS
 
 					return v[i];
 
 				PYOSG_ENABLE_WARNINGS
 			});
-
-			/* py::list items;
-
-			for(size_t i = 0; i < N; i++) {
-				PYOSG_DISABLE_WARNINGS
-
-					// No matter WHAosg::Quat the value_type is, lets give Python a double... a nice
-					// side-effect of how Python handles float-point numbers is that the
-					// `repr()` value of any true float-based type will CLEARLY indicate how a
-					// true 32bit float will look to the GPU!
-					auto val = py::float_(static_cast<double>(v[i]));
-
-				PYOSG_ENABLE_WARNINGS
-
-				items.append(py::repr(val));
-			}
-
-			return py::str("{}({})").format(name, py::str(", ").attr("join")(items)); */
 		})
-#endif
+	;
 
 	PYOSG_DISABLE_WARNINGS
 

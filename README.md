@@ -124,6 +124,7 @@ documents ownership transfer.
 
 # TODO (General)
 
+- [ ] Solidify make_list/make_tuple vs py::make_tuple
 - [ ] Add "buffer protocol" support for Vec/Matrix objects
 - [ ] Replace every instance of `std::runtime_error` with something... better
 - [ ] Settle on a single `py::obect` vs `const py::args&` function argument style
