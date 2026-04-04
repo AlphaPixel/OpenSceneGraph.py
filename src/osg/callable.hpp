@@ -2,7 +2,7 @@
 
 #include "../pyosg.hpp"
 
-// OSG’s callback system mixes:
+// OSG's callback system mixes:
 //
 //   - virtual inheritance (Callback)
 //   - derived callback types (NodeCallback, DrawCallback, etc.)
@@ -19,7 +19,7 @@
 //   3. Stored pointers are *canonicalized via the getter* (e.g. getUpdateCallback()) before being
 //      cached, ensuring stable comparisons.
 //
-// This is not a workaround for a bug, but an adaptation to OSG’s design.
+// This is not a workaround for a bug, but an adaptation to OSG's design.
 // Do not "simplify" this without understanding pointer adjustment semantics.
 
 namespace pyosg {

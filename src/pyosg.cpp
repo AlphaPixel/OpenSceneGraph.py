@@ -1,4 +1,5 @@
 #include "pyosg.hpp"
+#include "osg/Uniform.hpp"
 
 namespace pyosg {
 

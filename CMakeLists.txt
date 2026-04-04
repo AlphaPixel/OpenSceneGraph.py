@@ -6,7 +6,7 @@ find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 # find_package(pybind11 REQUIRED)
 add_subdirectory("etc/pybind11")
 
-# # Step A — generate C++ from Cython
+# # Step A -> generate C++ from Cython
 # set(CYTHON_SRC ${CMAKE_CURRENT_SOURCE_DIR}/cython_part.pyx)
 # set(CYTHON_CPP ${CMAKE_CURRENT_BINARY_DIR}/cython_part.cpp)
 #
@@ -18,7 +18,7 @@ add_subdirectory("etc/pybind11")
 # 	VERBATIM
 # )
 #
-# # Step B — build Cython-generated module
+# # Step B -> build Cython-generated module
 # add_library(cython_part MODULE ${CYTHON_CPP})
 # target_include_directories(cython_part PRIVATE ${Python3_INCLUDE_DIRS})
 # set_target_properties(cython_part PROPERTIES
@@ -27,7 +27,7 @@ add_subdirectory("etc/pybind11")
 # 	VISIBILITY_INLINES_HIDDEN OFF
 # )
 
-# Step C — build pybind11 module
+# Step C -> build pybind11 module
 # pybind11_add_module(pybind_part pybind_part.cpp)
 # target_link_libraries(pybind_part PRIVATE Python3::Python)
 # target_compile_features(pybind_part PUBLIC cxx_std_20)

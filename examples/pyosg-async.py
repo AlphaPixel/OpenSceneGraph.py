@@ -176,6 +176,26 @@ def run(viewer):
 		print("loop closed")
 
 if __name__ == "__main__":
+	SEVERITY_MAP = {
+		osg.NotifySeverity.FATAL: "\033[31m",
+		osg.NotifySeverity.WARN: "\033[33m",
+		osg.NotifySeverity.NOTICE: "\033[32m",
+		osg.NotifySeverity.INFO: "\033[0m",
+		osg.NotifySeverity.DEBUG_INFO: "\033[36m",
+		osg.NotifySeverity.DEBUG_FP: "\033[36m"
+	}
+
+	def notify(sev, msg):
+		msg = msg.strip()
+
+		if not msg:
+			return
+
+		print(f"{SEVERITY_MAP[sev]}{sev}: {msg}\033[0m")
+
+	osg.setNotifyLevel(osg.NotifySeverity.INFO)
+	osg.setNotifyHandler(notify)
+
 	viewer = osgViewer.Viewer()
 
 	viewer.cameraManipulator = osgGA.TrackballManipulator()

@@ -6,6 +6,38 @@ PYOSG_DISABLE_WARNINGS
 
 PYOSG_ENABLE_WARNINGS
 
+#include "pybind11x.hpp"
+
+namespace pyx = pybind11x;
+
+template<>
+struct pyx::SequenceTraits<osg::Program> {
+	using element_type = osg::Shader;
+	using value_type = element_type*;
+
+	static value_type from_python(py::handle h) {
+		return h.cast<value_type>();
+	}
+
+	static size_t size(const osg::Program* p) {
+		return p->getNumShaders();
+	}
+
+	static element_type* get(osg::Program* p, size_t i) {
+		return p->getShader(static_cast<unsigned int>(i));
+	}
+
+	// static void set(osg::Program* p, size_t i, element_type* d) {}
+
+	static void del(osg::Program* p, size_t i) {
+		p->removeShader(p->getShader(static_cast<unsigned int>(i)));
+	}
+
+	static void append(osg::Program* p, element_type* s) {
+		p->addShader(s);
+	}
+};
+
 namespace pyosg {
 
 namespace detail {
@@ -20,36 +52,8 @@ namespace detail {
 		}
 	}
 
-	template<>
-	struct SequenceTraits<osg::Program> {
-		using element_type = osg::Shader;
-
-		static size_t size(const osg::Program* p) {
-			return p->getNumShaders();
-		}
-
-		static element_type* get(osg::Program* p, size_t i) {
-			return p->getShader(static_cast<unsigned int>(i));
-		}
-
-		static void set(osg::Program* p, size_t i, element_type* n) {
-			// g->replaceShader(g->getShader(static_cast<unsigned int>(i)), n);
-
-			throw std::runtime_error("Index-based replacement of Shaders not supported");
-		}
-
-		static void remove(osg::Program* p, size_t i) {
-			p->removeShader(p->getShader(static_cast<unsigned int>(i)));
-		}
-
-		static void append(osg::Program* p, element_type* s) {
-			p->addShader(s);
-		}
-
-		static constexpr const char* add_method = "addShader";
-	};
-
-	using ShadersProxy = SequenceProxy<osg::Program>;
+	using ShadersProxy = pyx::SequenceProxy<osg::Program>;
+	using ProgramStorage = pyx::ProxyStorageOSG<osg::Program, ShadersProxy>;
 }
 
 void bind_Program(py::module_& m) {
@@ -72,12 +76,16 @@ void bind_Program(py::module_& m) {
 	detail::ShadersProxy::bind(program, "_Shaders");
 
 	program
-		.def("addShader", [](osg::Program& self, osg::Shader* shader) {
+		/* .def("addShader", [](osg::Program& self, osg::Shader* shader) {
 			return self.addShader(shader);
 		}, "shader"_a, py::keep_alive<1, 2>())
 		.def_property_readonly("shaders", [](osg::Program& self) {
 			return detail::ShadersProxy(&self);
-		})
+		}) */
+
+		.def_property_readonly("shaders", [](osg::Program& self) -> detail::ShadersProxy& {
+			return detail::ProgramStorage::get(self)->template proxy<detail::ShadersProxy>();
+		}, py::return_value_policy::reference_internal)
 	;
 }
 

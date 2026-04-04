@@ -183,7 +183,7 @@ void main_depth() {
 }
 
 void main() {
-	// main_depth(); return;
+	main_depth(); return;
 
 	float d = texture(depthTex, uv).r;
 	vec4 c = texture(colorTex, uv);
@@ -293,8 +293,16 @@ def create_hud_camera(cb, db):
 
 	cam.stateSet.setTextureAttributeAndModes(0, cb)
 	cam.stateSet.setTextureAttributeAndModes(1, db)
-	cam.stateSet.addUniform(osg.Uniform("colorTex", 0));
-	cam.stateSet.addUniform(osg.Uniform("depthTex", 1));
+
+	cam.stateSet.uniforms["colorTex"] = 0
+	cam.stateSet.uniforms["depthTex"] = 1
+
+	# cam.stateSet.addUniform(osg.Uniform("colorTex", 0))
+	# cam.stateSet.addUniform(osg.Uniform("depthTex", 1))
+	# cam.stateSet.uniforms.extend((
+	# 	osg.Uniform("colorTex", 0),
+	# 	osg.Uniform("depthTex", 1)
+	# ))
 
 	# Most properties on OSG.py objects can OPTIONALLY be set during creation using
 	# keyword arguments; key/value pairs are passed down the entire inheritance chain,
@@ -330,6 +338,7 @@ if __name__ == "__main__":
 	hudCam.stateSet.addUniform(znear)
 	hudCam.stateSet.addUniform(zfar)
 	hudCam.stateSet.addUniform(proj)
+	# hudCam.stateSet.uniforms.extend((znear, zfar, proj))
 
 	# This function is used as the `Camera.DrawCallback` for the default `osgViewer.Viewer`
 	# camera, and injects the proper near/far Z values into our `Program` state every frame.

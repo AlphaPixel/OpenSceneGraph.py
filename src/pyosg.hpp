@@ -268,7 +268,7 @@ namespace detail {
 	//   if(auto r = call_override<bool>(...)) { ... }
 	//   bool was_called = call_override<void>(...)
 	//
-	// Python returning None is treated as “no opinion/use default behavior”. This (mostly) matches
+	// Python returning None is treated as "no opinion/use default behavior". This (mostly) matches
 	// OSG semantics in NodeVisitor, NodeCallback, GUIEventHandler, and all other OSG virtual-call
 	// conventions where visitation/continuation can potentially be short-circuited.
 	template<typename Ret, typename Self, typename... Args>
@@ -300,62 +300,13 @@ namespace detail {
 
 		// Ret != void, so...
 		else {
-			// Python returned None: treat as “no value” (default C++ behavior).
+			// Python returned None: treat as "no value" (default C++ behavior).
 			if(result.is_none()) return std::optional<Ret>{};
 
 			// Concrete return: send it back to caller.
 			return std::optional<Ret>(result.template cast<Ret>());
 		}
 	}
-
-	// This is used to unify sequence-like access to `Group.children`, `Geode.drawable`, etc.
-	template<typename T>
-	struct SequenceTraits;
-
-	// This might look intimdating at first, BUT FEAR NOT! It is used in conjuction with the above
-	// in order to simplify/unify Pythonic access to sequences of objects. To see an example of it
-	// "in action", have a look at the source for Group or Geode.
-	template<typename T>
-	struct SequenceProxy {
-		using traits = SequenceTraits<T>;
-		using element_type = typename traits::element_type;
-
-		T* obj = nullptr;
-
-		explicit SequenceProxy(T* o): obj(o) {}
-
-		size_t size() const { return traits::size(obj); }
-
-		size_t _index(int index) const { return n_index(size(), index); }
-
-		element_type* get(int index) const { return traits::get(obj, _index(index)); }
-
-		void set(int index, element_type* elem) { traits::set(obj, _index(index), elem); }
-
-		void del(int index) { traits::remove(obj, _index(index)); }
-
-		void append(element_type* elem) {
-			// Call Python-level `add*` for `keep_alive<>` behavior.
-			py::cast(obj).attr(traits::add_method)(elem);
-		}
-
-		void extend(py::object iterable) {
-			for(py::handle item : iterable) {
-				append(item.cast<element_type*>());
-			}
-		}
-
-		static void bind(py::handle parent, const char* name) {
-			py::class_<SequenceProxy<T>>(parent, name, py::module_local())
-				.def("__len__", &SequenceProxy<T>::size)
-				.def("__getitem__", &SequenceProxy<T>::get)
-				.def("__setitem__", &SequenceProxy<T>::set)
-				.def("__delitem__", &SequenceProxy<T>::del)
-				.def("append", &SequenceProxy<T>::append)
-				.def("extend", &SequenceProxy<T>::extend)
-			;
-		}
-	};
 }
 
 class PYOSG_INTERNAL Interpreter {
@@ -440,7 +391,6 @@ void bind_View(py::module_& m);
 void bind_Camera(py::module_& m);
 void bind_State(py::module_& m);
 void bind_StateAttributes(py::module_& m);
-void bind_Uniform(py::module_& m);
 void bind_Shader(py::module_& m);
 void bind_Program(py::module_& m);
 void bind_Texture(py::module_& m);

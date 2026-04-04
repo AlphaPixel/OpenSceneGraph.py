@@ -4,6 +4,7 @@ import sys
 
 from PySide6.QtWidgets import QApplication, QMainWindow
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
+from PySide6.QtGui import QOpenGLContext
 from PySide6.QtCore import Qt, QTimer
 # from PySide6.QtGui import QSurfaceFormat
 
@@ -33,7 +34,7 @@ class GLWidget(QOpenGLWidget):
 
 		self._viewer.threadingModel = osgViewer.Viewer.ThreadingModel.SingleThreaded
 		self._viewer.cameraManipulator = osgGA.TrackballManipulator()
-		self._viewer.sceneData = osgDB.readNodeFile("cow.osgt")
+		self._viewer.sceneData = osgDB.readNodeFile("glsl_simple.osgt")
 
 		self._gw = self._viewer.setUpViewerAsEmbeddedInWindow(0, 0, self.width(), self.height())
 
@@ -119,6 +120,18 @@ def main():
 	win.setCentralWidget(GLWidget())
 	win.resize(800, 600)
 	win.show()
+
+	ctx = QOpenGLContext.currentContext()
+	fmt = ctx.format()
+
+	print("Qt Format:")
+	print("  Version:", fmt.majorVersion(), ".", fmt.minorVersion())
+	print("  Profile:", fmt.profile())  # CoreProfile, CompatibilityProfile
+	print("  Depth:", fmt.depthBufferSize())
+	print("  Stencil:", fmt.stencilBufferSize())
+	print("  Samples:", fmt.samples())
+	print("  Swap behavior:", fmt.swapBehavior())
+	print("  Options:", fmt.options())
 
 	sys.exit(app.exec())
 

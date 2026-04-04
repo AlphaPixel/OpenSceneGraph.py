@@ -105,7 +105,7 @@ Use `reference_internal` when:
 - returning parents / children
 - returning anything owned by self
 
-Essentially, the returned object’s lifetime is tied to the parent (self) through
+Essentially, the returned object's lifetime is tied to the parent (self) through
 `keep_alive<0, 1>()`.
 
 Use `reference` when:
