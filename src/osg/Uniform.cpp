@@ -1,135 +1,6 @@
-#include "../pyosg.hpp"
-
-PYOSG_DISABLE_WARNINGS
-
-#include <osg/Uniform>
-
-PYOSG_ENABLE_WARNINGS
-
-#include <utility>
+#include "Uniform.hpp"
 
 namespace pyosg {
-
-namespace detail {
-	using UniformVariant = std::variant<
-		/* float,
-		double,
-		int,
-		unsigned int,
-		bool,
-		osg::Vec2,
-		osg::Vec3,
-		osg::Vec4,
-		osg::Vec2d,
-		osg::Vec3d,
-		osg::Vec4d,
-		osg::Matrixd */
-		float,
-		double,
-		osg::Vec3,
-		osg::Matrixf
-	>;
-
-	py::object uniform_get(osg::Uniform& self, py::ssize_t index) {
-		UniformVariant value{};
-
-		auto i = n_index<unsigned int>(self.getNumElements(), index);
-
-		switch(self.getType()) {
-			case osg::Uniform::FLOAT: {
-				value.emplace<float>();
-
-				self.getElement(i, std::get<float>(value));
-
-				break;
-			}
-
-			case osg::Uniform::DOUBLE: {
-				value.emplace<double>();
-
-				self.getElement(i, std::get<double>(value));
-
-				break;
-			}
-
-			case osg::Uniform::FLOAT_VEC3: {
-				value.emplace<osg::Vec3>();
-
-				self.getElement(i, std::get<osg::Vec3>(value));
-
-				break;
-			}
-
-			case osg::Uniform::FLOAT_MAT4: {
-				value.emplace<osg::Matrixf>();
-
-				self.getElement(i, std::get<osg::Matrixf>(value));
-
-				break;
-			}
-
-			default: throw py::type_error("TODO: Unsupported underlying 'type'");
-		}
-
-		return std::visit([](auto& v) { return py::cast(v); }, value);
-	}
-
-	void uniform_set(osg::Uniform& self, py::ssize_t index, py::object obj) {
-		// UniformVariant value = obj.cast<UniformVariant>();
-
-		UniformVariant value;
-
-		try {
-			value = obj.cast<UniformVariant>();
-		}
-
-		catch(const py::cast_error&) {
-			throw py::type_error("Invalid type for Uniform assignment");
-		}
-
-		auto i = n_index<unsigned int>(self.getNumElements(), index);
-
-		std::visit([&](auto& v) {
-			if(!self.setElement(i, v)) throw py::type_error("Uniform assignment failed");
-		}, value);
-	}
-
-	py::object uniform_get_array(osg::Uniform& self) {
-		if(auto* a = self.getFloatArray()) return py::cast(a);
-		if(auto* a = self.getDoubleArray()) return py::cast(a);
-		if(auto* a = self.getIntArray()) return py::cast(a);
-		if(auto* a = self.getUIntArray()) return py::cast(a);
-		if(auto* a = self.getInt64Array()) return py::cast(a);
-		if(auto* a = self.getUInt64Array()) return py::cast(a);
-
-		return py::none();
-	}
-
-	// TODO: The calls to `self.setArray` return a boolean indicating whether it worked!
-	void uniform_set_array(osg::Uniform& self, py::object obj) {
-		if(auto* a = obj.cast<osg::FloatArray*>()) { self.setArray(a); return; }
-		if(auto* a = obj.cast<osg::DoubleArray*>()) { self.setArray(a); return; }
-		if(auto* a = obj.cast<osg::IntArray*>()) { self.setArray(a); return; }
-		if(auto* a = obj.cast<osg::UIntArray*>()) { self.setArray(a); return; }
-		if(auto* a = obj.cast<osg::Int64Array*>()) { self.setArray(a); return; }
-		if(auto* a = obj.cast<osg::UInt64Array*>()) { self.setArray(a); return; }
-
-		throw py::type_error("Unsupported array type for Uniform.array");
-	}
-
-	// TODO: Convert this to something more ... generic.
-	struct UniformIterator {
-		osg::Uniform* u = nullptr;
-
-		std::size_t index = 0;
-
-		py::object next() {
-			if(!u || index >= u->getNumElements()) throw py::stop_iteration();
-
-			return detail::uniform_get(*u, static_cast<py::ssize_t>(index++));
-		}
-	};
-}
 
 void bind_Uniform(py::module_& m) {
 	auto uniform = py::class_<osg::Uniform, osg::Object, osg::ref_ptr<osg::Uniform>>(m, "Uniform");
@@ -294,19 +165,15 @@ void bind_Uniform(py::module_& m) {
 			"numElements"_a=1
 		)
 
-		.def(py::init<const char*, float>())
-		.def(py::init<const char*, double>())
-		.def(py::init<const char*, int>())
-		.def(py::init<const char*, unsigned int>())
-		.def(py::init<const char*, bool>())
+		/* .def(py::init<const char*, double>())
 		.def(py::init<const char*, unsigned long long>())
-		.def(py::init<const char*, long long>())
+		.def(py::init<const char*, long long>()) */
 
 		.def(py::init<const char*, const osg::Vec2&>())
 		.def(py::init<const char*, const osg::Vec3&>())
 		.def(py::init<const char*, const osg::Vec4&>())
 
-		.def(py::init<const char*, const osg::Vec2d&>())
+		/* .def(py::init<const char*, const osg::Vec2d&>())
 		.def(py::init<const char*, const osg::Vec3d&>())
 		.def(py::init<const char*, const osg::Vec4d&>())
 
@@ -330,7 +197,10 @@ void bind_Uniform(py::module_& m) {
 		.def(py::init<const char*, const osg::Matrix3x2d&>())
 		.def(py::init<const char*, const osg::Matrix3x4d&>())
 		.def(py::init<const char*, const osg::Matrix4x2d&>())
-		.def(py::init<const char*, const osg::Matrix4x3d&>())
+		.def(py::init<const char*, const osg::Matrix4x3d&>()) */
+
+		.def(py::init<const char*, const osg::Matrixf&>())
+		.def(py::init<const char*, const osg::Matrixd&>())
 
 		.def(py::init<const char*, int, int>())
 		.def(py::init<const char*, int, int, int>())
@@ -344,16 +214,48 @@ void bind_Uniform(py::module_& m) {
 		.def(py::init<const char*, bool, bool, bool>())
 		.def(py::init<const char*, bool, bool, bool, bool>())
 
+		.def(py::init([](const char* name, py::object obj) {
+			if(py::isinstance<py::bool_>(obj)) return new osg::Uniform(name, obj.cast<bool>());
+
+			if(py::isinstance<py::int_>(obj)) return new osg::Uniform(name, obj.cast<int>());
+
+			if(py::isinstance<py::float_>(obj)) return new osg::Uniform(name, obj.cast<float>());
+
+			throw py::type_error("Unsupported type for Uniform(name, value)");
+		}))
+
 		.def_property("type", &osg::Uniform::getType, &osg::Uniform::setType)
 		.def_property("numElements", &osg::Uniform::getNumElements, &osg::Uniform::setNumElements)
 		.def_property_readonly("nameID", py::overload_cast<>(&osg::Uniform::getNameID, py::const_))
 
 		.def_property(
 			"value",
-			[](osg::Uniform& self) { return detail::uniform_get(self, 0); },
+			[](osg::Uniform& self) {
+				if(self.getNumElements() != 1) throw py::value_error(
+					"value property only valid for single-element Uniforms"
+				);
+
+				return detail::uniform_get(self, 0);
+			},
 			[](osg::Uniform& self, py::object obj) {
-				if(self.getNumElements() != 1)
-					throw py::value_error("value property only valid for single-element Uniforms");
+				if(self.getNumElements() != 1) throw py::value_error(
+					"value property only valid for single-element Uniforms"
+				);
+
+				/* // --- tuple override ---
+				if (py::isinstance<py::tuple>(obj)) {
+					auto t = py::cast<py::tuple>(obj);
+
+					if (t.size() < 2 || t.size() > 3)
+						throw py::type_error("Uniform tuple must be (type, value[, mode])");
+
+					auto type  = t[0].cast<osg::Uniform::Type>();
+					auto value = t[1];
+
+					self.setType(type);
+					detail::uniform_set(self, 0, value);
+					return;
+				} */
 
 				detail::uniform_set(self, 0, obj);
 			}

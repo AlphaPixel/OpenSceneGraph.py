@@ -77,6 +77,18 @@ def vec3a():
 	return osg.Vec3Array([osg.Vec3(i, i, i) for i in range(8)])
 
 @pytest.fixture
+def uniform_init():
+	return (
+		(osg.Uniform.BOOL, True),
+		(osg.Uniform.INT, 1),
+		(osg.Uniform.UNSIGNED_INT, 2),
+		(osg.Uniform.FLOAT, f32(3.3)),
+		(osg.Uniform.DOUBLE, 44.4444),
+		(osg.Uniform.FLOAT_VEC3, osg.Vec3f()),
+		(osg.Uniform.FLOAT_MAT4, osg.Matrixf())
+	)
+
+@pytest.fixture
 def scene(Node, Group):
 	root = Group()
 
