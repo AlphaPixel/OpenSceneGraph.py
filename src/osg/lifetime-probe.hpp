@@ -2,6 +2,7 @@
 
 PYOSG_DISABLE_WARNINGS
 
+#include <osg/observer_ptr>
 #include <osg/Object>
 #include <osg/UserDataContainer>
 
@@ -22,20 +23,20 @@ namespace detail {
 
 		LifetimeProbe() = default;
 
-		explicit LifetimeProbe(osg::Object* o, py::object cb=py::none()):
-		addr(reinterpret_cast<uintptr_t>(o)),
-		name(o ? o->getName() : ""),
-		type(o ? o->className() : ""),
-		pyo(std::move(cb)) {
-			// std::cout << "py::bool_(pyo) = " << py::bool_(pyo) << std::endl;
-			// std::cout << "PyCallable_Check(pyo.ptr()) = " << PyCallable_Check(pyo.ptr()) << std::endl;
+		explicit LifetimeProbe(osg::Object* o, py::object pyo=py::none()):
+		_addr(reinterpret_cast<uintptr_t>(o)),
+		_name(o ? o->getName() : ""),
+		_type(o ? o->className() : ""),
+		_pyo(std::move(pyo)),
+		_obj(o) {
+			setName("pyosg.LifetimeProbe");
 
-			if(py::bool_(pyo) && !PyCallable_Check(pyo.ptr())) _notify("Observing");
+			if(py::bool_(_pyo) && !PyCallable_Check(_pyo.ptr())) _notify("Observing", false);
 		}
 
 		~LifetimeProbe() {
-			if(py::bool_(pyo)) {
-				if(!PyCallable_Check(pyo.ptr())) _notify("Destroying");
+			if(py::bool_(_pyo)) {
+				if(!PyCallable_Check(_pyo.ptr())) _notify("Destroying");
 
 				else {
 					try {
@@ -45,7 +46,7 @@ namespace detail {
 
 							py::gil_scoped_acquire gil;
 
-							pyo(addr, type, name);
+							_pyo(_addr, _type, _name);
 						}
 
 						// TODO: Remove me!
@@ -73,27 +74,34 @@ namespace detail {
 		):
 		osg::Object() {}
 
-		static void attachTo(osg::Object* o) {
+		static void attachTo(osg::Object* o, py::object pyo=py::bool_(true)) {
 			o->getOrCreateUserDataContainer()->addUserObject(
-				new LifetimeProbe(o, py::bool_(true))
+				// new LifetimeProbe(o, py::bool_(true))
+				new LifetimeProbe(o, pyo)
 			);
 		}
 
 	protected:
-		void _notify(const std::string& action) {
+		void _notify(const std::string& action, bool checkValid=true) {
 			std::cerr
-				<< action << " " << std::hex << addr << std::dec
-				<< " [" << type << "]"
-				<< " (" << name << ")" << std::endl
+				<< action << " " << std::hex << _addr << std::dec
+				<< " [" << _type << "]"
+				<< " (" << _name << ")"
 			;
+
+			if(_obj.valid() && checkValid) std::cerr << " WARNING: Object still valid!";
+
+			std::cerr << std::endl;
 		}
 
-		uintptr_t addr = 0;
+		uintptr_t _addr = 0;
 
-		std::string name;
-		std::string type;
+		std::string _name;
+		std::string _type;
 
-		py::object pyo;
+		py::object _pyo;
+
+		osg::observer_ptr<osg::Object> _obj;
 	};
 }
 

@@ -13,84 +13,6 @@ PYOSG_ENABLE_WARNINGS
 namespace pyosg {
 
 namespace detail {
-	/* class PYOSG_INTERNAL LifetimeProbe: public osg::Object {
-	public:
-		PYOSG_DISABLE_WARNINGS
-
-		META_Object(pyosg, LifetimeProbe)
-
-		PYOSG_ENABLE_WARNINGS
-
-		LifetimeProbe() = default;
-
-		explicit LifetimeProbe(osg::Object* o, py::object cb=py::none()):
-		addr(reinterpret_cast<uintptr_t>(o)),
-		name(o ? o->getName() : ""),
-		type(o ? o->className() : ""),
-		pyo(std::move(cb)) {
-			// std::cout << "py::bool_(pyo) = " << py::bool_(pyo) << std::endl;
-			// std::cout << "PyCallable_Check(pyo.ptr()) = " << PyCallable_Check(pyo.ptr()) << std::endl;
-
-			if(py::bool_(pyo) && !PyCallable_Check(pyo.ptr())) _notify("Observing");
-		}
-
-		~LifetimeProbe() {
-			if(py::bool_(pyo)) {
-				if(!PyCallable_Check(pyo.ptr())) _notify("Destroying");
-
-				else {
-					try {
-						if(Py_IsInitialized()) {
-							// TODO: Remove me!
-							_notify("Destroying (Py_IsInitialized())");
-
-							py::gil_scoped_acquire gil;
-
-							pyo(addr, type, name);
-						}
-
-						// TODO: Remove me!
-						else _notify("Destroying (!Py_IsInitialized())");
-					}
-
-					catch(const py::error_already_set& e) {
-						std::cerr
-							<< "Python exception in destructor callback:"
-							<< e.what() << std::endl
-						;
-					}
-
-					catch(...) {
-						// TODO: Remove me!
-						_notify("Destroying (EXCEPTION)");
-					}
-				}
-			}
-		}
-
-		LifetimeProbe(
-			const LifetimeProbe& rhs,
-			const osg::CopyOp& copyop=osg::CopyOp::SHALLOW_COPY
-		):
-		osg::Object() {}
-
-	protected:
-		void _notify(const std::string& action) {
-			std::cerr
-				<< action << " " << std::hex << addr << std::dec
-				<< " [" << type << "]"
-				<< " (" << name << ")" << std::endl
-			;
-		}
-
-		uintptr_t addr = 0;
-
-		std::string name;
-		std::string type;
-
-		py::object pyo;
-	}; */
-
 	template<>
 	void kwargs_init(osg::Object& self, const py::kwargs& kwargs) {
 		if(kwargs.contains("name")) self.setName(kwargs["name"].cast<std::string>());
@@ -99,13 +21,7 @@ namespace detail {
 			kwargs["dataVariance"].cast<osg::Object::DataVariance>()
 		);
 
-		if(kwargs.contains("debug")) {
-			auto dbg = kwargs["debug"];
-
-			if(py::bool_(dbg)) self.getOrCreateUserDataContainer()->addUserObject(
-				new LifetimeProbe(&self, dbg)
-			);
-		}
+		if(kwargs.contains("debug")) LifetimeProbe::attachTo(&self, kwargs["debug"]);
 	}
 
 	// This class exists to permit Python code like: `o = osg.Object`.
@@ -126,6 +42,43 @@ namespace detail {
 		// TODO: These are used often, and Python subclasses MIGHT need to override them!
 		// void resizeGLObjectBuffers(unsigned int) override
 		// void releaseGLObjects(osg::State* = 0) const override
+	};
+
+	class UserDataContainer: public osg::UserDataContainer {
+	public:
+		using osg::UserDataContainer::UserDataContainer;
+
+		// void setUserData(Referenced* obj) = 0;
+		// Referenced* getUserData() = 0;
+		// const Referenced* getUserData() const  = 0;
+		// unsigned int addUserObject(Object* obj)  = 0;
+		// void setUserObject(unsigned int i, Object* obj)  = 0;
+		// void removeUserObject(unsigned int i)  = 0;
+		// unsigned int getUserObjectIndex(const osg::Object* obj, unsigned int startPos=0) const = 0;
+		// unsigned int getUserObjectIndex(const std::string& name, unsigned int startPos=0) const = 0;
+		// void setDescriptions(const DescriptionList& descriptions) = 0;
+		// DescriptionList& getDescriptions() = 0;
+		// const DescriptionList& getDescriptions() const = 0;
+		// unsigned int getNumDescriptions() const = 0;
+		// void addDescription(const std::string& desc) = 0;
+
+		unsigned int getNumUserObjects() const override {
+			PYBIND11_OVERRIDE_PURE(
+				unsigned int,
+				osg::UserDataContainer,
+				getNumUserObjects
+			);
+		}
+
+		// const Object* getUserObject(unsigned int i) const  = 0;
+		osg::Object* getUserObject(unsigned int i) override {
+			PYBIND11_OVERRIDE_PURE(
+				osg::Object*,
+				osg::UserDataContainer,
+				getUserObject
+				i
+			);
+		}
 	};
 }
 
@@ -201,6 +154,13 @@ void bind_Object(py::module_& m) {
 				// , py::keep_alive<1, 2>()
 			)
 		)
+		.def_property_readonly(
+			"userDataContainer",
+			&osg::Object::getOrCreateUserDataContainer,
+			py::return_value_policy::reference_internal
+		)
+		// TODO: Some way to do this..
+		// .def_property("debug", ...)
 		// TODO: This will be difficult to handle properly, and will likely end up using
 		// `py::capsule`. However, it's only really useful for C++ interop, as Python itself already
 		// HAS better mechanisms for this!
@@ -213,6 +173,24 @@ void bind_Object(py::module_& m) {
 		//
 		// userValue
 	;
+
+	py::class_<
+		osg::UserDataContainer,
+		detail::UserDataContainer,
+		osg::Object,
+		osg::ref_ptr<osg::UserDataContainer>
+	>(m, "UserDataContainer")
+		.def_property_readonly("numUserObjects", &osg::UserDataContainer::getNumUserObjects)
+		.def("getUserObject", py::overload_cast<unsigned int>(
+			&osg::UserDataContainer::getUserObject
+		))
+	;
+
+	py::class_<
+		osg::DefaultUserDataContainer,
+		osg::UserDataContainer,
+		osg::ref_ptr<osg::DefaultUserDataContainer>
+	>(m, "DefaultUserDataContainer");
 
 	// TODO: This is a temporary debugging method; REMOVE IT (eventually).
 	obj.def("dumps", [](osg::Object& self, const std::string& ext) {
@@ -228,6 +206,17 @@ void bind_Object(py::module_& m) {
 
 		return py::bytes(oss.str());
 	}, "ext"_a="osg");
+
+	obj.def("udcDebug", [](osg::Object& self) {
+		auto* udc = self.getOrCreateUserDataContainer();
+
+		for(unsigned int i = 0; i < udc->getNumUserObjects(); i++) {
+			// if(auto* s = dynamic_cast<ProxyStorageOSG*>(udc->getUserObject(i))) return s;
+			auto* o = udc->getUserObject(i);
+
+			std::cerr << i << ": " << o->getName() << " " << o->referenceCount() << std::endl;
+		}
+	});
 }
 
 }

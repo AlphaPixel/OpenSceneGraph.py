@@ -124,21 +124,22 @@ documents ownership transfer.
 
 # TODO (General)
 
+- [ ] Break up most of `detail::` into headers
+- [ ] Add `ProxyStorageNull`
 - [ ] Solidify make_list/make_tuple vs py::make_tuple
 - [ ] Add "buffer protocol" support for Vec/Matrix objects
 - [ ] Replace every instance of `std::runtime_error` with something... better
-- [ ] Settle on a single `py::obect` vs `const py::args&` function argument style
 - [ ] Threading support (see below)
 - [ ] Math
   - [x] Vec
-  - [ ] Quat
+  - [x] Quat
   - [x] Matrix
 - [ ] Array interfaces
-- [ ] Geometry
+- [x] Geometry
 - [x] GUIEventHandler
 - [x] NodeCallback
-- [ ] Drawable/DrawCallback (tricky due to rendering pipeline and non-copyable args)
-- [ ] CameraManipulator (multimethod override, multiple overloads, non-copyable args)
+- [x] Drawable/DrawCallback (tricky due to rendering pipeline and non-copyable args)
+- [x] CameraManipulator (multimethod override, multiple overloads, non-copyable args)
 - [ ] Operation
 - [x] Basic osgViewer::Viewer demo
 - [ ] Demo secondary bindings **BASED ON** these

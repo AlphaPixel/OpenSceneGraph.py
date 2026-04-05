@@ -80,7 +80,10 @@ void bind_Group(py::module_& m) {
 		.def_static("test_cpp", []() {
 			auto* g = new osg::Group();
 
+			g->setName("g");
+
 			// n->setUpdateCallback(new detail::TestCallback());
+			detail::LifetimeProbe::attachTo(g);
 
 			auto addNode = [&g](const std::string& name) {
 				auto* n = new osg::Node();

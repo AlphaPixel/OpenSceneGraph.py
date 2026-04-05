@@ -15,7 +15,9 @@ class DebugHandler(osgGA.GUIEventHandler):
 	debug = False
 
 	def handle(self, ea, aa):
-		if self.debug:
+		if not ea.type == osgGA.GUIEventAdapter.FRAME:
+		# if self.debug:
+			# print(f"DebugHandler.handle(self={self}, ea={ea}, aa={aa}) type={ea.type}")
 			print(f"DebugHandler.handle(self={self}, ea={ea}, aa={aa}) type={ea.type}")
 
 # ------------------------------------------------------------------------------
