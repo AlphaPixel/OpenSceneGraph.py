@@ -1,4 +1,5 @@
 #include "pyosgGA.hpp"
+#include "osg/callable.hpp"
 
 PYOSG_DISABLE_WARNINGS
 

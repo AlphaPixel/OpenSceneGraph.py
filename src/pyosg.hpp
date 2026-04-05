@@ -177,6 +177,7 @@ namespace detail {
 		std::is_base_of_v<osg::Object, std::remove_pointer_t<T>>
 	; */
 
+	// Builds a `py::list` from any single thing that can be iterated over.
 	template<typename T>
 	// requires OSGObject<typename T::value_type>
 	auto make_list(const T& seq) {
@@ -187,6 +188,8 @@ namespace detail {
 		return list;
 	}
 
+	// Builds a `py::tuple` from any single thing that can be iterated over; this differs from
+	// `py::make_tuple` in that is both runtime/non-constexpr and only expects a SINGLE argument.
 	template<typename T>
 	// requires OSGObject<typename T::value_type>
 	auto make_tuple(const T& seq) {
@@ -234,79 +237,6 @@ namespace detail {
 	inline py::handle builtin_int() { return builtin_type("int"); }
 	inline py::handle builtin_float() { return builtin_type("float"); }
 	inline py::handle builtin_bool() { return builtin_type("bool"); }
-
-	// Unified helper used by trampoline classes to safely invoke a Python override for a
-	// virtual C++ method; we need this because PYBIND11_OVERRIDE doesn't really jive that well
-	// with OSG code. It does exactly what PYBIND11_OVERRIDE does, while adding a few extra bits:
-	//
-	// - Acquires the GIL and calls the Python override if one exists.
-	// - Never re-enters Python from inside Python (recursion guard safe).
-	// - Correctly supports return types:
-	//   - If Ret == void, return bool (override called or not)
-	//   - If Ret != void, return std::optional<Ret>
-	// - Distinguishes between:
-	//   - The override exists
-	//   - The override exists but returns None
-	//   - override does not exist
-	// - Preserves default C++ behavior when Python returns None or does not override the method.
-	// - Ensures Python receives reference-wrapped arguments, not copies.
-	//
-	// Return-value rules are as follows:
-	//
-	//   Ret = void
-	//       returns bool
-	//           true = override exists and was called
-	//           false = no override
-	//
-	//   Ret != void
-	//       returns std::optional<Ret>
-	//           optional(value) = override returned a concrete value
-	//           empty optional = no override OR Python returned None
-	//
-	// This behavior allows trampoline code to make clear decisions:
-	//
-	//   if(auto r = call_override<bool>(...)) { ... }
-	//   bool was_called = call_override<void>(...)
-	//
-	// Python returning None is treated as "no opinion/use default behavior". This (mostly) matches
-	// OSG semantics in NodeVisitor, NodeCallback, GUIEventHandler, and all other OSG virtual-call
-	// conventions where visitation/continuation can potentially be short-circuited.
-	template<typename Ret, typename Self, typename... Args>
-	auto call_override(const char* name, const Self* self, Args&&... args) {
-		// Always acquire the GIL before touching Python.
-		py::gil_scoped_acquire gil;
-
-		// Look up the override on the Python side.
-		// py::function ovr = py::get_override(self, name);
-		auto ovr = py::get_override(self, name);
-
-		// No override: return default indicator based on Ret.
-		if(!ovr) {
-			if constexpr(std::is_void_v<Ret>) return false;
-
-			else return std::optional<Ret>{};
-		}
-
-		// Call the Python override with reference-return semantics.
-		// TODO: Is this version NOT using `py::cast` equivalent?
-		//
-		// auto result = ovr(std::forward<Args>(args)...);
-		auto result = ovr(
-			py::cast(std::forward<Args>(args), py::return_value_policy::reference)...
-		);
-
-		// Ret = void: override did run.
-		if constexpr(std::is_void_v<Ret>) return true;
-
-		// Ret != void, so...
-		else {
-			// Python returned None: treat as "no value" (default C++ behavior).
-			if(result.is_none()) return std::optional<Ret>{};
-
-			// Concrete return: send it back to caller.
-			return std::optional<Ret>(result.template cast<Ret>());
-		}
-	}
 }
 
 class PYOSG_INTERNAL Interpreter {
@@ -369,31 +299,31 @@ private:
 
 void bind(py::module_& m);
 
-void bind_ArgumentParser(py::module_& m);
-void bind_Notify(py::module_& m);
-void bind_Vec(py::module_& m);
+// void bind_ArgumentParser(py::module_& m);
+// void bind_Notify(py::module_& m);
+// void bind_Vec(py::module_& m);
 void bind_Quat(py::module_& m);
-void bind_Matrix(py::module_& m);
-void bind_Bound(py::module_& m);
-void bind_Object(py::module_& m);
-void bind_Buffer(py::module_& m);
-void bind_Array(py::module_& m);
-void bind_Node(py::module_& m);
-void bind_NodeVisitor(py::module_& m);
-void bind_NodeCallback(py::module_& m);
-void bind_Drawable(py::module_& m);
-void bind_Geometry(py::module_& m);
-void bind_Group(py::module_& m);
+// void bind_Matrix(py::module_& m);
+// void bind_Bound(py::module_& m);
+// void bind_Object(py::module_& m);
+// void bind_Buffer(py::module_& m);
+// void bind_Array(py::module_& m);
+// void bind_Node(py::module_& m);
+// void bind_NodeVisitor(py::module_& m);
+// void bind_NodeCallback(py::module_& m);
+// void bind_Drawable(py::module_& m);
+// void bind_Geometry(py::module_& m);
+// void bind_Group(py::module_& m);
 void bind_Transform(py::module_& m);
-void bind_Geode(py::module_& m);
+// void bind_Geode(py::module_& m);
 void bind_Shape(py::module_& m);
 void bind_View(py::module_& m);
-void bind_Camera(py::module_& m);
-void bind_State(py::module_& m);
+// void bind_Camera(py::module_& m);
+// void bind_State(py::module_& m);
 void bind_StateAttributes(py::module_& m);
 void bind_Shader(py::module_& m);
-void bind_Program(py::module_& m);
-void bind_Texture(py::module_& m);
+// void bind_Program(py::module_& m);
+// void bind_Texture(py::module_& m);
 void bind_GraphicsContext(py::module_& m);
 
 }

@@ -1,3 +1,5 @@
+#pragma once
+
 #include "../pyosg.hpp"
 
 PYOSG_DISABLE_WARNINGS

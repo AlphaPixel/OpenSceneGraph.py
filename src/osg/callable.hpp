@@ -148,6 +148,78 @@ namespace detail {
 			py::keep_alive<1, 2>()
 		);
 	}
+
+	// Unified helper used by trampoline classes to safely invoke a Python override for a
+	// virtual C++ method; we need this because PYBIND11_OVERRIDE doesn't really jive that well
+	// with OSG code. It does exactly what PYBIND11_OVERRIDE does, while adding a few extra bits:
+	//
+	// - Acquires the GIL and calls the Python override if one exists.
+	// - Never re-enters Python from inside Python (recursion guard safe).
+	// - Correctly supports return types:
+	//   - If Ret == void, return bool (override called or not)
+	//   - If Ret != void, return std::optional<Ret>
+	// - Distinguishes between:
+	//   - The override exists
+	//   - The override exists but returns None
+	//   - override does not exist
+	// - Preserves default C++ behavior when Python returns None or does not override the method.
+	// - Ensures Python receives reference-wrapped arguments, not copies.
+	//
+	// Return-value rules are as follows:
+	//
+	//   Ret = void
+	//       returns bool
+	//           true = override exists and was called
+	//           false = no override
+	//
+	//   Ret != void
+	//       returns std::optional<Ret>
+	//           optional(value) = override returned a concrete value
+	//           empty optional = no override OR Python returned None
+	//
+	// This behavior allows trampoline code to make clear decisions:
+	//
+	//   if(auto r = call_override<bool>(...)) { ... }
+	//   bool was_called = call_override<void>(...)
+	//
+	// Python returning None is treated as "no opinion/use default behavior". This (mostly) matches
+	// OSG semantics in NodeVisitor, NodeCallback, GUIEventHandler, and all other OSG virtual-call
+	// conventions where visitation/continuation can potentially be short-circuited.
+	template<typename Ret, typename Self, typename... Args>
+	auto call_override(const char* name, const Self* self, Args&&... args) {
+		// Always acquire the GIL before touching Python.
+		py::gil_scoped_acquire gil;
+
+		// Look up the override on the Python side.
+		auto ovr = py::get_override(self, name);
+
+		// No override: return default indicator based on Ret.
+		if(!ovr) {
+			if constexpr(std::is_void_v<Ret>) return false;
+
+			else return std::optional<Ret>{};
+		}
+
+		// Call the Python override with reference-return semantics.
+		// TODO: Is this version NOT using `py::cast` equivalent?
+		//
+		// auto result = ovr(std::forward<Args>(args)...);
+		auto result = ovr(
+			py::cast(std::forward<Args>(args), py::return_value_policy::reference)...
+		);
+
+		// Ret = void: override did run.
+		if constexpr(std::is_void_v<Ret>) return true;
+
+		// Ret != void, so...
+		else {
+			// Python returned None: treat as "no value" (default C++ behavior).
+			if(result.is_none()) return std::optional<Ret>{};
+
+			// Concrete return: send it back to caller.
+			return std::optional<Ret>(result.template cast<Ret>());
+		}
+	}
 }
 
 }
