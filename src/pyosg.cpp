@@ -15,7 +15,6 @@
 #include "osg/NodeCallback.hpp"
 #include "osg/Object.hpp"
 #include "osg/Program.hpp"
-#include "osg/pybind11x.hpp"
 #include "osg/State.hpp"
 #include "osg/Texture.hpp"
 #include "osg/Uniform.hpp"

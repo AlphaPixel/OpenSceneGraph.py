@@ -253,7 +253,7 @@ def create_rtt_camera(w=512, h=512):
 	cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
 	cam.clearMask = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT
 	cam.clearColor = osg.Vec4(0.1, 0.5, 0.2, 1.0)
-	cam.viewport = osg.Viewport(0, 0, w // 2, h // 2)
+	cam.viewport = osg.Viewport(0, 0, w, h)
 	cam.name = "RTT Camera"
 
 	cam.attach(osg.Camera.COLOR_BUFFER, cb)
@@ -322,7 +322,7 @@ if __name__ == "__main__":
 	v = osgViewer.Viewer()
 	r = osg.Group()
 
-	rttCam, cb, db = create_rtt_camera()
+	rttCam, cb, db = create_rtt_camera(800, 600)
 	hudCam = create_hud_camera(cb, db)
 
 	# This is how the RTT camera "knows" what to render...
@@ -334,11 +334,7 @@ if __name__ == "__main__":
 	zfar = osg.Uniform("zfar", 0.0)
 	proj = osg.Uniform("projMat", osg.Matrixf.identity())
 
-	# TODO: Eventually, this will become something like `stateSet.uniforms.{append,extend}`.
-	hudCam.stateSet.addUniform(znear)
-	hudCam.stateSet.addUniform(zfar)
-	hudCam.stateSet.addUniform(proj)
-	# hudCam.stateSet.uniforms.extend((znear, zfar, proj))
+	hudCam.stateSet.uniforms.extend((znear, zfar, proj))
 
 	# This function is used as the `Camera.DrawCallback` for the default `osgViewer.Viewer`
 	# camera, and injects the proper near/far Z values into our `Program` state every frame.
@@ -350,7 +346,7 @@ if __name__ == "__main__":
 	def update_uniforms(ri):
 		pm = ri.state.projectionMatrix
 
-		osg.notice(f"update_uniforms: {pm}")
+		# osg.notice(f"update_uniforms: {pm}")
 
 		fovy, aspect, near, far = pm.getPerspective()
 
@@ -364,9 +360,14 @@ if __name__ == "__main__":
 
 		# Even though this LOOKS like setting a "scalar", the `.value` property is just a wrapper
 		# around using the style above!
-		znear.value = float(near)
-		zfar.value = float(far)
-		proj.value = osg.Matrixf(pm)
+		#
+		# znear.value = float(near)
+		# zfar.value = float(far)
+		# proj.value = osg.Matrixf(pm)
+
+		hudCam.stateSet.uniforms["znear"] = float(near)
+		hudCam.stateSet.uniforms["zfar"] = float(far)
+		hudCam.stateSet.uniforms["proj"] = osg.Matrixf(pm)
 
 	v.sceneData = r
 	v.cameraManipulator = osgGA.TrackballManipulator()

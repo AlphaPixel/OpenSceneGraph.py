@@ -22,7 +22,7 @@ add_subdirectory("etc/pybind11")
 # add_library(cython_part MODULE ${CYTHON_CPP})
 # target_include_directories(cython_part PRIVATE ${Python3_INCLUDE_DIRS})
 # set_target_properties(cython_part PROPERTIES
-# 	PREFIX ""  # no 'lib' prefix
+# 	PREFIX "" # no 'lib' prefix
 # 	CXX_VISIBILITY_PRESET default
 # 	VISIBILITY_INLINES_HIDDEN OFF
 # )
@@ -129,7 +129,12 @@ target_link_libraries(OpenSceneGraph_python PRIVATE
 )
 target_compile_features(OpenSceneGraph_python PUBLIC cxx_std_20)
 target_compile_options(OpenSceneGraph_python PRIVATE ${PYOSG_COMPILE_OPTIONS})
-target_include_directories(OpenSceneGraph_python PUBLIC ${OPENSCENEGRAPH_INCLUDE_DIRS})
+target_include_directories(OpenSceneGraph_python PUBLIC
+	# TODO: This is currently a hack to ensure `pybind11x.hpp` is found! In the
+	# future, it will come in as another submodule!
+	"${CMAKE_SOURCE_DIR}/etc"
+	${OPENSCENEGRAPH_INCLUDE_DIRS}
+)
 # TODO: PCH didn't help much, but the "unity" build made the project go from
 # taking 3 full minutes to 30s or less. That's pretty incredible.
 # target_precompile_headers(OpenSceneGraph_python PRIVATE "src/pyosg_pch.hpp")

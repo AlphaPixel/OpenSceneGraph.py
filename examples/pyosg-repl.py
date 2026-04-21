@@ -1,4 +1,5 @@
 #!/usr/bin/env -S ipython3 -i
+#vimrun! ipython3 -i ../examples/pyosg-repl.py
 
 import os
 
@@ -15,10 +16,27 @@ class DebugHandler(osgGA.GUIEventHandler):
 	debug = False
 
 	def handle(self, ea, aa):
-		if not ea.type == osgGA.GUIEventAdapter.FRAME:
-		# if self.debug:
-			# print(f"DebugHandler.handle(self={self}, ea={ea}, aa={aa}) type={ea.type}")
-			print(f"DebugHandler.handle(self={self}, ea={ea}, aa={aa}) type={ea.type}")
+		if self.debug:
+			if not ea.type == osgGA.GUIEventAdapter.FRAME:
+				print(f"DebugHandler.handle(self={self}, ea={ea}, aa={aa}) type={ea.type}")
+
+class REPLCameraManipulator(osgGA.CameraManipulator):
+	def __init__(self):
+		super().__init__()
+
+		self._matrix = osg.Matrixd()
+
+	def getMatrix(self):
+		return self._matrix
+
+	def setByMatrix(self, m):
+		self._matrix = m
+
+	def getInverseMatrix(self):
+		return osg.Matrix.inverse(self._matrix)
+
+	def setByInverseMatrix(self, m):
+		self._matrix = osg.Matrix.inverse(m)
 
 # ------------------------------------------------------------------------------
 # Viewer setup (nothing fancy)
@@ -28,6 +46,7 @@ viewer = osgViewer.Viewer()
 
 viewer.sceneData = osg.Geode()
 viewer.cameraManipulator = osgGA.TrackballManipulator()
+# viewer.cameraManipulator = REPLCameraManipulator()
 viewer.addEventHandler(DebugHandler())
 
 # ------------------------------------------------------------------------------

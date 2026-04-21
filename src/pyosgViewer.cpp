@@ -20,9 +20,7 @@ namespace detail {
 		// void advance(double simulationTime=USE_REFERENCE_TIME) = 0;
 
 		// void eventTraversal() = 0;
-
 		// void updateTraversal() = 0;
-
 		// void renderingTraversals();
 
 		void viewerInit() override {
