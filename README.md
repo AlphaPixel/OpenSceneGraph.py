@@ -56,6 +56,7 @@
       osg.ShapeDrawable(),
       # ...etc...
   ))
+  ```
 
   [!NOTE]
   > Wherever it is practical to improve the ergonomics of the aging OSG API in
@@ -102,45 +103,17 @@
   attributes, change object internals, and watch it all take effect
   immediately--including the entire Program / Shader pipeline.
 
-# TODO (General)
+# Examples
 
-- [x] Break up most of `detail::` into headers
-- [ ] Add `ProxyStorageNull`
-- [ ] Solidify make_list/make_tuple vs py::make_tuple
-- [ ] Add "buffer protocol" support for Vec/Matrix objects
-- [ ] Replace every instance of `std::runtime_error` with something... better
-- [ ] Threading/Async support (see below)
-- [ ] Math
-  - [x] Vec
-  - [x] Quat
-  - [x] Matrix
-- [x] Array interfaces
-- [x] Geometry
-- [x] GUIEventHandler
-- [x] NodeCallback
-- [x] Drawable/DrawCallback (tricky due to rendering pipeline and non-copyable args)
-- [x] CameraManipulator (multimethod override, multiple overloads, non-copyable args)
-- [ ] Operation
-- [x] Basic osgViewer::Viewer demo
-- [ ] Demo secondary bindings **BASED ON** these
+- [Render To Texture](examples/pyosg-rtt.py): Demonstrates how to setup a
+  standard colorbuffer + depthbuffer rendering pipeline, composited together
+  using the standard fullscreen-quad approach.
 
-## TODO (Specific)
+- [Point Visualization](examples/pyosg-points.py): Visualizes random data
+  created by NumPy as simple points.
 
-- [ ] Make sure all `py::arg` use `""_a` syntax instead.
-- [ ] Make sure all `py::enum_` use `export_values()` if necessary.
-- [ ] Add docstrings!
+- [IPython Interactive REPL](examples/pyosg-repl.py): Fires up an `ipython3`
+  REPL session with `OpenSceneGraph` imported and ready to use!
 
-## TODO (Threading) **IMPORTANT!!!**
-
-This is going to be a HUGE headache, no matter WHAT we do. For now, we should
-**ENFORCE** a `SingleThreaded` model. Later, in order to FULLY support
-multithreaded processing, we'll need to utilize some kind of "event queue" or
-similar; Python has LONG be notorious for very poor paralellism when interacting
-with C/C++ extension modules.
-
-## TODO (Secondary Demo)
-
-Python bindings are great on their own, but a **really** great feature to have
-would be exposing an API that also *embeds* the Python interpreter directly into
-an existing application in a seamless manner, removing the need to rely on any
-external Python installation environments.
+- [OSG + Async](examples/pyosg-async.py): A simple example demonstrating modern
+  Python `async/await` programming in OpenSceneGraph.py.
