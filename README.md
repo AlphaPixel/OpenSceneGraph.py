@@ -57,6 +57,7 @@
       # ...etc...
   ))
 
+  [!NOTE]
   > Wherever it is practical to improve the ergonomics of the aging OSG API in
   > Python, we do. Most attributes can be set both at construction time and
   > through traditional setter-based APIs. Likewise, anything that functions as
