@@ -1,140 +1,119 @@
-# TLDR
+# Key Features (April, 2026)
 
-If something is misbehaving and you don't want to [read the Overview](Overview),
-it's likely one of these things:
+- Covers most of the core `osg` namespace, as well as significant portions of
+  `osgViewer`, `osgUtil`, `osgGA`, and `osgDB`. Any missing or unwrapped
+  objects can be added quickly as needed.
 
-- Are you using `py::return_value_policy::reference*` correctly when returning a
-  pointer/reference to another wrapped object?
-- If you're ACCEPTING a wrapped object, are you using `py::keep_alive<>` (if
-  necessary)?
-- If an instance is constructed in C++ but needs to support virtual method
-  override by derived classes in Python, you must make use of a "trampoline." In
-  some cases simply calling `PYBIND_OVERRIDE{_PURE}` will be enough; if not,
-  [refer to the comments](src/osg.hpp#84) of `pyosg::detail::call_override`.
+- Implements only the modern, non-FFP parts of OpenSceneGraph; all testing is
+  done with GL3/GLCORE as the minimum target.
 
-# Overview
+- Works in both modular *and* embedded setups. In an embedded build, the entire
+  `OpenSceneGraph.py` module interface can be **compiled into** the resulting
+  library or binary, making packaging and deployment much simpler.
 
-Slowly migrating existing research/code/attempts into this repository to build a
-solid foundation for moving forward. I'd like to establish a sound base (coding
-style, binding methodology, warnings-as-errors, static analysis, valgrind/ASAN
-support, etc) so that ANYONE can jump in and contribute.
+- Provides solutions to some of the sharp edges involved in wrapping
+  intrusively reference-counted code, especially *object lifetime*. In many
+  `pybind11` bindings, wrapper code must rely heavily on `keep_alive<>` in
+  order to guarantee object lifetime, which can lead to memory bloat and object
+  accumulation throughout the life of the process. `OpenSceneGraph.py` uses a
+  different approach in which the owning `PyObject*` reference is **stored
+  inside the `UserDataContainer`** of the instance, so when something is
+  deleted or reassigned, it can truly be deallocated.
 
-**NOTE**: During development, we need to continually ask the question "how can
-existing/established projects--that already use OSG--leverage OUR headers to
-simplify creating their OWN bindings?" This will mean that we need to keep
-things modular, support `pybind11::import_`, and export ALL of the utility
-functions and *"trampoline"* wrappers necessary for any external project to
-include and utilize.
+- Preserves **stable Python identity** for C++ object instances, even when
+  those objects are accessed repeatedly through container proxies or property
+  getters. This avoids one of the most common and confusing failure modes in
+  C++/Python bindings: multiple Python wrapper objects referring to the same
+  underlying C++ instance without behaving like the “same object” at the Python
+  level.
 
-**NOTE**: In addition to the above, it may become necessary at SOME POINT to
-create a kind of "shared core" library that both these bindings **AND** others
-link to in order to resolve utility/trampoline bits. For example, if a user
-wants to create Python bindings for their existing product (`osgAcme`), they
-can/should be able to do something like the following:
+- Uses a **unified proxy architecture** across intrusive reference-counted
+  objects, shared-ownership objects, sequence-style containers, mapping-style
+  containers, and persistent property-backed references. This keeps the Python
+  API consistent while still respecting native ownership and lifetime rules.
 
-```
-// First, they'll kick off an import to make pybind11 aware of all the types
-// defined in this project:
-py::module_::import("OpenSceneGraph");
+- Overhauls the OSG interface, making it naturally Pythonic and substantially
+  more pleasant to work with. Instead of binding the OSG API 1:1,
+  `OpenSceneGraph.py` exposes semantic proxies over things like `osg::Group`,
+  `osg::Geode`, `osg::Geometry`, and more. For example:
 
-// If the above was successful, pybind11 will understand and handle inheritance
-// such as this:
-py::class_<osgAcme::Foo, osg::Group, osg::ref_ptr<osgAcme::Foo>>(m, "Foo")
-	.def(py::init<>())
-;
+  ```py
+  # Instead of this...
+  g = osg.Group()
+  g.addChild(osg.Node())
+  g.addChild(osg.Node())
+  g.addChild(osg.Node())
 
-// Inevitably, the osgAcme bindings will want to use something we had to
-// "trampoline" for pybind11 to build properly (essentially ANYTHING with
-// virtual methods that need to work both in Python AND C++):
-py::class_<
-    osgAcme::EventHandler,
-    pyosgGA::GUIEventHandler,
-    osg::ref_ptr<osgAcme::EventHandler>
->(m, "EventHandler")
-    .def("method", ...)
-    .def_property("property", ...)
-    // Continues...
-;
-```
+  # ...you instead do something like:
+  g = osg.Group(name="Group", children=(
+      osg.Geode(name="Geode_00"),
+      osg.Node(name="Node_00", debug=True),
+      osg.Node(),
+  ))
 
-In the above, notice how we use `pyosgGA::GUIEventHandler` (instead of
-`osgGA::GUIEventHandler`) in the template parameters; this is **REQUIRED** (a
-"trampoline") in order for virtual overrides--defined in Python--to interop with
-C++ and pybind11 correctly. The "shared core" mentioned above would provide both
-the headers AND the static library for linker resolution (used by both this
-OpenSceneGraph.so module and the hypothetical osgAcme.so module).
+  g.children[0].drawables.extend((
+      osg.Geometry(),
+      osg.ShapeDrawable(),
+      # ...etc...
+  ))
 
-# Cheatsheet
+  > Wherever it is practical to improve the ergonomics of the aging OSG API in
+  > Python, we do. Most attributes can be set both at construction time and
+  > through traditional setter-based APIs. Likewise, anything that functions as
+  > a callback in OSG can usually be supplied either through the traditional
+  > method-override approach or by simply passing any suitable Python
+  > callable.
 
-## keep_alive
+- Container-like APIs are backed by semantic proxies, not thin wrappers. These
+  preserve object identity, native behavior, and ownership rules while
+  supporting natural Python idioms such as indexing, iteration, mutation,
+  appending, extending, and keyword-based construction.
 
-The pybind API calls the template parameters `py::keep_alive<Nurse, Patient>`.
-Once you understand *why* it uses these names (and understand WHAT the numeric
-indices refer to), using `py::keep_alive<>` becomes a lot easier: a `Nurse`
-keeps a `Patient` alive.
+- Provides a robust callback binding system supporting both Python subclass
+  overrides and plain Python callables/lambdas for OSG callback types.
+  Traversal semantics are preserved correctly, so native OSG behavior is not
+  replaced by a Python-specific approximation.
 
-### Indices
+- Object instances pass cleanly across the Python/C++ boundary; anything created
+  in one environment can be accessed directly and used in the other.
 
-| Index | Refers to                     |
-| ----- | ----------------------------- |
-| `0`   | the **return value** (if any) |
-| `1`   | `self` (for methods)          |
-| `2`   | first explicit argument       |
-| `3`   | second explicit argument      |
-| ...   | etc                           |
+- Designed for incremental embedding into existing C++ OSG applications. Python
+  can be introduced as a scripting/runtime layer without requiring an all-Python
+  rewrite of the existing codebase.
 
-### Common Usage
+- All of the OpenSceneGraph.py headers are exposed, allowing any existing
+  codebase to adapt its current stack so that it works inside OpenSceneGraph.py
+  natively. Helpers, trampoline classes, proxy machinery, and related
+  infrastructure are all accessible from C++.
 
-| Pattern            | Meaning                | Typical Use                    |
-| ------------------ | ---------------------- | ------------------------------ |
-| `keep_alive<1, 2>` | self owns arg          | containers, graphs             |
-| `keep_alive<0, 1>` | return depends on self | views (arrays), internals      |
-| `keep_alive<2, 1>` | arg owns self          | rare / suspect                 |
+- Makes wide use of the buffer protocol, meaning data coming from libraries like
+  NumPy or PyTorch can be passed to and visualized with OpenSceneGraph.py with
+  almost no copying of data. This also works in reverse: data from
+  OpenSceneGraph.py can be sent to NumPy, PyTorch, and similar libraries with
+  little to no copying.
 
-We could even come up with some aliases such as:
+- Supports modern interactive and asynchronous workflows, including cooperative
+  asyncio integration, background task execution, progress/event queues, and
+  clean cross-language cancellation and shutdown patterns.
 
-```
-using KeepChildAlive = py::keep_alive<1, 2>;
-using KeepSelfAlive  = py::keep_alive<0, 1>;
-```
-## return_value_policy
-
-Use `reference_internal` when:
-
-- returning userData
-- returning parents / children
-- returning anything owned by self
-
-Essentially, the returned object's lifetime is tied to the parent (self) through
-`keep_alive<0, 1>()`.
-
-Use `reference` when:
-
-- returning globally-owned singletons
-- returning objects guaranteed to outlive Python
-- you want raw semantics
-
-The returned object is not dependent on self.
-
-A great example of `reference` vs `reference_internal` are the
-`Node.updateCallback` and `Node.stateSet` properties.
-
-Avoid `copy`, `move`, and `take_ownership` unless the C++ API explicitly
-documents ownership transfer.
+- Perhaps best of all: OpenSceneGraph.py can be used INTERACTIVELY. You can fire
+  up something like ipython, interactively add objects to your scene, modify
+  attributes, change object internals, and watch it all take effect
+  immediately--including the entire Program / Shader pipeline.
 
 # TODO (General)
 
-- [ ] Break up most of `detail::` into headers
+- [x] Break up most of `detail::` into headers
 - [ ] Add `ProxyStorageNull`
 - [ ] Solidify make_list/make_tuple vs py::make_tuple
 - [ ] Add "buffer protocol" support for Vec/Matrix objects
 - [ ] Replace every instance of `std::runtime_error` with something... better
-- [ ] Threading support (see below)
+- [ ] Threading/Async support (see below)
 - [ ] Math
   - [x] Vec
   - [x] Quat
   - [x] Matrix
-- [ ] Array interfaces
+- [x] Array interfaces
 - [x] Geometry
 - [x] GUIEventHandler
 - [x] NodeCallback
