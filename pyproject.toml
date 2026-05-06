@@ -1,0 +1,10 @@
+[build-system]
+requires = ["scikit-build-core", "setuptools"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "OpenSceneGraph"
+version = "0.1.0"
+
+[tool.scikit-build]
+wheel.packages = ["OpenSceneGraph"]

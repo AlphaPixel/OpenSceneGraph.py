@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "pyosg-points",
+            "program": "python3",
+            "cwd": "${workspaceFolder}/build/release/",
+            "args": [
+                "${workspaceFolder}/examples/pyosg-points.py"
+            ],
+            "environment": [
+                "PYTHONPATH=${workspaceFolder}/result/lib/python3.13/site-packages"
+            ]
+        }
+    ]
+}
