@@ -37,8 +37,8 @@
             ];
           });
         };
-        openscenegraph-py = python.pkgs.buildPythonPackage {
-          pname = "OpenSceneGraph";
+        osgpy = python.pkgs.buildPythonPackage {
+          pname = "openscenegraph";
           version = "0.1.0";
           format = "pyproject";
           src = ./.;
@@ -78,7 +78,7 @@
 
       in
       {
-        packages.default = openscenegraph-py;
+        packages.default = osgpy;
 
         checks.${system} = {
           inputsFrom = [ self.packages.${system}.default ];
@@ -98,12 +98,14 @@
             pkgs.nixfmt
             pkgs.pre-commit
             python.pkgs.pytest
+            osgpy
             (python.withPackages (ps: [
-              openscenegraph-py
+              ps.numpy
             ]))
           ];
           shellHook = ''
-            export PYTHONPATH="${self.packages.${system}.default}/lib/python3.11/site-packages:$PYTHONPATH"
+            #export PYTHONPATH="${self.packages.${system}.default}/lib/python3.11/site-packages:$PYTHONPATH"
+            export PYTHONPATH="$PYTHONPATH:."
           '';
         };
       }
