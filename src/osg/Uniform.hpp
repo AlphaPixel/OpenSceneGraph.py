@@ -41,6 +41,9 @@ namespace detail {
 			case osg::Uniform::DOUBLE:
 				return new osg::Uniform(name.c_str(), value.cast<double>());
 
+			case osg::Uniform::FLOAT_VEC2:
+				return new osg::Uniform(name.c_str(), value.cast<osg::Vec2>());
+
 			case osg::Uniform::FLOAT_VEC3:
 				return new osg::Uniform(name.c_str(), value.cast<osg::Vec3>());
 
@@ -68,6 +71,10 @@ namespace detail {
 
 		if(py::isinstance<py::float_>(h)) {
 			return new osg::Uniform(name.c_str(), h.cast<float>());
+		}
+
+		if(py::isinstance<osg::Vec2>(h)) {
+			return new osg::Uniform(name.c_str(), h.cast<osg::Vec2>());
 		}
 
 		if(py::isinstance<osg::Vec3>(h)) {
@@ -153,6 +160,10 @@ namespace detail {
 				_uniform_set<bool>(self, i, obj, "BOOL");
 				return;
 
+			case osg::Uniform::FLOAT_VEC2:
+				_uniform_set<osg::Vec2f>(self, i, obj, "FLOAT_VEC2");
+				return;
+
 			case osg::Uniform::FLOAT_VEC3:
 				_uniform_set<osg::Vec3f>(self, i, obj, "FLOAT_VEC3");
 				return;
@@ -204,6 +215,12 @@ namespace detail {
 				return py::cast(v);
 			}
 
+			case osg::Uniform::FLOAT_VEC2: {
+				osg::Vec2 v; self.getElement(i, v);
+
+				return py::cast(v);
+			}
+
 			case osg::Uniform::FLOAT_VEC3: {
 				osg::Vec3 v; self.getElement(i, v);
 
@@ -226,21 +243,21 @@ namespace detail {
 	// ------------------------------------------------------------
 
 	inline py::object uniform_get_array(osg::Uniform& self) {
-		if(auto* a = self.getFloatArray())  return py::cast(a);
+		if(auto* a = self.getFloatArray()) return py::cast(a);
 		if(auto* a = self.getDoubleArray()) return py::cast(a);
-		if(auto* a = self.getIntArray())    return py::cast(a);
-		if(auto* a = self.getUIntArray())   return py::cast(a);
-		if(auto* a = self.getInt64Array())  return py::cast(a);
+		if(auto* a = self.getIntArray()) return py::cast(a);
+		if(auto* a = self.getUIntArray()) return py::cast(a);
+		if(auto* a = self.getInt64Array()) return py::cast(a);
 		if(auto* a = self.getUInt64Array()) return py::cast(a);
 		return py::none();
 	}
 
 	inline void uniform_set_array(osg::Uniform& self, py::object obj) {
-		if(auto* a = obj.cast<osg::FloatArray*>())  { self.setArray(a); return; }
+		if(auto* a = obj.cast<osg::FloatArray*>()) { self.setArray(a); return; }
 		if(auto* a = obj.cast<osg::DoubleArray*>()) { self.setArray(a); return; }
-		if(auto* a = obj.cast<osg::IntArray*>())    { self.setArray(a); return; }
-		if(auto* a = obj.cast<osg::UIntArray*>())   { self.setArray(a); return; }
-		if(auto* a = obj.cast<osg::Int64Array*>())  { self.setArray(a); return; }
+		if(auto* a = obj.cast<osg::IntArray*>()) { self.setArray(a); return; }
+		if(auto* a = obj.cast<osg::UIntArray*>()) { self.setArray(a); return; }
+		if(auto* a = obj.cast<osg::Int64Array*>()) { self.setArray(a); return; }
 		if(auto* a = obj.cast<osg::UInt64Array*>()) { self.setArray(a); return; }
 
 		throw py::type_error("Unsupported array type for Uniform.array");
