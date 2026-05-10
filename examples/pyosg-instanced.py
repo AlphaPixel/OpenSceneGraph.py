@@ -26,8 +26,8 @@ void main() {
 	vec2 base[4] = vec2[4](
 		vec2(-0.5, -0.5),
 		vec2( 0.5, -0.5),
-		vec2( 0.5,  0.5),
-		vec2(-0.5,  0.5)
+		vec2( 0.5, 0.5),
+		vec2(-0.5, 0.5)
 	);
 
 	vec2 v = base[gl_VertexID % 4];
@@ -74,7 +74,7 @@ if __name__ == "__main__":
 	g.addPrimitiveSet(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4, 16 * 16))
 
 	g.initialBound = osg.BoundingBox(-10, -10, -1, 10, 10, 1)
-	#  g.useVertexBufferObjects = True
+	# g.useVertexBufferObjects = True
 
 	p = osg.Program(name="gl_InstanceID_DEMO", shaders=(
 		osg.Shader(osg.Shader.VERTEX, VERTEX_SHADER),

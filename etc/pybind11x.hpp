@@ -2,7 +2,7 @@
 
 // One-line summaries of what you'll find in this file:
 //
-// SlotCache -> "Don’t recreate Python objects unless the underlying pointer changed."
+// SlotCache -> "Don't recreate Python objects unless the underlying pointer changed."
 // ProxyStorage -> "Attach all Python views to the lifetime of the C++ object."
 // PropertySlots -> "Make fields behave like stable Python attributes."
 // SequenceProxy -> "Turn arbitrary C++ containers into Python lists."
@@ -484,7 +484,7 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 	}
 
 	void append(py::object py_obj) {
-		if constexpr (!SequenceAppendable<T>) throw py::type_error(
+		if constexpr(!SequenceAppendable<T>) throw py::type_error(
 			"Sequence does not support append"
 		);
 

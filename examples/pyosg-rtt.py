@@ -66,6 +66,9 @@ void main() {
 	vec3 N = normalize(vNormal);
 
 	float diffuse = max(dot(N, L), 0.0);
+	diffuse = floor(diffuse * 3.0) / 3.0;  // add this line
+
+	// float diffuse = max(dot(N, L), 0.0);
 	float ambient = 0.25;
 	float light = ambient + diffuse;
 
@@ -182,8 +185,43 @@ void main_depth() {
 	// color = vec4(visualizeAbsoluteDepth_test(d, projMat));
 }
 
+void main_claude() {
+    vec4 c = texture(colorTex, uv);
+    float d = texture(depthTex, uv).r;
+
+    // Texel size for neighbor sampling
+    vec2 texel = 4.0 / vec2(800.0, 600.0);
+
+    // Sample depth at 4 neighbors
+    float dL = texture(depthTex, uv + vec2(-texel.x, 0.0)).r;
+    float dR = texture(depthTex, uv + vec2( texel.x, 0.0)).r;
+    float dU = texture(depthTex, uv + vec2(0.0,  texel.y)).r;
+    float dD = texture(depthTex, uv + vec2(0.0, -texel.y)).r;
+
+    // Linearize them all so edges are consistent across depth range
+    float z  = linearizeDepth(d,  znear, zfar);
+    float zL = linearizeDepth(dL, znear, zfar);
+    float zR = linearizeDepth(dR, znear, zfar);
+    float zU = linearizeDepth(dU, znear, zfar);
+    float zD = linearizeDepth(dD, znear, zfar);
+
+    // Sobel-ish edge detection on linearized depth
+    float edgeH = abs(zL - zR);
+    float edgeV = abs(zU - zD);
+    float edge = sqrt(edgeH * edgeH + edgeV * edgeV);
+
+    // Threshold relative to depth (edges far away need less delta)
+    float threshold = z * 0.03;
+    // float outline = edge > threshold ? 1.0 : 0.0;
+    float outline = smoothstep(threshold * 0.5, threshold * 1.5, edge);
+
+    // Black outline over scene color
+    color = mix(c, vec4(0.0, 0.0, 0.0, 1.0), outline);
+}
+
 void main() {
-	main_depth(); return;
+	// main_depth(); return;
+	main_claude(); return;
 
 	float d = texture(depthTex, uv).r;
 	vec4 c = texture(colorTex, uv);
@@ -322,7 +360,7 @@ if __name__ == "__main__":
 	v = osgViewer.Viewer()
 	r = osg.Group()
 
-	rttCam, cb, db = create_rtt_camera(800, 600)
+	rttCam, cb, db = create_rtt_camera(400, 300)
 	hudCam = create_hud_camera(cb, db)
 
 	# This is how the RTT camera "knows" what to render...
@@ -350,7 +388,7 @@ if __name__ == "__main__":
 
 		fovy, aspect, near, far = pm.getPerspective()
 
-		# OSG ALWAYS treats uniforms as ARRAYS (and only "pretends" to be scalar with a API
+		# OSG ALWAYS treats uniforms as ARRAYS (and only "pretends" to be scalar with an API
 		# that abstracts access to the `[0]` index. However, Python supports using either of the
 		# following methods for update:
 		#
@@ -378,4 +416,5 @@ if __name__ == "__main__":
 	while not v.done:
 		v.frame()
 
-		time.sleep(0.1)
+		# time.sleep(0.1)
+		# time.sleep(1.0 / 60.0)
