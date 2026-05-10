@@ -1,133 +1,6 @@
 #include "pyosgGA.hpp"
-#include "osg/callable.hpp"
-
-PYOSG_DISABLE_WARNINGS
-
-#include <osgGA/GUIEventHandler>
-#include <osgGA/EventQueue>
-#include <osgGA/TrackballManipulator>
-
-PYOSG_ENABLE_WARNINGS
 
 namespace pyosgGA {
-
-namespace detail {
-	class GUIEventHandler: public osgGA::GUIEventHandler {
-	public:
-		using osgGA::GUIEventHandler::GUIEventHandler;
-
-		bool handle(
-			const osgGA::GUIEventAdapter& ea,
-			osgGA::GUIActionAdapter& aa,
-			osg::Object* obj,
-			osg::NodeVisitor* nv
-		) override {
-			auto r = pyosg::detail::call_override<bool>("handle", this, &ea, &aa);
-
-			// If a Python override exists and gave us a bool, check it.
-			if(r.has_value()) {
-				// If the event WAS HANDLED (returned True), we're done.
-				if(*r) return true;
-			}
-
-			// Python does not override OR returned None, so we should keep going.
-			return osgGA::GUIEventHandler::handle(ea, aa, obj, nv);
-		}
-	};
-
-	class CameraManipulator: public osgGA::CameraManipulator {
-	public:
-		using osgGA::CameraManipulator::CameraManipulator;
-
-		~CameraManipulator() override {}
-
-		void home(const osgGA::GUIEventAdapter& ea, osgGA::GUIActionAdapter& aa) override {
-			PYBIND11_OVERRIDE(void, osgGA::CameraManipulator, home, ea, aa);
-		}
-
-		void home(double t) override {
-			PYBIND11_OVERRIDE(void, osgGA::CameraManipulator, home, t);
-		}
-
-		void setAutoComputeHomePosition(bool flag) override {
-			PYBIND11_OVERRIDE(void, osgGA::CameraManipulator, setAutoComputeHomePosition, flag);
-		}
-
-		void getHomePosition(osg::Vec3d& eye, osg::Vec3d& center, osg::Vec3d& up) const override {
-			PYBIND11_OVERRIDE(
-				void,
-				osgGA::CameraManipulator,
-				getHomePosition,
-				eye,
-				center,
-				up
-			);
-		}
-
-		void setHomePosition(
-			const osg::Vec3d& eye,
-			const osg::Vec3d& center,
-			const osg::Vec3d& up,
-			bool autoComputeHomePosition=false
-		) {
-			PYBIND11_OVERRIDE(
-				void,
-				osgGA::CameraManipulator,
-				setHomePosition,
-				eye,
-				center,
-				up,
-				autoComputeHomePosition
-			);
-		}
-
-		osg::Matrixd getMatrix() const override {
-			std::cerr << "detail::CameraManipulator::getMatrix" << std::endl;
-
-			PYBIND11_OVERRIDE_PURE(
-				osg::Matrixd,
-				osgGA::CameraManipulator,
-				getMatrix
-			);
-		}
-
-		osg::Matrixd getInverseMatrix() const override {
-			std::cerr << "detail::CameraManipulator::getInverseMatrix" << std::endl;
-
-			PYBIND11_OVERRIDE_PURE(
-				osg::Matrixd,
-				osgGA::CameraManipulator,
-				getInverseMatrix
-			);
-		}
-
-		void setByMatrix(const osg::Matrixd& mat) override {
-			std::cerr << "detail::CameraManipulator::setByMatrix" << std::endl;
-
-			PYBIND11_OVERRIDE_PURE(
-				void,
-				osgGA::CameraManipulator,
-				setByMatrix,
-				mat
-			);
-		}
-
-		void setByInverseMatrix(const osg::Matrixd& mat) override {
-			std::cerr << "detail::CameraManipulator::setByInverseMatrix" << std::endl;
-
-			PYBIND11_OVERRIDE_PURE(
-				void,
-				osgGA::CameraManipulator,
-				setByInverseMatrix,
-				mat
-			);
-		}
-
-		/* void computeHomePosition(const osg::Camera* camera=nullptr, bool useBoundingBox=false) {
-			PYBIND11_OVERRIDE(void, osgGA::CameraManipulator, setAutoComputeHomePosition, flag);
-		} */
-	};
-}
 
 void bind(py::module_& m) {
 	py::class_<osgGA::GUIActionAdapter>(m, "GUIActionAdapter");
@@ -146,6 +19,7 @@ void bind(py::module_& m) {
 		.def_property_readonly("scrollingMotion", &osgGA::GUIEventAdapter::getScrollingMotion)
 		.def_property_readonly("modKeyMask", &osgGA::GUIEventAdapter::getModKeyMask)
 		.def_property_readonly("key", &osgGA::GUIEventAdapter::getKey)
+		.def_property_readonly("handled", &osgGA::GUIEventAdapter::getHandled)
 	;
 
 	py::enum_<osgGA::GUIEventAdapter::EventType>(gea, "EventType")

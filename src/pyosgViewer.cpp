@@ -1,4 +1,5 @@
 #include "pyosgViewer.hpp"
+#include "pyosgGA.hpp"
 
 PYOSG_DISABLE_WARNINGS
 
@@ -7,6 +8,98 @@ PYOSG_DISABLE_WARNINGS
 #include <osgViewer/ViewerEventHandlers>
 
 PYOSG_ENABLE_WARNINGS
+
+#include "pybind11x.hpp"
+
+namespace pyx = pybind11x;
+
+template<>
+struct pyx::SequenceTraits<osgViewer::View> {
+	using element_type = osgGA::GUIEventHandler;
+	using value_type = osgGA::GUIEventHandler*;
+
+	using list_type = osgViewer::View::EventHandlers;
+	using iterator = list_type::iterator;
+
+	/* static value_type from_python(py::handle h) {
+		if(h.is_none()) {
+			throw py::type_error("EventHandler cannot be None");
+		}
+
+		return h.cast<value_type>();
+	} */
+
+	static value_type from_python(py::handle h) {
+		if(h.is_none()) {
+			throw py::type_error("EventHandler cannot be None");
+		}
+
+		if(py::isinstance<osgGA::GUIEventHandler>(h)) {
+			return h.cast<osgGA::GUIEventHandler*>();
+		}
+
+		if(PyCallable_Check(h.ptr())) {
+			return new pyosgGA::detail::CallableGUIEventHandler(
+				py::reinterpret_borrow<py::object>(h)
+			);
+		}
+
+		throw py::type_error("Expected osgGA.GUIEventHandler or callable");
+	}
+
+	static size_t size(const osgViewer::View* v) {
+		return v->getEventHandlers().size();
+	}
+
+	static iterator nth(osgViewer::View* v, size_t i) {
+		auto& ehs = v->getEventHandlers();
+
+		if(i >= ehs.size()) {
+			throw py::index_error("event handler index out of range");
+		}
+
+		auto it = ehs.begin();
+		std::advance(it, static_cast<list_type::difference_type>(i));
+		return it;
+	}
+
+	static element_type* get(osgViewer::View* v, size_t i) {
+		auto* eh = nth(v, i)->get();
+
+		auto* gui = dynamic_cast<osgGA::GUIEventHandler*>(eh);
+		if(!gui) {
+			throw py::type_error(
+				"View event handler is not an osgGA::GUIEventHandler; "
+				"osgGA::EventHandler is not registered in Python"
+			);
+		}
+
+		return gui;
+	}
+
+	static void set(osgViewer::View* v, size_t i, value_type eh) {
+		if(!eh) {
+			throw py::type_error("EventHandler cannot be None");
+		}
+
+		auto it = nth(v, i);
+		*it = eh;
+	}
+
+	static void del(osgViewer::View* v, size_t i) {
+		auto& ehs = v->getEventHandlers();
+		auto it = nth(v, i);
+		ehs.erase(it);
+	}
+
+	static void append(osgViewer::View* v, value_type eh) {
+		if(!eh) {
+			throw py::type_error("EventHandler cannot be None");
+		}
+
+		v->addEventHandler(eh);
+	}
+};
 
 namespace pyosgViewer {
 
@@ -27,6 +120,9 @@ namespace detail {
 			PYBIND11_OVERRIDE_PURE(void, osgViewer::ViewerBase, viewerInit);
 		}
 	};
+
+	using EventHandlersProxy = pyx::SequenceProxy<osgViewer::View>;
+	using EventHandlersStorage = pyx::ProxyStorageOSG<osgViewer::View, EventHandlersProxy>;
 }
 
 void bind(py::module_& m) {
@@ -62,8 +158,22 @@ void bind(py::module_& m) {
 	>(m, "GraphicsWindowEmbedded");
 
 	// We LEAVE OUT osgGA::GUIActionAdapter here as a base class...
-	py::class_<osgViewer::View, osg::View, osg::ref_ptr<osgViewer::View>>(m, "View")
+	auto view = py::class_<osgViewer::View, osg::View, osg::ref_ptr<osgViewer::View>>(m, "View");
+
+	detail::EventHandlersProxy::bind(view, "_EventHandlers");
+
+	view
 		.def(py::init<>())
+
+		.def_property_readonly(
+			"eventHandlers",
+			[](osgViewer::View& self) -> detail::EventHandlersProxy& {
+				return detail::EventHandlersStorage::get(self)->template proxy<
+					detail::EventHandlersProxy
+				>();
+			},
+			py::return_value_policy::reference_internal
+		)
 
 		// TODO: Convert to SequenceProxy!
 		.def("addEventHandler", [](osgViewer::View& self, py::object obj) {
