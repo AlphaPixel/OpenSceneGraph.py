@@ -4,6 +4,8 @@
 #include "pyosgGA.hpp"
 #include "pyosgViewer.hpp"
 
+#include "pybind11x.hpp"
+
 #include <osg/Version>
 
 #include <GL/gl.h>
@@ -21,6 +23,8 @@ PYOSG_CONSTRUCTOR(pyosg_preinit) {
 #include <atomic>
 #include <thread>
 #include <chrono>
+
+namespace pyx = pybind11x;
 
 struct StopEvent {
 	std::atomic<bool> stop{false};
@@ -143,33 +147,11 @@ PYBIND11_MODULE(OpenSceneGraph, m) {
 	gl.attr("GL_ONE") = GL_ONE;
 	// ============================================================================================
 
-	m.def("build_info", []() {
-		py::dict info;
+	py::dict info;
 
-		info["osg"] = osgGetVersion();
+	info["osg"] = osgGetVersion();
 
-		info["pybind"] = py::str("{}.{}.{}").format(
-			PYBIND11_VERSION_MAJOR,
-			PYBIND11_VERSION_MINOR,
-			PYBIND11_VERSION_MICRO
-		);
-
-		info["date"] = __DATE__ " " __TIME__;
-
-		info["compiler"] =
-#ifdef __clang__
-		"Clang " __clang_version__
-#elif defined(__GNUC__)
-		"GCC " __VERSION__
-#elif defined(_MSC_VER)
-		std::string("MSVC ") + std::to_string(_MSC_VER)
-#else
-		"Unknown compiler"
-#endif
-		;
-
-		return info;
-	});
+	pyx::build_info(m, info);
 
 	m.attr("F32_MIN") = std::numeric_limits<float>::min();
 	m.attr("F32_MAX") = std::numeric_limits<float>::max();

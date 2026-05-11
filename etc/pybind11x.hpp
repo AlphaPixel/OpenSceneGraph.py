@@ -798,4 +798,32 @@ struct PYOBJECT_INTERNAL MappingProxy: public MapSlotCache<typename MappingTrait
 	}
 };
 
+inline void build_info(py::module_ m, py::dict info) {
+	m.def("build_info", [info]() {
+		info["pybind"] = py::str("{}.{}.{}").format(
+			PYBIND11_VERSION_MAJOR,
+			PYBIND11_VERSION_MINOR,
+			PYBIND11_VERSION_MICRO
+		);
+
+		info["date"] = __DATE__ " " __TIME__;
+
+		info["compiler"] =
+#ifdef __clang__
+		"Clang " __clang_version__
+#elif defined(__GNUC__)
+		"GCC " __VERSION__
+#elif defined(_MSC_VER)
+		std::string("MSVC ") + std::to_string(_MSC_VER)
+#else
+		"Unknown compiler"
+#endif
+		;
+
+		return info;
+	});
+
+	// return info;
+}
+
 }
