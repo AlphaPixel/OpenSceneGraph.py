@@ -150,7 +150,7 @@ namespace detail {
 			const osg::Vec3d& center,
 			const osg::Vec3d& up,
 			bool autoComputeHomePosition=false
-		) {
+		) override {
 			PYBIND11_OVERRIDE(
 				void,
 				osgGA::CameraManipulator,

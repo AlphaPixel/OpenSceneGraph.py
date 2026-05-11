@@ -24,7 +24,7 @@
   those objects are accessed repeatedly through container proxies or property
   getters. This avoids one of the most common and confusing failure modes in
   C++/Python bindings: multiple Python wrapper objects referring to the same
-  underlying C++ instance without behaving like the “same object” at the Python
+  underlying C++ instance without behaving like the "same object" at the Python
   level.
 
 - Uses a **unified proxy architecture** across intrusive reference-counted
@@ -49,6 +49,7 @@
       osg.Geode(name="Geode_00"),
       osg.Node(name="Node_00", debug=True),
       osg.Node(),
+      # ...etc...
   ))
 
   g.children[0].drawables.extend((
