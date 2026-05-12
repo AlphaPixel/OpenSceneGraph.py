@@ -1,38 +1,67 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.17)
 
-project(OpenSceneGraph-python LANGUAGES C CXX)
+project(
+    ${SKBUILD_PROJECT_NAME}
+    VERSION ${SKBUILD_PROJECT_VERSION}
+    LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+
+# Generate compile_commands.json to make tree-sitter happy.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE INTERNAL "")
+if(CMAKE_EXPORT_COMPILE_COMMANDS)
+  set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES
+      ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
+endif()
+
+# By default build the release version with O3
+if (NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
+message(STATUS "Using compiler ${CMAKE_CXX_COMPILER_ID} ...")
+
+include(CMakeDependentOption)           # This is a really useful scripts that creates options that depends on other options. It can even be used with generator expressions !
+include(GNUInstallDirs)                 # This will define the default values for installation directories (all platforms even if named GNU)
+include(InstallRequiredSystemLibraries) # Tell CMake that the `install` target needs to install required system libraries (eg: Windows SDK)
+include(CMakePackageConfigHelpers)      # Helper to create relocatable packages
+
+# +----------------------------------------+
+# | Options                                |
+# +----------------------------------------+
+
+option(PYOSG_ENABLE_TEST "Should ${PROJECT_NAME} build the unit tests" ON)
+option(PYOSG_EMBEDDED "Build OpenSceneGraph bindings for embedding" OFF)
+
+# +----------------------------------------+
+# | Dependencies                           |
+# +----------------------------------------+
+
+if(PYOSG_ENABLE_TEST)
+    include(GoogleTest)
+    find_package(GTest REQUIRED)
+    enable_testing()
+endif()
 
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
-# find_package(pybind11 REQUIRED)
-add_subdirectory("etc/pybind11")
+find_package(pybind11 CONFIG REQUIRED)
+find_package(spdlog REQUIRED)
+find_package(OpenSceneGraph REQUIRED
+    osg
+	osgUtil
+	osgDB
+	osgGA
+	osgViewer
+)
 
-# # Step A -> generate C++ from Cython
-# set(CYTHON_SRC ${CMAKE_CURRENT_SOURCE_DIR}/cython_part.pyx)
-# set(CYTHON_CPP ${CMAKE_CURRENT_BINARY_DIR}/cython_part.cpp)
-#
-# add_custom_command(
-# 	OUTPUT ${CYTHON_CPP}
-# 	COMMAND ${Python3_EXECUTABLE} -m cython --cplus -3 ${CYTHON_SRC} -o ${CYTHON_CPP}
-# 	DEPENDS ${CYTHON_SRC}
-# 	COMMENT "Running Cython"
-# 	VERBATIM
-# )
-#
-# # Step B -> build Cython-generated module
-# add_library(cython_part MODULE ${CYTHON_CPP})
-# target_include_directories(cython_part PRIVATE ${Python3_INCLUDE_DIRS})
-# set_target_properties(cython_part PROPERTIES
-# 	PREFIX "" # no 'lib' prefix
-# 	CXX_VISIBILITY_PRESET default
-# 	VISIBILITY_INLINES_HIDDEN OFF
-# )
-
-# Step C -> build pybind11 module
-# pybind11_add_module(pybind_part pybind_part.cpp)
-# target_link_libraries(pybind_part PRIVATE Python3::Python)
-# target_compile_features(pybind_part PUBLIC cxx_std_20)
-# add_dependencies(pybind_part cython_part)
-
+#############################################################
+# Targets                                                   #
+#############################################################
 if(WIN32)
 	set(PYOSG_COMPILE_OPTIONS
 		"/W4"
@@ -73,18 +102,6 @@ else(WIN32)
 	endif()
 endif()
 
-find_package(OpenSceneGraph REQUIRED
-	osg
-	osgUtil
-	osgDB
-	osgGA
-	osgViewer
-	# osgUtil
-	# osgText
-)
-
-option(PYOSG_EMBEDDED "Build OpenSceneGraph bindings for embedding" OFF)
-
 set(PYOSG_SOURCES
 	"src/pyosg.cpp"
 	"src/osg/ArgumentParser.cpp"
@@ -119,37 +136,25 @@ set(PYOSG_SOURCES
 	"src/pyosgGA.cpp"
 	"src/pyosgViewer.cpp"
 )
-
 add_library(OpenSceneGraph_python STATIC ${PYOSG_SOURCES})
 
 target_link_libraries(OpenSceneGraph_python PRIVATE
 	Python3::Python
-	pybind11::module
+	pybind11::headers
 	${OPENSCENEGRAPH_LIBRARIES}
 )
 target_compile_features(OpenSceneGraph_python PUBLIC cxx_std_20)
 target_compile_options(OpenSceneGraph_python PRIVATE ${PYOSG_COMPILE_OPTIONS})
 target_include_directories(OpenSceneGraph_python PUBLIC
-	# TODO: This is currently a hack to ensure `pybind11x.hpp` is found! In the
-	# future, it will come in as another submodule!
 	"${CMAKE_SOURCE_DIR}/etc"
 	${OPENSCENEGRAPH_INCLUDE_DIRS}
 )
-# TODO: PCH didn't help much, but the "unity" build made the project go from
-# taking 3 full minutes to 30s or less. That's pretty incredible.
-# target_precompile_headers(OpenSceneGraph_python PRIVATE "src/pyosg_pch.hpp")
-# set_target_properties(OpenSceneGraph_python PROPERTIES
-# 	UNITY_BUILD ON
-# 	UNITY_BUILD_BATCH_SIZE 1000
-# )
-set_property(TARGET OpenSceneGraph_python PROPERTY POSITION_INDEPENDENT_CODE ON)
-# set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
 
 if(NOT PYOSG_EMBEDDED)
-	pybind11_add_module(OpenSceneGraph "src/OpenSceneGraph-python.cpp")
+	pybind11_add_module(${SKBUILD_PROJECT_NAME} "src/OpenSceneGraph-python.cpp")
+	target_link_libraries(${SKBUILD_PROJECT_NAME} PRIVATE OpenSceneGraph_python)
 
-	target_link_libraries(OpenSceneGraph PRIVATE OpenSceneGraph_python)
-
+    install(TARGETS ${SKBUILD_PROJECT_NAME} LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}")
 else()
 	add_executable(embed
 		"src/OpenSceneGraph-python.cpp"
@@ -160,16 +165,3 @@ else()
 	target_link_libraries(embed PRIVATE pybind11::embed OpenSceneGraph_python)
 	target_include_directories(embed PRIVATE "${CMAKE_SOURCE_DIR}/src")
 endif()
-
-# pybind11_add_module(osgEarth
-# 	"src/osgEarth-python.cpp"
-# )
-#
-# target_link_libraries(osgEarth PRIVATE
-# 	Python3::Python
-# 	osgEarthd
-# )
-# target_compile_features(osgEarth PUBLIC cxx_std_20)
-# # target_link_libraries(osgEarth PRIVATE ${OPENSCENEGRAPH_LIBRARIES} osgEarthd)
-# target_include_directories(osgEarth PRIVATE ${OPENSCENEGRAPH_INCLUDE_DIRS})
-# target_link_directories(osgEarth PRIVATE "${CMAKE_INSTALL_PREFIX}/lib")
