@@ -25,9 +25,20 @@
 
 #if defined(__clang__)
 
-#define PYOSG_DISABLE_WARNINGS
+#define PYOSG_DISABLE_WARNINGS \
+    _Pragma("clang diagnostic push") \
+	_Pragma("clang diagnostic ignored \"-Wconversion\"") \
+	_Pragma("clang diagnostic ignored \"-Wsign-conversion\"") \
+	_Pragma("clang diagnostic ignored \"-Wdeprecated-copy\"") \
+	_Pragma("clang diagnostic ignored \"-Wfloat-conversion\"") \
+	_Pragma("clang diagnostic ignored \"-Wsign-compare\"") \
+	_Pragma("clang diagnostic ignored \"-Woverloaded-virtual\"") \
+	_Pragma("clang diagnostic ignored \"-Wshadow\"") \
+	_Pragma("clang diagnostic ignored \"-Wunused-but-set-variable\"") \
+	_Pragma("clang diagnostic ignored \"-Winconsistent-missing-override\"")
 
-#define PYOSG_ENABLE_WARNINGS
+#define PYOSG_ENABLE_WARNINGS \
+    _Pragma("clang diagnostic push")
 
 #elif defined(__GNUC__)
 

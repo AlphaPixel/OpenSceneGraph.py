@@ -22,20 +22,20 @@ public:
 
       PYOSG_ENABLE_WARNINGS
 
-  //      using osg::Object::Object;
+      using osg::Object::Object;
 
-  // explicit Object()
-  //: osg::Object() {}
+  explicit Object() : osg::Object() {}
   // ~Object() override {}
 
   // TODO: These are used often, and Python subclasses MIGHT need to override
-  // them! void resizeGLObjectBuffers(unsigned int) override void
-  // releaseGLObjects(osg::State* = 0) const override
+  // them!
+  // void resizeGLObjectBuffers(unsigned int) override
+  // void releaseGLObjects(osg::State* = 0) const override
   //
   // virtual const char *libraryName() const { return "pyosg"; }
   // virtual const char *className() const { return "detail::Object"; }
-  //  virtual osg::Object *cloneType() const { return new Object(*this); }
-  //  virtual osg::Object *clone() const { return new Object(*this); }
+  // virtual osg::Object *cloneType() const { return new Object(*this); }
+  // virtual osg::Object *clone() const { return new Object(*this); }
 };
 
 class UserDataContainer : public osg::UserDataContainer {
