@@ -9,7 +9,7 @@
 #include <osg/Version>
 
 #ifdef PYOSG_EMBEDDED
-extern "C" PYBIND11_EXPORT PyObject *PyInit_OpenSceneGraph();
+extern "C" PYBIND11_EXPORT PyObject *PyInit_pyosg();
 #endif
 
 PYOSG_CONSTRUCTOR(pyosg_preinit) {
@@ -87,7 +87,7 @@ std::string pyosg_async_task_example(size_t seconds, StopEvent *stop,
   return "result-from-cpp";
 }
 
-PYBIND11_MODULE(OpenSceneGraph, m) {
+PYBIND11_MODULE(pyosg, m) {
   auto osg = m.def_submodule("osg", "osg namespace");
 
   pyosg::bind(osg);

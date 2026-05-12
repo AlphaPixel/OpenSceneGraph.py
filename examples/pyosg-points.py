@@ -13,8 +13,8 @@ os.environ.update({
 	"OSG_GL_CONTEXT_VERSION": "4.6"
 })
 
-from OpenSceneGraph import *
-from OpenSceneGraph.GL import *
+from pyosg import *
+from pyosg.GL import *
 
 VERTEX_SHADER = """
 #version 330 core
