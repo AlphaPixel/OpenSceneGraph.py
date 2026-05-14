@@ -10,14 +10,14 @@
   , mesa-gl-headers
   , libGL
   , numpy
+  , pkgs
   , stdenv
 }:
 
-buildPythonPackage rec {
+buildPythonPackage.override { stdenv = pkgs.clangStdenv; } rec {
   pname = "pyosg";
   version = "1.0.0";
   pyproject = true;
-
   disabled = pythonOlder "3.8";
 
   src = ../.;

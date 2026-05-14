@@ -1,14 +1,14 @@
 { inputs, ... }:
-
-let self = inputs.self;
-
+let
+    self = inputs.self;
 in {
   flake.overlays.default = inputs.nixpkgs.lib.composeManyExtensions [
     self.overlays.dev
     (final: prev: {
       pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
         (python-final: python-prev: {
-          osgpy = python-final.callPackage ./default.nix {};
+          osgpy = python-final.callPackage ./default.nix {
+          };
         })
       ];
       openscenegraph = prev.openscenegraph.overrideAttrs (previousAttrs: {

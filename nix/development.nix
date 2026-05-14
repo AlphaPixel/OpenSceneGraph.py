@@ -1,5 +1,4 @@
 { inputs, ... }:
-
 let
   self = inputs.self;
   nixpkgs = inputs.nixpkgs;
