@@ -185,43 +185,43 @@ void main_depth() {
 	// color = vec4(visualizeAbsoluteDepth_test(d, projMat));
 }
 
-void main_claude() {
-    vec4 c = texture(colorTex, uv);
-    float d = texture(depthTex, uv).r;
+void main_toon() {
+	vec4 c = texture(colorTex, uv);
+	float d = texture(depthTex, uv).r;
 
-    // Texel size for neighbor sampling
-    vec2 texel = 4.0 / vec2(800.0, 600.0);
+	// Texel size for neighbor sampling
+	vec2 texel = 4.0 / vec2(800.0, 600.0);
 
-    // Sample depth at 4 neighbors
-    float dL = texture(depthTex, uv + vec2(-texel.x, 0.0)).r;
-    float dR = texture(depthTex, uv + vec2( texel.x, 0.0)).r;
-    float dU = texture(depthTex, uv + vec2(0.0,  texel.y)).r;
-    float dD = texture(depthTex, uv + vec2(0.0, -texel.y)).r;
+	// Sample depth at 4 neighbors
+	float dL = texture(depthTex, uv + vec2(-texel.x, 0.0)).r;
+	float dR = texture(depthTex, uv + vec2( texel.x, 0.0)).r;
+	float dU = texture(depthTex, uv + vec2(0.0, texel.y)).r;
+	float dD = texture(depthTex, uv + vec2(0.0, -texel.y)).r;
 
-    // Linearize them all so edges are consistent across depth range
-    float z  = linearizeDepth(d,  znear, zfar);
-    float zL = linearizeDepth(dL, znear, zfar);
-    float zR = linearizeDepth(dR, znear, zfar);
-    float zU = linearizeDepth(dU, znear, zfar);
-    float zD = linearizeDepth(dD, znear, zfar);
+	// Linearize them all so edges are consistent across depth range
+	float z = linearizeDepth(d, znear, zfar);
+	float zL = linearizeDepth(dL, znear, zfar);
+	float zR = linearizeDepth(dR, znear, zfar);
+	float zU = linearizeDepth(dU, znear, zfar);
+	float zD = linearizeDepth(dD, znear, zfar);
 
-    // Sobel-ish edge detection on linearized depth
-    float edgeH = abs(zL - zR);
-    float edgeV = abs(zU - zD);
-    float edge = sqrt(edgeH * edgeH + edgeV * edgeV);
+	// Sobel-ish edge detection on linearized depth
+	float edgeH = abs(zL - zR);
+	float edgeV = abs(zU - zD);
+	float edge = sqrt(edgeH * edgeH + edgeV * edgeV);
 
-    // Threshold relative to depth (edges far away need less delta)
-    float threshold = z * 0.03;
-    // float outline = edge > threshold ? 1.0 : 0.0;
-    float outline = smoothstep(threshold * 0.5, threshold * 1.5, edge);
+	// Threshold relative to depth (edges far away need less delta)
+	float threshold = z * 0.03;
+	// float outline = edge > threshold ? 1.0 : 0.0;
+	float outline = smoothstep(threshold * 0.5, threshold * 1.5, edge);
 
-    // Black outline over scene color
-    color = mix(c, vec4(0.0, 0.0, 0.0, 1.0), outline);
+	// Black outline over scene color
+	color = mix(c, vec4(0.0, 0.0, 0.0, 1.0), outline);
 }
 
 void main() {
 	// main_depth(); return;
-	main_claude(); return;
+	main_toon(); return;
 
 	float d = texture(depthTex, uv).r;
 	vec4 c = texture(colorTex, uv);
@@ -405,7 +405,7 @@ if __name__ == "__main__":
 
 		hudCam.stateSet.uniforms["znear"] = float(near)
 		hudCam.stateSet.uniforms["zfar"] = float(far)
-		hudCam.stateSet.uniforms["proj"] = osg.Matrixf(pm)
+		hudCam.stateSet.uniforms["projMat"] = osg.Matrixf(pm)
 
 	v.sceneData = r
 	v.cameraManipulator = osgGA.TrackballManipulator()
