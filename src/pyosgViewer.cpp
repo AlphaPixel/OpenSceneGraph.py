@@ -1,6 +1,8 @@
 #include "pyosgViewer.hpp"
 #include "pyosgGA.hpp"
 
+#include "osg/ArgumentParser.hpp"
+
 PYOSG_DISABLE_WARNINGS
 
 #include <osgGA/TrackballManipulator>
@@ -302,7 +304,10 @@ void bind(py::module_& m) {
 		osg::ref_ptr<osgViewer::Viewer>
 	>(m, "Viewer")
 		.def(py::init<>())
-		.def(py::init<osg::ArgumentParser&>())
+		// .def(py::init<osg::ArgumentParser&>())
+		.def(py::init([](pyosg::detail::ArgumentParser& args) {
+			return new osgViewer::Viewer(args.parser);
+		}))
 
 		.def(
 			"setUpViewerAsEmbeddedInWindow",
