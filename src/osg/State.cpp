@@ -91,12 +91,13 @@ void bind_State(py::module_& m) {
 	sa.attr("GLModeValue") = detail::builtin_int();
 	sa.attr("OverrideValue") = detail::builtin_int();
 
-	py::enum_<osg::StateAttribute::Values>(sa, "Values")
+	py::enum_<osg::StateAttribute::Values>(sa, "Values", py::arithmetic())
 		.value("OFF", osg::StateAttribute::Values::OFF)
 		.value("ON", osg::StateAttribute::Values::ON)
 		.value("OVERRIDE", osg::StateAttribute::Values::OVERRIDE)
 		.value("PROTECTED", osg::StateAttribute::Values::PROTECTED)
 		.value("INHERIT", osg::StateAttribute::Values::INHERIT)
+		.export_values()
 	;
 
 	py::enum_<osg::StateAttribute::Type>(sa, "Type")
@@ -165,6 +166,7 @@ void bind_State(py::module_& m) {
 		.value("BINDIMAGETEXTURE", osg::StateAttribute::BINDIMAGETEXTURE)
 		.value("SAMPLER", osg::StateAttribute::SAMPLER)
 		.value("CAPABILITY", osg::StateAttribute::CAPABILITY)
+		.export_values()
 	;
 
 	auto ss = py::class_<
@@ -188,6 +190,7 @@ void bind_State(py::module_& m) {
 		.value("DEFAULT_BIN", osg::StateSet::DEFAULT_BIN)
 		.value("OPAQUE_BIN", osg::StateSet::OPAQUE_BIN)
 		.value("TRANSPARENT_BIN", osg::StateSet::TRANSPARENT_BIN)
+		.export_values()
 	;
 
 	py::enum_<osg::StateSet::RenderBinMode>(ss, "RenderBinMode")
@@ -199,6 +202,7 @@ void bind_State(py::module_& m) {
 			"OVERRIDE_PROTECTED_RENDERBIN_DETAILS",
 			osg::StateSet::OVERRIDE_PROTECTED_RENDERBIN_DETAILS
 		)
+		.export_values()
 	;
 
 	// TODO: Add append/extend methods!
