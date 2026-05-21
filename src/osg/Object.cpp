@@ -36,7 +36,12 @@ void bind_Object(py::module_& m) {
 		})
 		.def_property_readonly(
 			"addr",
-			[](const osg::Referenced& self) { return reinterpret_cast<uintptr_t>(&self); }
+			// This only returns the "offset" of `osg::Referenced` in the vtable, NOT the address we
+			// actually want; in order to get that, we need the second (uglier) approach.
+			// [](const osg::Referenced& self) { return reinterpret_cast<uintptr_t>(&self); }
+			[](const osg::Referenced& self) {
+				return reinterpret_cast<std::uintptr_t>(dynamic_cast<const void*>(&self));
+			}
 		);
 	;
 

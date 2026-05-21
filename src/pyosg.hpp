@@ -124,6 +124,8 @@ namespace detail {
 		raise_error(PyExc_FileNotFoundError, msg.c_str());
 	}
 
+	// Builds a `py::list` by invoking the `Getter` once for every `N`'th item (useful for
+	// sequential containers); requires that size be known AT COMPILE TIME.
 	template<size_t N, typename Getter>
 	py::str seq_repr(const char* name, Getter get) {
 		py::list items;
