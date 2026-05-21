@@ -86,38 +86,38 @@ find_package(OpenSceneGraph REQUIRED
 option(PYOSG_EMBEDDED "Build OpenSceneGraph bindings for embedding" OFF)
 
 set(PYOSG_SOURCES
-	"src/pyosg.cpp"
-	"src/osg/ArgumentParser.cpp"
-	"src/osg/Notify.cpp"
-	"src/osg/Vec.cpp"
-	"src/osg/Quat.cpp"
-	"src/osg/Matrix.cpp"
-	"src/osg/Bound.cpp"
-	"src/osg/Buffer.cpp"
-	"src/osg/Array.cpp"
-	"src/osg/Object.cpp"
-	"src/osg/Node.cpp"
-	"src/osg/NodeCallback.cpp"
-	"src/osg/NodeVisitor.cpp"
-	"src/osg/Drawable.cpp"
-	"src/osg/Geometry.cpp"
-	"src/osg/Group.cpp"
-	"src/osg/Transform.cpp"
-	"src/osg/Geode.cpp"
-	"src/osg/Shape.cpp"
-	"src/osg/View.cpp"
-	"src/osg/Camera.cpp"
-	"src/osg/State.cpp"
-	"src/osg/StateAttributes.cpp"
-	"src/osg/Uniform.cpp"
-	"src/osg/Shader.cpp"
-	"src/osg/Program.cpp"
-	"src/osg/Texture.cpp"
-	"src/osg/GraphicsContext.cpp"
-	"src/pyosgUtil.cpp"
-	"src/pyosgDB.cpp"
-	"src/pyosgGA.cpp"
-	"src/pyosgViewer.cpp"
+	"pyosg/pyosg.cpp"
+	"pyosg/osg/ArgumentParser.cpp"
+	"pyosg/osg/Notify.cpp"
+	"pyosg/osg/Vec.cpp"
+	"pyosg/osg/Quat.cpp"
+	"pyosg/osg/Matrix.cpp"
+	"pyosg/osg/Bound.cpp"
+	"pyosg/osg/Buffer.cpp"
+	"pyosg/osg/Array.cpp"
+	"pyosg/osg/Object.cpp"
+	"pyosg/osg/Node.cpp"
+	"pyosg/osg/NodeCallback.cpp"
+	"pyosg/osg/NodeVisitor.cpp"
+	"pyosg/osg/Drawable.cpp"
+	"pyosg/osg/Geometry.cpp"
+	"pyosg/osg/Group.cpp"
+	"pyosg/osg/Transform.cpp"
+	"pyosg/osg/Geode.cpp"
+	"pyosg/osg/Shape.cpp"
+	"pyosg/osg/View.cpp"
+	"pyosg/osg/Camera.cpp"
+	"pyosg/osg/State.cpp"
+	"pyosg/osg/StateAttributes.cpp"
+	"pyosg/osg/Uniform.cpp"
+	"pyosg/osg/Shader.cpp"
+	"pyosg/osg/Program.cpp"
+	"pyosg/osg/Texture.cpp"
+	"pyosg/osg/GraphicsContext.cpp"
+	"pyosg/pyosgUtil.cpp"
+	"pyosg/pyosgDB.cpp"
+	"pyosg/pyosgGA.cpp"
+	"pyosg/pyosgViewer.cpp"
 )
 
 add_library(OpenSceneGraph_python STATIC ${PYOSG_SOURCES})
@@ -137,7 +137,7 @@ target_include_directories(OpenSceneGraph_python PUBLIC
 )
 # TODO: PCH didn't help much, but the "unity" build made the project go from
 # taking 3 full minutes to 30s or less. That's pretty incredible.
-# target_precompile_headers(OpenSceneGraph_python PRIVATE "src/pyosg_pch.hpp")
+# target_precompile_headers(OpenSceneGraph_python PRIVATE "pyosg/pyosg_pch.hpp")
 # set_target_properties(OpenSceneGraph_python PROPERTIES
 # 	UNITY_BUILD ON
 # 	UNITY_BUILD_BATCH_SIZE 1000
@@ -146,23 +146,23 @@ set_property(TARGET OpenSceneGraph_python PROPERTY POSITION_INDEPENDENT_CODE ON)
 # set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
 
 if(NOT PYOSG_EMBEDDED)
-	pybind11_add_module(OpenSceneGraph "src/OpenSceneGraph-python.cpp")
+	pybind11_add_module(OpenSceneGraph "pyosg/OpenSceneGraph-python.cpp")
 
 	target_link_libraries(OpenSceneGraph PRIVATE OpenSceneGraph_python)
 
 else()
 	add_executable(embed
-		"src/OpenSceneGraph-python.cpp"
+		"pyosg/OpenSceneGraph-python.cpp"
 		"etc/embed.cpp"
 	)
 
 	target_compile_definitions(embed PRIVATE PYOSG_EMBEDDED=1)
 	target_link_libraries(embed PRIVATE pybind11::embed OpenSceneGraph_python)
-	target_include_directories(embed PRIVATE "${CMAKE_SOURCE_DIR}/src")
+	target_include_directories(embed PRIVATE "${CMAKE_SOURCE_DIR}/pyosg")
 endif()
 
 # pybind11_add_module(osgEarth
-# 	"src/osgEarth-python.cpp"
+# 	"pyosg/osgEarth-python.cpp"
 # )
 #
 # target_link_libraries(osgEarth PRIVATE

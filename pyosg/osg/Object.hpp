@@ -67,6 +67,17 @@ namespace detail {
 			);
 		}
 	};
+
+	template<typename T>
+	std::uintptr_t objectAddress(const T& self) {
+		PYOSG_DISABLE_WARNINGS
+
+			const void* ptr = dynamic_cast<const void*>(&self);
+
+		PYOSG_ENABLE_WARNINGS
+
+		return reinterpret_cast<std::uintptr_t>(ptr);
+	}
 }
 
 void bind_Object(py::module_& m);

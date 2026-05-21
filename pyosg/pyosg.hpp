@@ -52,6 +52,7 @@
 	_Pragma("GCC diagnostic ignored \"-Woverloaded-virtual\"") \
 	_Pragma("GCC diagnostic ignored \"-Wshadow\"") \
 	_Pragma("GCC diagnostic ignored \"-Wunused-but-set-variable\"") \
+	_Pragma("GCC diagnostic ignored \"-Wnonnull-compare\"")
 
 #define PYOSG_ENABLE_WARNINGS \
 	_Pragma("GCC diagnostic pop")
