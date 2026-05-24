@@ -11,8 +11,6 @@ void bind_Array(py::module_& m) {
 		.def_property_readonly("type", &osg::Array::getType)
 		.def_property_readonly("dataSize", &osg::Array::getDataSize)
 		.def_property_readonly("dataType", &osg::Array::getDataType)
-		// .def_property("bufferObject"
-		// .def_property("bufferIndex"
 	;
 
 	py::enum_<osg::Array::Type>(arr, "Type")

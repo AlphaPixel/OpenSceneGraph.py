@@ -17,14 +17,13 @@ namespace pyx = pybind11x;
 namespace pyosg {
 
 namespace detail {
-	using CameraSlots = pyx::PropertySlots<osg::Camera, 4>;
-	using CameraStorage = pyx::ProxyStorageOSG<osg::Camera, CameraSlots>;
-
 	constexpr size_t InitialDrawCallbackSlot = 0;
 	constexpr size_t PreDrawCallbackSlot = 1;
 	constexpr size_t PostDrawCallbackSlot = 2;
 	constexpr size_t FinalDrawCallbackSlot = 3;
 
+	using CameraSlots = pyx::PropertySlots<osg::Camera, 4>;
+	using CameraStorage = pyx::ProxyStorageOSG<osg::Camera, CameraSlots>;
 	using DrawCallbackType = osg::Camera::DrawCallback;
 	using DrawCallbackWrapper = CallableCallback<
 		osg::Camera::DrawCallback,

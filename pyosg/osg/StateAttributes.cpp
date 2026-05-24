@@ -5,6 +5,7 @@ PYOSG_DISABLE_WARNINGS
 #include <osg/Viewport>
 #include <osg/BlendFunc>
 #include <osg/Depth>
+#include <osg/BufferIndexBinding>
 
 PYOSG_ENABLE_WARNINGS
 
@@ -94,6 +95,34 @@ void bind_StateAttributes(py::module_& m) {
 			"zNear"_a=0.0,
 			"zFar"_a=1.0,
 			"writeMask"_a=true
+		)
+	;
+
+	py::class_<
+		osg::BufferIndexBinding,
+		osg::StateAttribute,
+		osg::ref_ptr<osg::BufferIndexBinding>
+	>(m, "BufferIndexBinding")
+		// .def(py::init<GLenum, GLuint>())
+		// .def(py::init<GLenum, GLuint, osg::BufferData*, GLintptr, GLsizeiptr>(),
+		// 	"target"_a,
+		// 	"index"_a,
+		// 	"bd"_a,
+		// 	"offset"_a=0,
+		// 	"size"_a=0
+		// )
+	;
+
+	py::class_<
+		osg::ShaderStorageBufferBinding,
+		osg::BufferIndexBinding,
+		osg::ref_ptr<osg::ShaderStorageBufferBinding>
+	>(m, "ShaderStorageBufferBinding")
+		.def(py::init<GLuint, osg::BufferData*, GLintptr, GLsizeiptr>(),
+			"index"_a,
+			"bd"_a,
+			"offset"_a=0,
+			"size"_a=0
 		)
 	;
 }

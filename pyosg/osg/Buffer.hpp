@@ -8,6 +8,10 @@ PYOSG_DISABLE_WARNINGS
 
 PYOSG_ENABLE_WARNINGS
 
+#include "pybind11x.hpp"
+
+namespace pyx = pybind11x;
+
 namespace pyosg {
 
 namespace detail {
@@ -29,6 +33,12 @@ namespace detail {
 			);
 		}
 	};
+
+	constexpr size_t BufferObjectSlot = 0;
+	constexpr size_t BufferIndexSlot = 1;
+
+	using BufferDataSlots = pyx::PropertySlots<osg::BufferData, 2>;
+	using BufferDataStorage = pyx::ProxyStorageOSG<osg::BufferData, BufferDataSlots>;
 }
 
 void bind_Buffer(py::module_& m);
