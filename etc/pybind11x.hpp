@@ -8,9 +8,7 @@
 // SequenceProxy -> "Turn arbitrary C++ containers into Python lists."
 // MappingProxy -> "Turn arbitrary C++ containers into Python dicts."
 // Traits -> "Define behavior once, reuse everywhere."
-
-// TODO: Remove me!
-#include <iostream>
+// build_info -> Injects "common" Python compiler information, merged with a user-defined dict
 
 #include "pybind11/pybind11.h"
 #include "pybind11/stl.h"

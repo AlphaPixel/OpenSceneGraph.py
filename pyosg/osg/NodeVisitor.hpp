@@ -8,6 +8,10 @@ PYOSG_DISABLE_WARNINGS
 
 PYOSG_ENABLE_WARNINGS
 
+// TODO: See `NodeVisitor.cpp` for WHY this exists; its current use is simply for "forwarding" to
+// other wrapped functions that require a valid `NodePath` argument.
+PYBIND11_MAKE_OPAQUE(std::vector<osg::Node*>);
+
 namespace pyosg {
 
 namespace detail {

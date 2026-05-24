@@ -3,7 +3,17 @@
 namespace pyosg {
 
 void bind_NodeVisitor(py::module_& m) {
-	auto nv = py::class_<osg::NodeVisitor, detail::NodeVisitor, osg::Object, osg::ref_ptr<osg::NodeVisitor>>(m, "NodeVisitor");
+	// TODO: This _works_, but isn't really what we WANT; it'll return the pointers, exactly as
+	// requested, but it doesn't do us much good in Python, unless we're just passing it directly
+	// to something else (like the `osg::computeWorldToLocal` helpers).
+	py::bind_vector<std::vector<osg::Node*>>(m, "NodePath");
+
+	auto nv = py::class_<
+		osg::NodeVisitor,
+		detail::NodeVisitor,
+		osg::Object,
+		osg::ref_ptr<osg::NodeVisitor>
+	>(m, "NodeVisitor");
 
 	py::enum_<osg::NodeVisitor::TraversalMode>(nv, "TraversalMode")
 		.value("TRAVERSE_NONE", osg::NodeVisitor::TRAVERSE_NONE)
@@ -44,6 +54,12 @@ void bind_NodeVisitor(py::module_& m) {
 		.def_property_readonly("frameStamp",
 			py::overload_cast<>(&osg::NodeVisitor::getFrameStamp, py::const_),
 			py::return_value_policy::reference
+		)
+		// TODO: See the comment for `bind_vector` above!
+		.def_property_readonly(
+			"nodePath",
+			py::overload_cast<>(&osg::NodeVisitor::getNodePath, py::const_),
+			py::return_value_policy::reference_internal
 		)
 	;
 }

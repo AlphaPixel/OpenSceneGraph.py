@@ -1,15 +1,10 @@
-#include "../pyosg.hpp"
-
-PYOSG_DISABLE_WARNINGS
-
-#include <osg/MatrixTransform>
-#include <osg/PositionAttitudeTransform>
-
-PYOSG_ENABLE_WARNINGS
+#include "Transform.hpp"
+// TODO: We include the following file ONLY BECAUSE we need the `MAKE_OPAQUE` call in the same
+// source file where it's actually USED. :/ There are ways around this we can add to pybind11x.hpp
+// at some time in the future.
+#include "NodeVisitor.hpp"
 
 namespace pyosg {
-
-// namespace detail {}
 
 void bind_Transform(py::module_& m) {
 	auto transform = py::class_<
@@ -87,6 +82,27 @@ void bind_Transform(py::module_& m) {
 			"asPositionAttitudeTransform",
 			py::overload_cast<>(&osg::Transform::asPositionAttitudeTransform),
 			py::return_value_policy::reference_internal
+		)
+	;
+
+	m
+		.def("computeLocalToWorld", &osg::computeLocalToWorld,
+			"nodePath"_a,
+			"ignoreCameras"_a=true
+		)
+		.def("computeWorldToLocal", &osg::computeWorldToLocal,
+			"nodePath"_a,
+			"ignoreCameras"_a=true
+		)
+		.def("computeLocalToEye", &osg::computeLocalToEye,
+			"modelview"_a,
+			"nodePath"_a,
+			"ignoreCameras"_a=true
+		)
+		.def("computeEyeToLocal", &osg::computeEyeToLocal,
+			"modelview"_a,
+			"nodePath"_a,
+			"ignoreCameras"_a=true
 		)
 	;
 }
