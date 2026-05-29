@@ -103,38 +103,38 @@ else(WIN32)
 endif()
 
 set(PYOSG_SOURCES
-	"src/pyosg.cpp"
-	"src/osg/ArgumentParser.cpp"
-	"src/osg/Notify.cpp"
-	"src/osg/Vec.cpp"
-	"src/osg/Quat.cpp"
-	"src/osg/Matrix.cpp"
-	"src/osg/Bound.cpp"
-	"src/osg/Buffer.cpp"
-	"src/osg/Array.cpp"
-	"src/osg/Object.cpp"
-	"src/osg/Node.cpp"
-	"src/osg/NodeCallback.cpp"
-	"src/osg/NodeVisitor.cpp"
-	"src/osg/Drawable.cpp"
-	"src/osg/Geometry.cpp"
-	"src/osg/Group.cpp"
-	"src/osg/Transform.cpp"
-	"src/osg/Geode.cpp"
-	"src/osg/Shape.cpp"
-	"src/osg/View.cpp"
-	"src/osg/Camera.cpp"
-	"src/osg/State.cpp"
-	"src/osg/StateAttributes.cpp"
-	"src/osg/Uniform.cpp"
-	"src/osg/Shader.cpp"
-	"src/osg/Program.cpp"
-	"src/osg/Texture.cpp"
-	"src/osg/GraphicsContext.cpp"
-	"src/pyosgUtil.cpp"
-	"src/pyosgDB.cpp"
-	"src/pyosgGA.cpp"
-	"src/pyosgViewer.cpp"
+	"pyosg/pyosg.cpp"
+	"pyosg/osg/ArgumentParser.cpp"
+	"pyosg/osg/Notify.cpp"
+	"pyosg/osg/Vec.cpp"
+	"pyosg/osg/Quat.cpp"
+	"pyosg/osg/Matrix.cpp"
+	"pyosg/osg/Bound.cpp"
+	"pyosg/osg/Buffer.cpp"
+	"pyosg/osg/Array.cpp"
+	"pyosg/osg/Object.cpp"
+	"pyosg/osg/Node.cpp"
+	"pyosg/osg/NodeCallback.cpp"
+	"pyosg/osg/NodeVisitor.cpp"
+	"pyosg/osg/Drawable.cpp"
+	"pyosg/osg/Geometry.cpp"
+	"pyosg/osg/Group.cpp"
+	"pyosg/osg/Transform.cpp"
+	"pyosg/osg/Geode.cpp"
+	"pyosg/osg/Shape.cpp"
+	"pyosg/osg/View.cpp"
+	"pyosg/osg/Camera.cpp"
+	"pyosg/osg/State.cpp"
+	"pyosg/osg/StateAttributes.cpp"
+	"pyosg/osg/Uniform.cpp"
+	"pyosg/osg/Shader.cpp"
+	"pyosg/osg/Program.cpp"
+	"pyosg/osg/Texture.cpp"
+	"pyosg/osg/GraphicsContext.cpp"
+	"pyosg/pyosgUtil.cpp"
+	"pyosg/pyosgDB.cpp"
+	"pyosg/pyosgGA.cpp"
+	"pyosg/pyosgViewer.cpp"
 )
 add_library(OpenSceneGraph_python STATIC ${PYOSG_SOURCES})
 
@@ -151,13 +151,13 @@ target_include_directories(OpenSceneGraph_python PUBLIC
 )
 
 if(NOT PYOSG_EMBEDDED)
-	pybind11_add_module(${SKBUILD_PROJECT_NAME} "src/OpenSceneGraph-python.cpp")
+	pybind11_add_module(${SKBUILD_PROJECT_NAME} "pyosg/OpenSceneGraph-python.cpp")
 	target_link_libraries(${SKBUILD_PROJECT_NAME} PRIVATE OpenSceneGraph_python)
 
     install(TARGETS ${SKBUILD_PROJECT_NAME} LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}")
 else()
 	add_executable(embed
-		"src/OpenSceneGraph-python.cpp"
+		"pyosg/OpenSceneGraph-python.cpp"
 		"etc/embed.cpp"
 	)
 
