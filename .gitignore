@@ -1,7 +1,3 @@
-test/__pycache__
-etc/__pycache__
-BUILD-*
-
 # Prerequisites
 *.d
 
@@ -14,12 +10,6 @@ BUILD-*
 # Precompiled Headers
 *.gch
 *.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
 
 # Compiled Dynamic libraries
 *.so
@@ -41,5 +31,14 @@ BUILD-*
 *.out
 *.app
 
-# debug information files
-*.dwo
+# Build
+build
+
+# Nix
+result
+
+# Vscode
+.vscode/
+
+# Env
+.direnv
