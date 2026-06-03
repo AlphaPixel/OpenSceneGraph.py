@@ -148,6 +148,7 @@ if(NOT PYOSG_EMBEDDED)
 	pybind11_add_module(OpenSceneGraph "pyosg/OpenSceneGraph-python.cpp")
 
 	target_link_libraries(OpenSceneGraph PRIVATE OpenSceneGraph_python)
+    install(TARGETS OpenSceneGraph LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}")
 
 else()
 	add_executable(embed
