@@ -6,7 +6,7 @@ requires = [
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "pyosg"
+name = "OpenSceneGraph"
 version = "1.0.0"
 description = "And Python binding interface to OpenSceneGraph"
 # readme = "README.md"

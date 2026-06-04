@@ -10,11 +10,15 @@ in {
   perSystem = { system, pkgs-dev, lib, pkgs, ... }: {
     _module.args.pkgs-dev = import nixpkgs {
       inherit system;
-      overlays = [ self.overlays.dev ];
+      overlays = [ self.overlays.dev self.overlays.default ];
     };
 
     devShells.default = pkgs-dev.mkShell rec {
       name = "pyosg-devshell";
+
+      nativeBuildInputs = with pkgs-dev; [
+        openscenegraph
+      ];
 
       packages = with pkgs-dev; [
         (python3.withPackages (p:
@@ -22,6 +26,7 @@ in {
             numpy
             pybind11
           ]))
+        openscenegraph
         llvmPackages.clang
         cmake
         clang-tools

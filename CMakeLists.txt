@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(OpenSceneGraph-python LANGUAGES C CXX)
+project(S{SKBUILD_PROJECT_NAME} LANGUAGES C CXX)
 
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 find_package(pybind11 REQUIRED)
@@ -145,10 +145,10 @@ set_property(TARGET OpenSceneGraph_python PROPERTY POSITION_INDEPENDENT_CODE ON)
 # set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
 
 if(NOT PYOSG_EMBEDDED)
-	pybind11_add_module(OpenSceneGraph "pyosg/OpenSceneGraph-python.cpp")
+	pybind11_add_module(${SKBUILD_PROJECT_NAME} "pyosg/OpenSceneGraph-python.cpp")
 
-	target_link_libraries(OpenSceneGraph PRIVATE OpenSceneGraph_python)
-    install(TARGETS OpenSceneGraph LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}")
+	target_link_libraries(${SKBUILD_PROJECT_NAME} PRIVATE OpenSceneGraph_python)
+    install(TARGETS ${SKBUILD_PROJECT_NAME} LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}")
 
 else()
 	add_executable(embed

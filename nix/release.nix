@@ -11,7 +11,10 @@ in {
           };
         })
       ];
-      openscenegraph = prev.openscenegraph.overrideAttrs (previousAttrs: {
+      openscenegraph = (prev.openscenegraph.override {
+        withExamples = true;
+        withApps = true;
+      }).overrideAttrs (previousAttrs: {
         cmakeFlags = previousAttrs.cmakeFlags ++ [
           "-DOPENGL_PROFILE=GLCORE"
           "-DOSG_GL3_AVAILABLE=ON"
