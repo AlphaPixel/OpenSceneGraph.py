@@ -61,14 +61,16 @@ struct pyx::SequenceTraits<osgViewer::View> {
 		}
 
 		auto it = ehs.begin();
+
 		std::advance(it, static_cast<list_type::difference_type>(i));
+
 		return it;
 	}
 
 	static element_type* get(osgViewer::View* v, size_t i) {
 		auto* eh = nth(v, i)->get();
-
 		auto* gui = dynamic_cast<osgGA::GUIEventHandler*>(eh);
+
 		if(!gui) {
 			throw py::type_error(
 				"View event handler is not an osgGA::GUIEventHandler; "
@@ -85,12 +87,14 @@ struct pyx::SequenceTraits<osgViewer::View> {
 		}
 
 		auto it = nth(v, i);
+
 		*it = eh;
 	}
 
 	static void del(osgViewer::View* v, size_t i) {
 		auto& ehs = v->getEventHandlers();
 		auto it = nth(v, i);
+
 		ehs.erase(it);
 	}
 
@@ -260,6 +264,12 @@ void bind(py::module_& m) {
 
 			self.frame();
 		})
+
+		.def_property(
+			"realizeOperation",
+			&osgViewer::ViewerBase::getRealizeOperation,
+			&osgViewer::ViewerBase::setRealizeOperation
+		)
 	;
 
 	py::enum_<osgViewer::ViewerBase::ThreadingModel>(vb, "ThreadingModel")
