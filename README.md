@@ -1,4 +1,8 @@
-# Key Features (April, 2026)
+<p align="center">
+  <img src="logo.png" alt="OpenSceneGraph.py logo" width="220">
+</p>
+
+# Key Features (June, 2026)
 
 - Covers most of the core `osg` namespace, as well as significant portions of
   `osgViewer`, `osgUtil`, `osgGA`, and `osgDB`. Any missing or unwrapped
