@@ -3,6 +3,7 @@
 PYOSG_DISABLE_WARNINGS
 
 #include <osgDB/ReadFile>
+#include <osgDB/WriteFile>
 
 PYOSG_ENABLE_WARNINGS
 
@@ -124,8 +125,8 @@ void bind(py::module_& m) {
 
 	py::enum_<osgDB::ReaderWriter::WriteResult::WriteStatus>(wr, "WriteStatus")
 		.value("NOT_IMPLEMENTED", osgDB::ReaderWriter::WriteResult::NOT_IMPLEMENTED)
-		.value("FILE_NOT_HANDLED",  osgDB::ReaderWriter::WriteResult::FILE_NOT_HANDLED)
-		.value("ERROR_IN_WRITING_FILE",  osgDB::ReaderWriter::WriteResult::ERROR_IN_WRITING_FILE)
+		.value("FILE_NOT_HANDLED", osgDB::ReaderWriter::WriteResult::FILE_NOT_HANDLED)
+		.value("ERROR_IN_WRITING_FILE", osgDB::ReaderWriter::WriteResult::ERROR_IN_WRITING_FILE)
 		.value("FILE_SAVED", osgDB::ReaderWriter::WriteResult::FILE_SAVED)
 		.export_values()
 	;
@@ -139,6 +140,18 @@ void bind(py::module_& m) {
 	;
 
 	m.def(
+		"readObjectFile", [](const std::string& filename) {
+			osg::Object* obj = osgDB::readObjectFile(filename);
+
+			if(!obj) pyosg::detail::file_not_found(filename);
+
+			return obj;
+		},
+		py::arg("filename"),
+		"Read an OSG object from a file; pybind11 downcasts to the concrete type (e.g. osg.TextureCubeMap)"
+	);
+
+	m.def(
 		"readNodeFile", [](const std::string& filename) {
 			auto* node = osgDB::readNodeFile(filename);
 
@@ -148,6 +161,27 @@ void bind(py::module_& m) {
 		},
 		py::arg("filename"),
 		"Read an OSG node from a file and return it as an osg.Node"
+	);
+
+	m.def(
+		"readImageFile", [](const std::string& filename) {
+			auto* img = osgDB::readImageFile(filename);
+
+			if(!img) pyosg::detail::file_not_found(filename);
+
+			return img;
+		},
+		py::arg("filename"),
+		"Read an OSG image from a file and return it as an osg.Image"
+	);
+
+	m.def(
+		"writeImageFile", [](const osg::Image& img, const std::string& filename) {
+			return osgDB::writeImageFile(img, filename);
+		},
+		"img"_a,
+		"filename"_a,
+		"Write an OSG image from an osg.Image to the specified filename"
 	);
 
 	// m.def("readNodeFile", py::overload_cast<const std::string&>(&osgDB::readNodeFile));
