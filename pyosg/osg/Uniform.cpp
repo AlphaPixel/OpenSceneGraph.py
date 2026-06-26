@@ -243,13 +243,13 @@ void bind_Uniform(py::module_& m) {
 				);
 
 				/* // --- tuple override ---
-				if (py::isinstance<py::tuple>(obj)) {
+				if(py::isinstance<py::tuple>(obj)) {
 					auto t = py::cast<py::tuple>(obj);
 
-					if (t.size() < 2 || t.size() > 3)
+					if(t.size() < 2 || t.size() > 3)
 						throw py::type_error("Uniform tuple must be (type, value[, mode])");
 
-					auto type  = t[0].cast<osg::Uniform::Type>();
+					auto type = t[0].cast<osg::Uniform::Type>();
 					auto value = t[1];
 
 					self.setType(type);
