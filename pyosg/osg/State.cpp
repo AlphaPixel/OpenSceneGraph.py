@@ -205,15 +205,20 @@ void bind_State(py::module_& m) {
 		.export_values()
 	;
 
-	// TODO: Add append/extend methods!
+	detail::TextureAttributesProxy::bind(ss, "_TextureAttributes");
+
 	auto up = detail::UniformsProxy::bind(ss, "_Uniforms");
 
 	up
 		.def("append", [](detail::UniformsProxy& self, py::object u) {
-			pyx::MappingTraits<osg::StateSet>::apply(self.obj, std::nullopt, u);
+			pyx::MappingTraits<osg::StateSet, detail::UniformsTag>::apply(
+				self.obj,
+				std::nullopt,
+				u
+			);
 		})
 		.def("extend", [](detail::UniformsProxy& self, py::iterable uniforms) {
-			for(auto u : uniforms) pyx::MappingTraits<osg::StateSet>::apply(
+			for(auto u : uniforms) pyx::MappingTraits<osg::StateSet, detail::UniformsTag>::apply(
 				self.obj,
 				std::nullopt,
 				u
@@ -341,6 +346,15 @@ void bind_State(py::module_& m) {
 			"uniforms",
 			[](osg::StateSet& self) -> detail::UniformsProxy& {
 				return detail::StateSetStorage::get(self)->template proxy<detail::UniformsProxy>();
+			},
+			py::return_value_policy::reference_internal
+		)
+		.def_property_readonly(
+			"textureAttributes",
+			[](osg::StateSet& self) -> detail::TextureAttributesProxy& {
+				return detail::StateSetStorage::get(self)->template proxy<
+					detail::TextureAttributesProxy
+				>();
 			},
 			py::return_value_policy::reference_internal
 		)

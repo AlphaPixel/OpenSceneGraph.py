@@ -18,8 +18,13 @@ PYBIND11_MAKE_OPAQUE(osg::StateSet::ModeList);
 
 namespace pyx = pybind11x;
 
+namespace pyosg::detail {
+	struct UniformsTag;
+	struct TextureAttributesTag;
+}
+
 template<>
-struct pyx::MappingTraits<osg::StateSet> {
+struct pyx::MappingTraits<osg::StateSet, pyosg::detail::UniformsTag> {
 	using element_type = osg::Uniform;
 	using key_type = std::string;
 	using value_type = element_type*;
@@ -36,6 +41,7 @@ struct pyx::MappingTraits<osg::StateSet> {
 		return dynamic_cast<element_type*>(ss->getUniform(k));
 	}
 
+	// TODO: I think this can be REMOVED!
 	/* static void apply(osg::StateSet* ss, std::optional<key_type> k, py::handle h) {
 		// This is the ... weirdest ... path; users should avoid it.
 		if(py::isinstance<osg::Uniform>(h)) {
@@ -162,11 +168,96 @@ struct pyx::MappingTraits<osg::StateSet> {
 	}
 };
 
+template<>
+struct pyx::MappingTraits<osg::StateSet, pyosg::detail::TextureAttributesTag> {
+	using element_type = osg::StateAttribute;
+	using key_type = unsigned int;
+	using value_type = element_type*;
+
+	static value_type from_python(py::handle h) {
+		return h.cast<value_type>();
+	}
+
+	static size_t size(osg::StateSet* ss) {
+		size_t out = 0;
+		const auto& texture_attributes = ss->getTextureAttributeList();
+
+		for(unsigned int unit = 0; unit < texture_attributes.size(); unit++) {
+			if(ss->getTextureAttribute(unit, osg::StateAttribute::TEXTURE)) out++;
+		}
+
+		return out;
+	}
+
+	static element_type* get(osg::StateSet* ss, key_type unit) {
+		return ss->getTextureAttribute(unit, osg::StateAttribute::TEXTURE);
+	}
+
+	static void apply(osg::StateSet* ss, key_type unit, py::handle h) {
+		if(py::isinstance<osg::StateAttribute>(h)) {
+			auto* attr = h.cast<osg::StateAttribute*>();
+
+			if(attr->getType() != osg::StateAttribute::TEXTURE) throw py::type_error(
+				"Integer textureAttributes keys currently accept only TEXTURE attributes"
+			);
+
+			ss->setTextureAttributeAndModes(unit, attr, osg::StateAttribute::ON);
+
+			return;
+		}
+
+		if(py::isinstance<py::tuple>(h)) {
+			auto t = h.cast<py::tuple>();
+
+			if(t.size() != 2) throw py::type_error("Expected (attribute, mode)");
+
+			auto* attr = t[0].cast<osg::StateAttribute*>();
+
+			if(attr->getType() != osg::StateAttribute::TEXTURE) throw py::type_error(
+				"Integer textureAttributes keys currently accept only TEXTURE attributes"
+			);
+
+			auto mode = t[1].cast<osg::StateAttribute::GLModeValue>();
+
+			ss->setTextureAttributeAndModes(unit, attr, mode);
+
+			return;
+		}
+
+		throw py::type_error("Expected StateAttribute or (StateAttribute, mode)");
+	}
+
+	static void set(osg::StateSet* ss, key_type unit, py::handle h) {
+		apply(ss, unit, h);
+	}
+
+	static void del(osg::StateSet* ss, key_type unit) {
+		ss->removeTextureAttribute(unit, osg::StateAttribute::TEXTURE);
+	}
+
+	static std::vector<key_type> keys(osg::StateSet* ss) {
+		std::vector<key_type> out;
+
+		const auto& texture_attributes = ss->getTextureAttributeList();
+
+		for(unsigned int unit = 0; unit < texture_attributes.size(); unit++) {
+			if(ss->getTextureAttribute(unit, osg::StateAttribute::TEXTURE)) out.push_back(unit);
+		}
+
+		return out;
+	}
+};
+
 namespace pyosg {
 
 namespace detail {
-	using UniformsProxy = pyx::MappingProxy<osg::StateSet>;
-	using StateSetStorage = pyx::ProxyStorageOSG<osg::StateSet, UniformsProxy>;
+	using UniformsProxy = pyx::MappingProxy<osg::StateSet, UniformsTag>;
+	using TextureAttributesProxy = pyx::MappingProxy<osg::StateSet, TextureAttributesTag>;
+	using StateSetStorage = pyx::ProxyStorageOSG<
+		osg::StateSet,
+		UniformsProxy,
+		TextureAttributesProxy
+	>;
 }
 
 void bind_State(py::module_& m);
