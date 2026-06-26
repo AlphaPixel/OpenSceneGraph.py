@@ -16,6 +16,8 @@
 #include "pybind11/operators.h"
 #include "pybind11/embed.h"
 
+#include <algorithm>
+
 namespace py = pybind11;
 
 using namespace std::string_literals;
@@ -803,6 +805,212 @@ public MapSlotCache<typename MappingTraits<T, Tag>::key_type> {
 			.def("keys", &MappingProxy<T, Tag>::keys)
 			.def("values", &MappingProxy<T, Tag>::values)
 			.def("items", &MappingProxy<T, Tag>::items)
+		;
+
+		return mp;
+	}
+};
+
+// Defines how a C++ type behaves like a value mapping:
+//
+// - size / get / set / del / keys
+// - plus conversion from Python
+//
+// This is the scalar-value counterpart to `MappingTraits`. It intentionally does not require
+// `element_type` or pointer-valued `get()`, and `ValueMappingProxy` does not use `SlotCache`.
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
+struct ValueMappingTraits;
+
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
+concept ValueMappingTraitsConcept = requires(
+	T* obj,
+	typename ValueMappingTraits<T, Tag>::key_type key,
+	py::handle h
+) {
+	typename ValueMappingTraits<T, Tag>::key_type;
+	typename ValueMappingTraits<T, Tag>::value_type;
+
+	{
+		ValueMappingTraits<T, Tag>::from_python(h)
+	} -> std::same_as<typename ValueMappingTraits<T, Tag>::value_type>;
+
+	{ ValueMappingTraits<T, Tag>::size(obj) } -> std::convertible_to<size_t>;
+	{
+		ValueMappingTraits<T, Tag>::get(obj, key)
+	} -> std::same_as<typename ValueMappingTraits<T, Tag>::value_type>;
+	{ ValueMappingTraits<T, Tag>::keys(obj) };
+};
+
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
+concept ValueMappingSettable = requires(
+	T* obj,
+	typename ValueMappingTraits<T, Tag>::key_type key,
+	py::handle h
+) {
+	ValueMappingTraits<T, Tag>::set(
+		obj,
+		key,
+		ValueMappingTraits<T, Tag>::from_python(h)
+	);
+};
+
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
+concept ValueMappingDeletable = requires(
+	T* obj,
+	typename ValueMappingTraits<T, Tag>::key_type key
+) {
+	ValueMappingTraits<T, Tag>::del(obj, key);
+};
+
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
+concept ValueMappingIterable = requires(T* obj) {
+	ValueMappingTraits<T, Tag>::keys(obj);
+};
+
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
+concept ValueMappingContains = requires(
+	T* obj,
+	typename ValueMappingTraits<T, Tag>::key_type key
+) {
+	{ ValueMappingTraits<T, Tag>::contains(obj, key) } -> std::convertible_to<bool>;
+};
+
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
+requires ValueMappingTraitsConcept<T, Tag>
+struct PYOBJECT_INTERNAL ValueMappingProxy {
+	using traits_type = ValueMappingTraits<T, Tag>;
+	using key_type = typename traits_type::key_type;
+	using value_type = typename traits_type::value_type;
+
+	T* obj = nullptr;
+
+	explicit ValueMappingProxy(): obj(nullptr) {}
+	explicit ValueMappingProxy(T* o): obj(o) {}
+
+	size_t size() const { return traits_type::size(obj); }
+
+	value_type get(key_type key) {
+		if(!contains(key)) throw py::key_error("key not found");
+
+		return traits_type::get(obj, key);
+	}
+
+	void set(key_type key, py::object py_obj) {
+		if constexpr(!ValueMappingSettable<T, Tag>) throw py::type_error(
+			"Mapping does not support assignment"
+		);
+
+		else {
+			auto value = traits_type::from_python(py_obj);
+
+			traits_type::set(obj, key, value);
+		}
+	}
+
+	void del(key_type key) {
+		if constexpr(!ValueMappingDeletable<T, Tag>) throw py::type_error(
+			"Mapping does not support deletion"
+		);
+
+		else traits_type::del(obj, key);
+	}
+
+	bool contains(key_type key) {
+		if constexpr(!ValueMappingContains<T, Tag>) {
+			auto ks = traits_type::keys(obj);
+
+			return std::find(ks.begin(), ks.end(), key) != ks.end();
+		}
+
+		else return traits_type::contains(obj, key);
+	}
+
+	py::list keys() {
+		if constexpr(!ValueMappingIterable<T, Tag>) throw py::type_error(
+			"Mapping does not support key-based iteration"
+		);
+
+		else {
+			py::list out;
+
+			auto ks = traits_type::keys(obj);
+
+			for(auto k : ks) out.append(k);
+
+			return out;
+		}
+	}
+
+	py::list values() {
+		if constexpr(!ValueMappingIterable<T, Tag>) throw py::type_error(
+			"Mapping does not support key-based iteration"
+		);
+
+		else {
+			py::list out;
+
+			auto ks = traits_type::keys(obj);
+
+			for(auto k : ks) out.append(traits_type::get(obj, k));
+
+			return out;
+		}
+	}
+
+	py::list items() {
+		if constexpr(!ValueMappingIterable<T, Tag>) throw py::type_error(
+			"Mapping does not support key-based iteration"
+		);
+
+		else {
+			py::list out;
+
+			auto ks = traits_type::keys(obj);
+
+			for(auto k : ks) out.append(py::make_tuple(k, traits_type::get(obj, k)));
+
+			return out;
+		}
+	}
+
+	struct Iterator {
+		ValueMappingProxy* proxy = nullptr;
+		std::vector<key_type> keys;
+		size_t index = 0;
+
+		key_type next() {
+			if(index >= keys.size()) throw py::stop_iteration();
+
+			return keys[index++];
+		}
+	};
+
+	Iterator iter() {
+		return Iterator{this, traits_type::keys(obj), 0};
+	}
+
+	static auto bind(py::handle parent, const char* name) {
+		using iterator_type = typename ValueMappingProxy<T, Tag>::Iterator;
+
+		auto mp = py::class_<ValueMappingProxy<T, Tag>>(parent, name);
+
+		py::class_<iterator_type>(mp, "Iterator")
+			.def("__iter__", [](iterator_type& self) -> iterator_type& {
+				return self;
+			}, py::return_value_policy::reference_internal)
+			.def("__next__", &iterator_type::next)
+		;
+
+		mp
+			.def("__getitem__", &ValueMappingProxy<T, Tag>::get)
+			.def("__setitem__", &ValueMappingProxy<T, Tag>::set)
+			.def("__delitem__", &ValueMappingProxy<T, Tag>::del)
+			.def("__contains__", &ValueMappingProxy<T, Tag>::contains)
+			.def("__iter__", &ValueMappingProxy<T, Tag>::iter)
+			.def("__len__", &ValueMappingProxy<T, Tag>::size)
+			.def("keys", &ValueMappingProxy<T, Tag>::keys)
+			.def("values", &ValueMappingProxy<T, Tag>::values)
+			.def("items", &ValueMappingProxy<T, Tag>::items)
 		;
 
 		return mp;

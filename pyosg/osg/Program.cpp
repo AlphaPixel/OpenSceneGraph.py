@@ -33,6 +33,9 @@ void bind_Program(py::module_& m) {
 	;
 
 	detail::ShadersProxy::bind(program, "_Shaders");
+	detail::BindAttribLocationProxy::bind(program, "_BindAttribLocation");
+	detail::BindFragDataLocationProxy::bind(program, "_BindFragDataLocation");
+	detail::BindUniformBlockProxy::bind(program, "_BindUniformBlock");
 
 	program
 		/* .def("addShader", [](osg::Program& self, osg::Shader* shader) {
@@ -46,9 +49,33 @@ void bind_Program(py::module_& m) {
 			return detail::ProgramStorage::get(self)->template proxy<detail::ShadersProxy>();
 		}, py::return_value_policy::reference_internal)
 
-		.def("addBindAttribLocation", [](osg::Program& self, const std::string& name, GLuint index) {
-			self.addBindAttribLocation(name, index);
-		}, "name"_a, "index"_a)
+		.def_property_readonly(
+			"bindAttribLocation",
+			[](osg::Program& self) -> detail::BindAttribLocationProxy& {
+				return detail::ProgramStorage::get(self)->template proxy<
+					detail::BindAttribLocationProxy
+				>();
+			},
+			py::return_value_policy::reference_internal
+		)
+		.def_property_readonly(
+			"bindFragDataLocation",
+			[](osg::Program& self) -> detail::BindFragDataLocationProxy& {
+				return detail::ProgramStorage::get(self)->template proxy<
+					detail::BindFragDataLocationProxy
+				>();
+			},
+			py::return_value_policy::reference_internal
+		)
+		.def_property_readonly(
+			"bindUniformBlock",
+			[](osg::Program& self) -> detail::BindUniformBlockProxy& {
+				return detail::ProgramStorage::get(self)->template proxy<
+					detail::BindUniformBlockProxy
+				>();
+			},
+			py::return_value_policy::reference_internal
+		)
 	;
 }
 
