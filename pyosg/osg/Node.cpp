@@ -45,6 +45,16 @@ void bind_Node(py::module_& m) {
 			[](osg::Node& self, osg::StateSet* ss) { self.setStateSet(ss); }
 		)
 		.def_property("nodeMask", &osg::Node::getNodeMask, &osg::Node::setNodeMask)
+		.def_property(
+			"cullingActive",
+			&osg::Node::getCullingActive,
+			&osg::Node::setCullingActive
+		)
+		.def_property_readonly(
+			"bound",
+			&osg::Node::getBound,
+			py::return_value_policy::reference_internal
+		)
 	;
 
 	node.attr("NodeMask") = detail::builtin_int();

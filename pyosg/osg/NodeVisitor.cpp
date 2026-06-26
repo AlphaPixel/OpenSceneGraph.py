@@ -6,7 +6,30 @@ void bind_NodeVisitor(py::module_& m) {
 	// TODO: This _works_, but isn't really what we WANT; it'll return the pointers, exactly as
 	// requested, but it doesn't do us much good in Python, unless we're just passing it directly
 	// to something else (like the `osg::computeWorldToLocal` helpers).
-	py::bind_vector<std::vector<osg::Node*>>(m, "NodePath");
+	// py::bind_vector<std::vector<osg::Node*>>(m, "NodePath");
+
+	// TODO: This is a readonly variant I'm testing!
+	py::class_<osg::NodePath>(m, "NodePath")
+		.def("__len__", [](const osg::NodePath& self) {
+			return self.size();
+		})
+		.def("__repr__", [](const osg::NodePath& self) {
+			std::ostringstream out;
+			out << "NodePath[";
+
+			for(std::size_t i = 0; i < self.size(); ++i) {
+				if(i != 0) {
+					out << ", ";
+				}
+
+				out << self[i];
+			}
+
+			out << "]";
+
+			return out.str();
+		})
+	;
 
 	auto nv = py::class_<
 		osg::NodeVisitor,

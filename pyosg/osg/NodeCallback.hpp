@@ -41,7 +41,7 @@ namespace detail {
 				<< " name=" << (node ? node->getName() : std::string("<null>"))
 				<< std::endl; */
 
-			if (auto r = call_override<bool>("__call__", this, node, nv)) {
+			if(auto r = call_override<bool>("__call__", this, node, nv)) {
 				// std::cout << "[C++] __call__ override found, value_or(true)="
 				// << r.value_or(true) << std::endl;
 
