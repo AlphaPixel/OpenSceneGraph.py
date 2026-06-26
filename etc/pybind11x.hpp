@@ -25,6 +25,10 @@ using namespace py::literals;
 
 namespace pybind11x {
 
+// Used when the user doesn't define their OWN (which they would need to do if they have MULTIPLE
+// proxies on one object).
+struct DEFAULT_PROXY_TAG {};
+
 // A helper for "normalizing" numeric index values, converting negative numbers to their C++
 // equivalent. Any time you ACCEPT an index from Python, this helper will ensure that the returned
 // value is safe to use in C++.
@@ -382,40 +386,44 @@ public:
 //
 // This isolates container semantics from the proxy itself, and is where you'll put your "glue
 // code" to resolve Python/C++ interop.
-template<typename T>
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
 struct SequenceTraits;
 
 // Enforces the "contract" used by the `SequenceTraits` instance you define for `SequenceProxy`.
-template<typename T>
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
 concept SequenceTraitsConcept = requires(T* obj, size_t i, py::object py_obj) {
 	// What do you GET when you READ?
-	typename SequenceTraits<T>::element_type;
+	typename SequenceTraits<T, Tag>::element_type;
 
 	// What do you ACCEPT when you WRITE?
-	typename SequenceTraits<T>::value_type;
+	typename SequenceTraits<T, Tag>::value_type;
 
-	{ SequenceTraits<T>::from_python(py_obj) } -> std::same_as<typename SequenceTraits<T>::value_type>;
+	{
+		SequenceTraits<T, Tag>::from_python(py_obj)
+	} -> std::same_as<typename SequenceTraits<T, Tag>::value_type>;
 
-	{ SequenceTraits<T>::size(obj) } -> std::convertible_to<size_t>;
-	{ SequenceTraits<T>::get(obj, i) } -> std::same_as<typename SequenceTraits<T>::element_type*>;
-	// { SequenceTraits<T>::set(obj, i, SequenceTraits<T>::from_python(py_obj)) };
-	// { SequenceTraits<T>::del(obj, i) };
-	// { SequenceTraits<T>::append(obj, SequenceTraits<T>::from_python(py_obj)) };
+	{ SequenceTraits<T, Tag>::size(obj) } -> std::convertible_to<size_t>;
+	{
+		SequenceTraits<T, Tag>::get(obj, i)
+	} -> std::same_as<typename SequenceTraits<T, Tag>::element_type*>;
+	// { SequenceTraits<T, Tag>::set(obj, i, SequenceTraits<T, Tag>::from_python(py_obj)) };
+	// { SequenceTraits<T, Tag>::del(obj, i) };
+	// { SequenceTraits<T, Tag>::append(obj, SequenceTraits<T, Tag>::from_python(py_obj)) };
 };
 
-template<typename T>
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
 concept SequenceSettable = requires(T* obj, size_t i, py::object py_obj) {
-	SequenceTraits<T>::set(obj, i, SequenceTraits<T>::from_python(py_obj));
+	SequenceTraits<T, Tag>::set(obj, i, SequenceTraits<T, Tag>::from_python(py_obj));
 };
 
-template<typename T>
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
 concept SequenceDeletable = requires(T* obj, size_t i) {
-	SequenceTraits<T>::del(obj, i);
+	SequenceTraits<T, Tag>::del(obj, i);
 };
 
-template<typename T>
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
 concept SequenceAppendable = requires(T* obj, py::object py_obj) {
-	SequenceTraits<T>::append(obj, SequenceTraits<T>::from_python(py_obj));
+	SequenceTraits<T, Tag>::append(obj, SequenceTraits<T, Tag>::from_python(py_obj));
 };
 
 // A Python list-like wrapper over arbitrary C++ containers.
@@ -426,10 +434,10 @@ concept SequenceAppendable = requires(T* obj, py::object py_obj) {
 //
 // Identity is tied to index + pointer; if the container mutates, cache stays consistent because
 // pointer mismatch invalidates entries.
-template<typename T>
-requires SequenceTraitsConcept<T>
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
+requires SequenceTraitsConcept<T, Tag>
 struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_t>> {
-	using traits_type = SequenceTraits<T>;
+	using traits_type = SequenceTraits<T, Tag>;
 	using element_type = typename traits_type::element_type;
 
 	// The compiler can find `key_type` here from our inheritance above; thus, in this
@@ -451,7 +459,7 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 	}
 
 	void set(py::ssize_t index, py::object py_obj) {
-		if constexpr(!SequenceSettable<T>) throw py::type_error(
+		if constexpr(!SequenceSettable<T, Tag>) throw py::type_error(
 			"Sequence does not support assignment"
 		);
 
@@ -468,7 +476,7 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 	}
 
 	void del(py::ssize_t index) {
-		if constexpr(!SequenceDeletable<T>) throw py::type_error(
+		if constexpr(!SequenceDeletable<T, Tag>) throw py::type_error(
 			"Sequence does not support deletion"
 		);
 
@@ -482,7 +490,7 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 	}
 
 	void append(py::object py_obj) {
-		if constexpr(!SequenceAppendable<T>) throw py::type_error(
+		if constexpr(!SequenceAppendable<T, Tag>) throw py::type_error(
 			"Sequence does not support append"
 		);
 
@@ -535,9 +543,9 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 	}
 
 	static auto bind(py::handle parent, const char* name) {
-		using iterator_type = typename SequenceProxy<T>::Iterator;
+		using iterator_type = typename SequenceProxy<T, Tag>::Iterator;
 
-		auto sp = py::class_<SequenceProxy<T>>(parent, name);
+		auto sp = py::class_<SequenceProxy<T, Tag>>(parent, name);
 
 		py::class_<iterator_type>(sp, "Iterator")
 			.def("__iter__", [](iterator_type& self) -> iterator_type& {
@@ -547,14 +555,14 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 		;
 
 		sp
-			.def("__len__", &SequenceProxy<T>::size)
-			.def("__getitem__", &SequenceProxy<T>::get)
-			.def("__setitem__", &SequenceProxy<T>::set)
-			.def("__delitem__", &SequenceProxy<T>::del)
-			.def("__iter__", &SequenceProxy<T>::iter, py::keep_alive<0, 1>())
-			.def("__contains__", &SequenceProxy<T>::contains)
-			.def("append", &SequenceProxy<T>::append)
-			.def("extend", &SequenceProxy<T>::extend)
+			.def("__len__", &SequenceProxy<T, Tag>::size)
+			.def("__getitem__", &SequenceProxy<T, Tag>::get)
+			.def("__setitem__", &SequenceProxy<T, Tag>::set)
+			.def("__delitem__", &SequenceProxy<T, Tag>::del)
+			.def("__iter__", &SequenceProxy<T, Tag>::iter, py::keep_alive<0, 1>())
+			.def("__contains__", &SequenceProxy<T, Tag>::contains)
+			.def("append", &SequenceProxy<T, Tag>::append)
+			.def("extend", &SequenceProxy<T, Tag>::extend)
 		;
 
 		return sp;
@@ -567,52 +575,56 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 // - plus conversion from Python
 //
 // Essentially, the counterpart to `SequenceTraits` for "map-like" C++ objects.
-template<typename T>
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
 struct MappingTraits;
 
 // Enforces the "contract" used by the `MappingTraits` instance you define for `MappingProxy`.
-template<typename T>
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
 concept MappingTraitsConcept = requires(
 	T* obj,
-	typename MappingTraits<T>::key_type key,
+	typename MappingTraits<T, Tag>::key_type key,
 	py::handle h
 ) {
-	typename MappingTraits<T>::element_type;
-	typename MappingTraits<T>::key_type;
-	typename MappingTraits<T>::value_type;
+	typename MappingTraits<T, Tag>::element_type;
+	typename MappingTraits<T, Tag>::key_type;
+	typename MappingTraits<T, Tag>::value_type;
 
-	{ MappingTraits<T>::from_python(h) } -> std::same_as<typename MappingTraits<T>::value_type>;
+	{
+		MappingTraits<T, Tag>::from_python(h)
+	} -> std::same_as<typename MappingTraits<T, Tag>::value_type>;
 
-	{ MappingTraits<T>::size(obj) } -> std::convertible_to<size_t>;
-	{ MappingTraits<T>::get(obj, key) } -> std::same_as<typename MappingTraits<T>::element_type*>;
-	// { MappingTraits<T>::set(obj, key, MappingTraits<T>::from_python(h)) };
-	// { MappingTraits<T>::del(obj, key) };
-	// { MappingTraits<T>::keys(obj) };
+	{ MappingTraits<T, Tag>::size(obj) } -> std::convertible_to<size_t>;
+	{
+		MappingTraits<T, Tag>::get(obj, key)
+	} -> std::same_as<typename MappingTraits<T, Tag>::element_type*>;
+	// { MappingTraits<T, Tag>::set(obj, key, MappingTraits<T, Tag>::from_python(h)) };
+	// { MappingTraits<T, Tag>::del(obj, key) };
+	// { MappingTraits<T, Tag>::keys(obj) };
 };
 
-template<typename T>
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
 concept MappingSettable = (
-	requires(T* obj, typename MappingTraits<T>::key_type key, py::handle h) {
-		MappingTraits<T>::set(obj, key, MappingTraits<T>::from_python(h));
+	requires(T* obj, typename MappingTraits<T, Tag>::key_type key, py::handle h) {
+		MappingTraits<T, Tag>::set(obj, key, MappingTraits<T, Tag>::from_python(h));
 	}) || (
-	requires(T* obj, typename MappingTraits<T>::key_type key, py::handle h) {
-		MappingTraits<T>::set(obj, key, h);
+	requires(T* obj, typename MappingTraits<T, Tag>::key_type key, py::handle h) {
+		MappingTraits<T, Tag>::set(obj, key, h);
 	})
 ;
 
-template<typename T>
-concept MappingDeletable = requires(T* obj, typename MappingTraits<T>::key_type key) {
-	MappingTraits<T>::del(obj, key);
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
+concept MappingDeletable = requires(T* obj, typename MappingTraits<T, Tag>::key_type key) {
+	MappingTraits<T, Tag>::del(obj, key);
 };
 
-template<typename T>
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
 concept MappingIterable = requires(T* obj) {
-	MappingTraits<T>::keys(obj);
+	MappingTraits<T, Tag>::keys(obj);
 };
 
-template<typename T>
-concept MappingContains = requires(T* obj, typename MappingTraits<T>::key_type key) {
-	{ MappingTraits<T>::contains(obj, key) } -> std::convertible_to<bool>;
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
+concept MappingContains = requires(T* obj, typename MappingTraits<T, Tag>::key_type key) {
+	{ MappingTraits<T, Tag>::contains(obj, key) } -> std::convertible_to<bool>;
 };
 
 // A Python dict-like wrapper (similar to `SequenceProxy`):
@@ -624,10 +636,11 @@ concept MappingContains = requires(T* obj, typename MappingTraits<T>::key_type k
 // Also, contains() conditionally uses traits-provided implementation if available.
 //
 // TODO: Important! What happens the `key_type` is another wrapped object!?
-template<typename T>
-requires MappingTraitsConcept<T>
-struct PYOBJECT_INTERNAL MappingProxy: public MapSlotCache<typename MappingTraits<T>::key_type> {
-	using traits_type = MappingTraits<T>;
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
+requires MappingTraitsConcept<T, Tag>
+struct PYOBJECT_INTERNAL MappingProxy:
+public MapSlotCache<typename MappingTraits<T, Tag>::key_type> {
+	using traits_type = MappingTraits<T, Tag>;
 	using element_type = typename traits_type::element_type;
 	using key_type = typename traits_type::key_type;
 	using base_type = SlotCache<MapSlotStorage<key_type>>;
@@ -648,7 +661,7 @@ struct PYOBJECT_INTERNAL MappingProxy: public MapSlotCache<typename MappingTrait
 	}
 
 	/* void set(key_type key, py::object py_obj) {
-		if constexpr(!MappingSettable<T>) throw py::type_error(
+		if constexpr(!MappingSettable<T, Tag>) throw py::type_error(
 			"Mapping does not support assignment"
 		);
 
@@ -664,7 +677,7 @@ struct PYOBJECT_INTERNAL MappingProxy: public MapSlotCache<typename MappingTrait
 	} */
 
 	void set(key_type key, py::object py_obj) {
-		if constexpr(!MappingSettable<T>) throw py::type_error(
+		if constexpr(!MappingSettable<T, Tag>) throw py::type_error(
 			"Mapping does not support assignment"
 		);
 
@@ -689,7 +702,7 @@ struct PYOBJECT_INTERNAL MappingProxy: public MapSlotCache<typename MappingTrait
 	}
 
 	void del(key_type key) {
-		if constexpr(!MappingDeletable<T>) throw py::type_error(
+		if constexpr(!MappingDeletable<T, Tag>) throw py::type_error(
 			"Mapping does not support deletion"
 		);
 
@@ -701,13 +714,13 @@ struct PYOBJECT_INTERNAL MappingProxy: public MapSlotCache<typename MappingTrait
 	}
 
 	bool contains(key_type key) {
-		if constexpr(!MappingContains<T>) return traits_type::get(obj, key) != nullptr;
+		if constexpr(!MappingContains<T, Tag>) return traits_type::get(obj, key) != nullptr;
 
 		else return traits_type::contains(obj, key);
 	}
 
 	py::list keys() {
-		if constexpr(!MappingIterable<T>) throw py::type_error(
+		if constexpr(!MappingIterable<T, Tag>) throw py::type_error(
 			"Mapping does not support key-based iteration"
 		);
 
@@ -769,9 +782,9 @@ struct PYOBJECT_INTERNAL MappingProxy: public MapSlotCache<typename MappingTrait
 	}
 
 	static auto bind(py::handle parent, const char* name) {
-		using iterator_type = typename MappingProxy<T>::Iterator;
+		using iterator_type = typename MappingProxy<T, Tag>::Iterator;
 
-		auto mp = py::class_<MappingProxy<T>>(parent, name);
+		auto mp = py::class_<MappingProxy<T, Tag>>(parent, name);
 
 		py::class_<iterator_type>(mp, "Iterator")
 			.def("__iter__", [](iterator_type& self) -> iterator_type& {
@@ -781,15 +794,15 @@ struct PYOBJECT_INTERNAL MappingProxy: public MapSlotCache<typename MappingTrait
 		;
 
 		mp
-			.def("__getitem__", &MappingProxy::get)
-			.def("__setitem__", &MappingProxy::set)
-			.def("__delitem__", &MappingProxy::del)
-			.def("__contains__", &MappingProxy::contains)
-			.def("__iter__", &MappingProxy::iter)
-			.def("__len__", &MappingProxy::size)
-			.def("keys", &MappingProxy::keys)
-			.def("values", &MappingProxy::values)
-			.def("items", &MappingProxy::items)
+			.def("__getitem__", &MappingProxy<T, Tag>::get)
+			.def("__setitem__", &MappingProxy<T, Tag>::set)
+			.def("__delitem__", &MappingProxy<T, Tag>::del)
+			.def("__contains__", &MappingProxy<T, Tag>::contains)
+			.def("__iter__", &MappingProxy<T, Tag>::iter)
+			.def("__len__", &MappingProxy<T, Tag>::size)
+			.def("keys", &MappingProxy<T, Tag>::keys)
+			.def("values", &MappingProxy<T, Tag>::values)
+			.def("items", &MappingProxy<T, Tag>::items)
 		;
 
 		return mp;
