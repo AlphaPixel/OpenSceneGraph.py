@@ -110,12 +110,7 @@ namespace detail {
 			using osg::Camera::DrawCallback::DrawCallback;
 
 			void operator()(osg::RenderInfo& ri) const override {
-				PYBIND11_OVERRIDE(
-					void,
-					osg::Camera::DrawCallback,
-					operator(),
-					ri
-				);
+				call_override<void>("__call__", this, ri);
 			}
 		};
 	};
