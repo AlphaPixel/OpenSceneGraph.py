@@ -45,6 +45,10 @@ void bind_Program(py::module_& m) {
 		.def_property_readonly("shaders", [](osg::Program& self) -> detail::ShadersProxy& {
 			return detail::ProgramStorage::get(self)->template proxy<detail::ShadersProxy>();
 		}, py::return_value_policy::reference_internal)
+
+		.def("addBindAttribLocation", [](osg::Program& self, const std::string& name, GLuint index) {
+			self.addBindAttribLocation(name, index);
+		}, "name"_a, "index"_a)
 	;
 }
 
