@@ -4,7 +4,7 @@
 
 import pytest
 
-from OpenSceneGraph.osg import StateSet, Uniform, Vec3f, Matrixf
+from OpenSceneGraph.osg import StateSet, StateAttribute, Texture2D, Uniform, Vec3f, Matrixf
 
 def test_uniforms_append(uniform_init):
 	ss = StateSet()
@@ -46,3 +46,28 @@ def test_uniform_mutation():
 
 	assert ss.uniforms["double"].value == 56.78
 	assert len(ss.uniforms) == 2
+
+def test_texture_attributes_mapping():
+	ss = StateSet()
+	t0 = Texture2D()
+	t1 = Texture2D()
+
+	ss.textureAttributes[0] = t0
+	ss.textureAttributes[1] = (t1, StateAttribute.ON)
+
+	assert ss.textureAttributes[0] is t0
+	assert ss.textureAttributes[1] is t1
+	assert len(ss.textureAttributes) == 2
+	assert ss.textureAttributes.keys() == [0, 1]
+	assert 0 in ss.textureAttributes
+	assert 2 not in ss.textureAttributes
+
+	ss.uniforms["u"] = 1.0
+
+	assert ss.uniforms["u"].value == pytest.approx(1.0)
+
+	del ss.textureAttributes[0]
+
+	assert len(ss.textureAttributes) == 1
+	assert ss.textureAttributes.keys() == [1]
+	assert 0 not in ss.textureAttributes

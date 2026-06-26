@@ -73,13 +73,13 @@ def test_updatecallback():
 	# class UpdateCallback(Callback):
 	# 	def run(self, obj, data):
 	# 		nonlocal updated
-    #
+	#
 	# 		updated.append(3)
-    #
+	#
 	# n.updateCallback = UpdateCallback()
-    #
+	#
 	# n.accept(UpdateVisitor())
-    #
+	#
 	# assert updated[-1] == 3
 
 def test_stateset():
