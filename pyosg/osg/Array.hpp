@@ -135,7 +135,7 @@ namespace detail {
 				auto comps = static_cast<py::ssize_t>(array_components<T>());
 
 				if(info.ndim == 1) {
-					if(info.shape[0] % comps != 0) throw py::value_error(
+					if(info.shape[0] % comps) throw py::value_error(
 						"Flat array size must be divisible by component count"
 					);
 				}

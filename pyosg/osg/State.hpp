@@ -97,26 +97,25 @@ struct pyx::MappingTraits<osg::StateSet, pyosg::detail::UniformsTag> {
 		if(py::isinstance<py::tuple>(h)) {
 			auto t = h.cast<py::tuple>();
 
-			if(t.size() != 2) throw py::type_error("Expected (value, mode) or (type, value)");
+			if(!t.size()) throw py::type_error("Cannot assign empty tuple as Uniform value");
 
 			// (value, mode): REPLACE with override!
-			if(py::isinstance<osg::StateAttribute::OverrideValue>(t[1])) {
+			if(t.size() == 2 && py::isinstance<osg::StateAttribute::OverrideValue>(t[1])) {
 				auto mode = t[1].cast<osg::StateAttribute::OverrideValue>();
 
 				if(k) ss->addUniform(pyosg::detail::make_uniform(*k, t[0]), mode);
 
-				else ss->addUniform( t[0].cast<osg::Uniform*>(), mode);
+				else ss->addUniform(t[0].cast<osg::Uniform*>(), mode);
 
 				return;
 			}
 
 			// (type, value): REPLACE with explicit type!
-			if(py::isinstance<osg::Uniform::Type>(t[0])) {
+			if(t.size() == 2 && py::isinstance<osg::Uniform::Type>(t[0])) {
 				if(!k) throw py::type_error("(type, value) requires a key");
 
 				auto type = t[0].cast<osg::Uniform::Type>();
 
-				// osg::ref_ptr<osg::Uniform> u = new osg::Uniform(type, *k);
 				auto* u = new osg::Uniform(type, *k);
 
 				pyosg::detail::uniform_set(*u, 0, py::cast<py::object>(t[1]));
@@ -126,7 +125,12 @@ struct pyx::MappingTraits<osg::StateSet, pyosg::detail::UniformsTag> {
 				return;
 			}
 
-			throw py::type_error("Invalid tuple form for Uniform assignment");
+			// Array of values: infer type from first element, set all
+			if(!k) throw py::type_error("Array Uniform assignment requires a key");
+
+			ss->addUniform(pyosg::detail::make_uniform_array_infer(*k, t));
+
+			return;
 		}
 
 		// CASE 3: Simple value MUTATATION or CREATION!

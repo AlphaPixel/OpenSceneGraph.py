@@ -68,17 +68,17 @@ void bind_State(py::module_& m) {
 			// used `typeid` in my OWN CODE!?
 			if(typeid(a) != typeid(b)) return false;
 
-			return a.compare(b) == 0;
+			return !a.compare(b);
 		})
 		.def("__ne__", [](const osg::StateAttribute& a, const osg::StateAttribute& b) {
 			if(typeid(a) != typeid(b)) return true;
 
-			return a.compare(b) != 0;
+			return a.compare(b);
 		}); */
 
 		// TODO: Implement `.def(py::self < py::self)`, etc for these! However, I need to solve the
 		// `compare` issue above before I can address these...
-		// bool operator <  (const StateAttribute& rhs) const { return compare(rhs)<0; }
+		// bool operator < (const StateAttribute& rhs) const { return compare(rhs)<0; }
 		// bool operator == (const StateAttribute& rhs) const { return compare(rhs)==0; }
 		// bool operator != (const StateAttribute& rhs) const { return compare(rhs)!=0; }
 

@@ -15,12 +15,11 @@ void bind_NodeVisitor(py::module_& m) {
 		})
 		.def("__repr__", [](const osg::NodePath& self) {
 			std::ostringstream out;
+
 			out << "NodePath[";
 
 			for(std::size_t i = 0; i < self.size(); ++i) {
-				if(i != 0) {
-					out << ", ";
-				}
+				if(i) { out << ", "; }
 
 				out << self[i];
 			}
