@@ -5,6 +5,7 @@
 PYOSG_DISABLE_WARNINGS
 
 #include <osg/Texture2D>
+#include <osg/TextureCubeMap>
 
 PYOSG_ENABLE_WARNINGS
 
@@ -17,24 +18,33 @@ namespace detail {
 
 		// getType
 		// isTextureAttribute
-        //
+		//
 		// getTextureTarget (pure virtual)
-        //
+		//
 		// getTextureWidth
 		// getTextureHeight
 		// getTextureDepth
-        //
+		//
 		// setImage (pure virtual)
 		// getImage (pure virtual)
 		// getImage const (pure virtual)
 		// getNumImages (pure virtual)
-        //
-		// apply (pure virtual)
-        //
+		//
+		// virtual void apply(State& state) const = 0;
+
+		void apply(osg::State& state) const override {
+			PYBIND11_OVERRIDE_PURE(
+				void,
+				osg::Texture,
+				apply,
+				state
+			);
+		}
+
 		// compileGLObjects
 		// resizeGLObjectBuffers
 		// releaseGLObjects
-        //
+		//
 		// isDirty
 	};
 }

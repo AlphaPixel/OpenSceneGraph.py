@@ -127,8 +127,17 @@ void bind_Texture(py::module_& m) {
 				if(py::isinstance<osg::Texture::FilterMode>(obj)) {
 					auto v = obj.cast<osg::Texture::FilterMode>();
 
+					// MAG filter only accepts LINEAR or NEAREST - strip mipmap component
+					osg::Texture::FilterMode mag =
+						(v == osg::Texture::NEAREST ||
+						 v == osg::Texture::NEAREST_MIPMAP_LINEAR ||
+						 v == osg::Texture::NEAREST_MIPMAP_NEAREST)
+						? osg::Texture::NEAREST
+						: osg::Texture::LINEAR
+					;
+
 					self.setFilter(osg::Texture::FilterParameter::MIN_FILTER, v);
-					self.setFilter(osg::Texture::FilterParameter::MAG_FILTER, v);
+					self.setFilter(osg::Texture::FilterParameter::MAG_FILTER, mag);
 				}
 
 				else {
@@ -173,37 +182,78 @@ void bind_Texture(py::module_& m) {
 			&osg::Texture::getMaxAnisotropy,
 			&osg::Texture::setMaxAnisotropy
 		)
-	;
 
-	// setBorderColor
-	// getBorderColor
-    //
-	// setBorderWidth
-	// getBorderWidth
-    //
-	// setMinLOD
-	// getMinLOD
-    //
-	// setMaxLOD
-	// getMaxLOD
-    //
-	// setLODBias
-	// getLODBias
-    //
-	// setSwizzle
-	// getSwizzle
-    //
-	// setUseHardwareMipMapGeneration
-	// getUseHardwareMipMapGeneration
-    //
-	// setResizeNonPowerOfTwoHint
-	// getResizeNonPowerOfTwoHint
-    //
-	// isCompressedInternalFormat
-    //
-	// selectSizedInternalFormat
-    //
-	// allocateMipmapLevels
+		// TODO: Convert to `pyx::*Proxy`!
+		.def_property(
+			"image",
+			py::cpp_function(
+				// py::overload_cast<osg::Image*>(&osg::Texture::getImage),
+				[](osg::Texture& self) { return self.getImage(0); },
+				py::return_value_policy::reference_internal
+			),
+			py::cpp_function(
+				/* [](osg::Texture& self, unsigned int face, osg::Image* data) {
+					self.setImage(face, data);
+				}, py::keep_alive<1, 2>() */
+				[](osg::Texture& self, py::object obj) {
+					auto seq = obj.cast<py::sequence>();
+					auto n = seq.size();
+
+					if(n == 1) self.setImage(0, seq[0].cast<osg::Image*>());
+
+					else if(n == 2) self.setImage(
+						seq[0].cast<unsigned int>(),
+						seq[1].cast<osg::Image*>()
+					);
+
+					else throw py::value_error("Image or face/Image required");
+				}
+			)
+		)
+
+		// setBorderColor
+		// getBorderColor
+		//
+		// setBorderWidth
+		// getBorderWidth
+		//
+		// setMinLOD
+		// getMinLOD
+		//
+		// setMaxLOD
+		// getMaxLOD
+		//
+		// setLODBias
+		// getLODBias
+		//
+		// setSwizzle
+		// getSwizzle
+		//
+		// setUseHardwareMipMapGeneration
+		// getUseHardwareMipMapGeneration
+
+		.def_property(
+			"useHardwareMipMapGeneration",
+			&osg::Texture::getUseHardwareMipMapGeneration,
+			&osg::Texture::setUseHardwareMipMapGeneration
+		)
+		.def(
+			"allocateMipmapLevels",
+			&osg::Texture::allocateMipmapLevels,
+			"Mark all mip levels dirty so OSG calls glTexImage2D for each level "
+			"during the next apply(), pre-allocating storage before FBO attachment."
+		)
+
+		.def_property(
+			"resizeNonPowerOfTwoHint",
+			&osg::Texture::getResizeNonPowerOfTwoHint,
+			&osg::Texture::setResizeNonPowerOfTwoHint
+		)
+
+		// isCompressedInternalFormat
+		//
+		// selectSizedInternalFormat
+	;
 
 	auto tex2d = py::class_<
 		osg::Texture2D,
@@ -231,6 +281,42 @@ void bind_Texture(py::module_& m) {
 				self.setTextureSize(seq[0].cast<int>(), seq[1].cast<int>());
 			}
 		)
+		.def("apply", &osg::Texture2D::apply)
+	;
+
+	auto texcm = py::class_<
+		osg::TextureCubeMap,
+		osg::Texture,
+		osg::ref_ptr<osg::TextureCubeMap>
+	>(m, "TextureCubeMap")
+		.def(py::init<>())
+		.def_property(
+			"size",
+			[](osg::TextureCubeMap& self) { return self.getTextureWidth(); },
+			[](osg::TextureCubeMap& self, int s) { self.setTextureSize(s, s); }
+		)
+		.def_property(
+			"numMipmapLevels",
+			&osg::TextureCubeMap::getNumMipmapLevels,
+			&osg::TextureCubeMap::setNumMipmapLevels
+		)
+		.def("apply", &osg::TextureCubeMap::apply)
+		.def("setFace", [](osg::TextureCubeMap& self, osg::TextureCubeMap::Face face, osg::Image* img) {
+			self.setImage(static_cast<unsigned int>(face), img);
+		}, py::keep_alive<1, 3>())
+		.def("getFace", [](osg::TextureCubeMap& self, osg::TextureCubeMap::Face face) {
+			return self.getImage(static_cast<unsigned int>(face));
+		}, py::return_value_policy::reference_internal)
+	;
+
+	py::enum_<osg::TextureCubeMap::Face>(texcm, "Face")
+		.value("POSITIVE_X", osg::TextureCubeMap::POSITIVE_X)
+		.value("NEGATIVE_X", osg::TextureCubeMap::NEGATIVE_X)
+		.value("POSITIVE_Y", osg::TextureCubeMap::POSITIVE_Y)
+		.value("NEGATIVE_Y", osg::TextureCubeMap::NEGATIVE_Y)
+		.value("POSITIVE_Z", osg::TextureCubeMap::POSITIVE_Z)
+		.value("NEGATIVE_Z", osg::TextureCubeMap::NEGATIVE_Z)
+		.export_values()
 	;
 }
 
