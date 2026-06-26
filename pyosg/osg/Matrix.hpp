@@ -56,6 +56,16 @@ namespace detail {
 			.def(py::self < py::self)
 			.def(py::self == py::self)
 			.def(py::self != py::self)
+			.def(py::self * py::self)
+			.def(py::self *= py::self)
+
+			/* .def("preMult", py::overload_cast<const osg::Vec3f&>(&T::preMult))
+			.def("preMult", py::overload_cast<const osg::Vec3d&>(&T::preMult))
+			.def("preMult", py::overload_cast<const osg::Vec4f&>(&T::preMult))
+			.def("preMult", py::overload_cast<const osg::Vec4d&>(&T::preMult))
+			.def("postMult", py::overload_cast<const osg::Vec3f&>(&T::postMult))
+			.def("preMult", py::overload_cast<const T&>(&T::preMult))
+			.def("postMult", py::overload_cast<const T&>(&T::postMult)) */
 
 			// Mirrors the OSG method of operator()(row, col) access.
 			.def("__call__", [](T& self, py::ssize_t row, py::ssize_t col) {
@@ -73,14 +83,14 @@ namespace detail {
 
 			/* .def("__getitem__", [](const T& self, py::object index) -> py::object {
 				// (row, col)
-				if (py::isinstance<py::tuple>(index)) {
+				if(py::isinstance<py::tuple>(index)) {
 					auto rc = index.cast<std::pair<size_t, size_t>>();
 					auto [row, col] = n_indices<int>(4, rc.first, rc.second);
 					return py::cast(self(row, col));
 				}
 
 				// row
-				if (py::isinstance<py::int_>(index)) {
+				if(py::isinstance<py::int_>(index)) {
 					int row = index.cast<int>();
 					row = n_index<int>(4, row);
 
@@ -103,7 +113,7 @@ namespace detail {
 
 			/* .def("__setitem__", [](T& self, py::object index, py::object value) {
 				// (row, col)
-				if (py::isinstance<py::tuple>(index)) {
+				if(py::isinstance<py::tuple>(index)) {
 					auto rc = index.cast<std::pair<size_t, size_t>>();
 					auto [row, col] = n_indices<int>(4, rc.first, rc.second);
 
@@ -112,7 +122,7 @@ namespace detail {
 				}
 
 				// row
-				if (py::isinstance<py::int_>(index)) {
+				if(py::isinstance<py::int_>(index)) {
 					int row = index.cast<int>();
 					row = n_index<int>(4, row);
 
