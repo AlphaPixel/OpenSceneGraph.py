@@ -282,6 +282,51 @@ namespace detail {
 	}
 
 	// --------------------------------------------------------------------------------------------
+	// ARRAY CONSTRUCTION (from Python sequence)
+	// --------------------------------------------------------------------------------------------
+
+	inline osg::Uniform::Type infer_uniform_type(py::handle h) {
+		if(py::isinstance<py::bool_>(h)) return osg::Uniform::BOOL;
+		if(py::isinstance<py::int_>(h)) return osg::Uniform::INT;
+		if(py::isinstance<py::float_>(h)) return osg::Uniform::FLOAT;
+		if(py::isinstance<osg::Vec2>(h)) return osg::Uniform::FLOAT_VEC2;
+		if(py::isinstance<osg::Vec3>(h)) return osg::Uniform::FLOAT_VEC3;
+		if(py::isinstance<osg::Matrixf>(h)) return osg::Uniform::FLOAT_MAT4;
+		if(py::isinstance<osg::Matrixd>(h)) return osg::Uniform::DOUBLE_MAT4;
+
+		throw py::type_error(
+			std::string("Cannot infer Uniform type from Python object: got ") +
+			py_type_name(h)
+		);
+	}
+
+	inline osg::Uniform* make_uniform_array(
+		osg::Uniform::Type type,
+		const std::string& name,
+		py::sequence elements
+	) {
+		auto n = static_cast<int>(elements.size());
+
+		if(!n) throw py::value_error("Cannot create array Uniform from empty sequence");
+
+		auto* u = new osg::Uniform(type, name.c_str(), n);
+
+		for(int i = 0; i < n; i++) uniform_set(
+			*u,
+			i,
+			py::cast<py::object>(elements[static_cast<py::size_t>(i)])
+		);
+
+		return u;
+	}
+
+	inline osg::Uniform* make_uniform_array_infer(const std::string& name, py::sequence elements) {
+		if(!elements.size()) throw py::value_error("Cannot create array Uniform from empty sequence");
+
+		return make_uniform_array(infer_uniform_type(elements[0]), name, elements);
+	}
+
+	// --------------------------------------------------------------------------------------------
 	// ARRAY ACCESS
 	// --------------------------------------------------------------------------------------------
 

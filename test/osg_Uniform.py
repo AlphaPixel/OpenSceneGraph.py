@@ -106,3 +106,25 @@ def test_value_on_multi_element_rejected():
 
 	with pytest.raises(ValueError):
 		u.value = 1
+
+def test_array_init_from_tuple():
+	from OpenSceneGraph.osg import Vec3f
+
+	u = Uniform(Uniform.Type.FLOAT_VEC3, "colors", (Vec3f(1, 0, 0), Vec3f(0, 1, 0)))
+
+	assert len(u) == 2
+	assert u[0] == Vec3f(1, 0, 0)
+	assert u[1] == Vec3f(0, 1, 0)
+
+def test_array_init_from_list():
+	from OpenSceneGraph.osg import Vec3f
+
+	u = Uniform(Uniform.Type.FLOAT_VEC3, "colors", [Vec3f(1, 0, 0), Vec3f(0, 0, 1)])
+
+	assert len(u) == 2
+	assert u[0] == Vec3f(1, 0, 0)
+	assert u[1] == Vec3f(0, 0, 1)
+
+def test_array_init_empty_rejected():
+	with pytest.raises((ValueError, TypeError)):
+		Uniform(Uniform.Type.FLOAT_VEC3, "x", ())

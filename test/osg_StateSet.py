@@ -47,6 +47,27 @@ def test_uniform_mutation():
 	assert ss.uniforms["double"].value == 56.78
 	assert len(ss.uniforms) == 2
 
+def test_uniforms_array_tuple_assignment():
+	ss = StateSet()
+
+	ss.uniforms["lights"] = (Vec3f(1, 0, 0), Vec3f(0, 1, 0))
+
+	u = ss.uniforms["lights"]
+
+	assert len(u) == 2
+	assert u[0] == Vec3f(1, 0, 0)
+	assert u[1] == Vec3f(0, 1, 0)
+
+def test_uniforms_array_tuple_three():
+	ss = StateSet()
+
+	ss.uniforms["pts"] = (Vec3f(1, 0, 0), Vec3f(0, 1, 0), Vec3f(0, 0, 1))
+
+	u = ss.uniforms["pts"]
+
+	assert len(u) == 3
+	assert u[2] == Vec3f(0, 0, 1)
+
 def test_texture_attributes_mapping():
 	ss = StateSet()
 	t0 = Texture2D()

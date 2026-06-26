@@ -158,6 +158,10 @@ void bind_Uniform(py::module_& m) {
 	uniform
 		.def(py::init<>())
 		.def(py::init<const osg::Uniform&>())
+		.def(py::init([](osg::Uniform::Type type, const std::string& name, py::sequence elements) {
+			return detail::make_uniform_array(type, name, elements);
+		}), "type"_a, "name"_a, "elements"_a)
+
 		.def(
 			py::init<osg::Uniform::Type, const std::string&, int>(),
 			"type"_a,
