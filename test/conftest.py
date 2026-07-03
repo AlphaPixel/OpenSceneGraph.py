@@ -4,6 +4,7 @@ import os
 
 import pytest
 
+sys.path.append("BUILD-g++-13.3.0-NOASAN")
 sys.path.append("BUILD-g++-15.2.1-NOASAN")
 
 os.putenv("OSG_THREADING", "SingleThreaded")
