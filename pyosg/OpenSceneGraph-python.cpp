@@ -127,6 +127,7 @@ PYBIND11_MODULE(OpenSceneGraph, m) {
 	gl.attr("GL_TRIANGLE_STRIP") = GL_TRIANGLE_STRIP;
 	gl.attr("GL_TRIANGLE_FAN") = GL_TRIANGLE_FAN;
 
+	gl.attr("GL_RED") = GL_RED;
 	gl.attr("GL_RGB") = GL_RGB;
 	gl.attr("GL_RGBA") = GL_RGBA;
 	gl.attr("GL_RGBA8") = GL_RGBA8;
@@ -135,6 +136,7 @@ PYBIND11_MODULE(OpenSceneGraph, m) {
 	gl.attr("GL_DEPTH_COMPONENT24") = GL_DEPTH_COMPONENT24;
 	gl.attr("GL_DEPTH_COMPONENT") = GL_DEPTH_COMPONENT;
 	gl.attr("GL_FLOAT") = GL_FLOAT;
+	gl.attr("GL_HALF_FLOAT") = GL_HALF_FLOAT;
 	gl.attr("GL_UNSIGNED_INT") = GL_UNSIGNED_INT;
 	gl.attr("GL_UNSIGNED_BYTE") = GL_UNSIGNED_BYTE;
 	gl.attr("GL_COLOR_BUFFER_BIT") = GL_COLOR_BUFFER_BIT;
