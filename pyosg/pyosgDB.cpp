@@ -184,6 +184,15 @@ void bind(py::module_& m) {
 		"Write an OSG image from an osg.Image to the specified filename"
 	);
 
+	m.def(
+		"writeObjectFile", [](const osg::Object& obj, const std::string& filename) {
+			return osgDB::writeObjectFile(obj, filename);
+		},
+		"obj"_a,
+		"filename"_a,
+		"Write an OSG object (e.g. osg.TextureCubeMap) to the specified filename"
+	);
+
 	// m.def("readNodeFile", py::overload_cast<const std::string&>(&osgDB::readNodeFile));
 
 	/* m.def(
