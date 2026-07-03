@@ -324,10 +324,18 @@ void bind(py::module_& m) {
 			&osgViewer::Viewer::setUpViewerAsEmbeddedInWindow,
 			py::return_value_policy::reference_internal
 		)
+		.def(
+			"setUpViewInWindow",
+			&osgViewer::Viewer::setUpViewInWindow,
+			"x"_a,
+			"y"_a,
+			"width"_a,
+			"height"_a,
+			"screenNum"_a=0
+		)
 
 		// TODO: This is where I put stuff I NEED to call, but haven't wrapped (YET)!
 		.def("TODO", [](osgViewer::Viewer& self, bool glModern) {
-			// self.setUpViewInWindow(1970, 50, 800, 600);
 			// self.setThreadingModel(osgViewer::Viewer::SingleThreaded);
 			// self.setCameraManipulator(new osgGA::TrackballManipulator());
 			self.addEventHandler(new osgViewer::StatsHandler());
