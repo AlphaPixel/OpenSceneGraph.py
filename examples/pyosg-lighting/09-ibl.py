@@ -17,16 +17,16 @@
 #
 # prefilter_tex - loaded from --ktx2 (TextureCubeMap, mip0...N, all 6 faces)
 # brdf_lut - baked once at startup via a single PRE_RENDER camera
-# SH diffuse - computed synchronously from --hdr if provided; zero otherwise
+# SH diffuse - computed asynchronously from --hdr if provided; zero otherwise
 #
 # Texture units (same as step 8 + 9):
 # 0 baseColor 1 normal 2 ORM 3 emissive 4 shadow 5 envMap 6 brdfLUT
 
 import sys
 import os
-import time
+import math
 import argparse
-import threading
+import asyncio
 import pathlib
 
 os.environ.update({
@@ -49,12 +49,28 @@ from OpenSceneGraph.GL import *
 
 SHADOW_SIZE = 1024
 
-KEY_LIGHT_POS = osg.Vec3( 0.1, 0.1, 1.0)
-FILL_LIGHT_POS_0 = osg.Vec3(-0.8, 0.3, 0.5)
-FILL_LIGHT_POS_1 = osg.Vec3( 0.0, -0.6, 0.2)
+# Light rig, expressed as directions from the model's bounding-sphere center plus a distance/radius
+# tuned for a ~1.7-unit-radius object (Cube/AnimatedCube's actual scale - the objects this rig was
+# originally hand-tuned against). At load time these get scaled by max(model_radius /
+# REFERENCE_RADIUS, 1.0) - never shrunk below this baseline (so BoomBox/Avocado/Cube etc. render
+# identically to before), only grown for anything bigger. Without this, direct lighting collapses
+# to near-zero on larger meshes (e.g. Lantern, whose ~15-unit bounding radius put every surface
+# point dozens of light-radii away from these originally-fixed positions) - see
+# ai/context-todo-utils.md in osgGLTF and ext/glTF-Sample-Models.md for the investigation.
+REFERENCE_RADIUS = 1.7
+
+KEY_LIGHT_DIR = osg.Vec3( 0.1, 0.1, 1.0).normalized()
+FILL_LIGHT_DIR_0 = osg.Vec3(-0.8, 0.3, 0.5).normalized()
+FILL_LIGHT_DIR_1 = osg.Vec3( 0.0, -0.6, 0.2).normalized()
+
+KEY_LIGHT_DIST = osg.Vec3( 0.1, 0.1, 1.0).length()
+FILL_LIGHT_DIST_0 = osg.Vec3(-0.8, 0.3, 0.5).length()
+FILL_LIGHT_DIST_1 = osg.Vec3( 0.0, -0.6, 0.2).length()
+
+LIGHT_RADII = (2.5, 1.5, 1.2)
 
 # --------------------------------------------------------------------------- #
-# SH projection (synchronous - no async needed without FBO bake)
+# SH projection
 # SH = Spherical Harmonics
 # --------------------------------------------------------------------------- #
 
@@ -95,9 +111,17 @@ def compute_sh(hdr_path):
 		0.546274 * (x*x - y*y),
 	]
 
-	A = [np.pi,
-		 2*np.pi/3, 2*np.pi/3, 2*np.pi/3,
-		 np.pi/4, np.pi/4, np.pi/4, np.pi/4, np.pi/4]
+	A = [
+		np.pi,
+		2*np.pi/3,
+		2*np.pi/3,
+		2*np.pi/3,
+		np.pi/4,
+		np.pi/4,
+		np.pi/4,
+		np.pi/4,
+		np.pi/4
+	]
 
 	sh = []
 
@@ -112,6 +136,15 @@ def compute_sh(hdr_path):
 
 	return sh
 
+async def task_compute_sh(queue, hdr_path):
+	try:
+		sh = await asyncio.to_thread(compute_sh, hdr_path)
+
+		await queue.put(sh)
+
+	except Exception as e:
+		print(f"[ibl] ERROR computing SH: {e}", flush=True)
+
 # --------------------------------------------------------------------------- #
 # Shaders
 # --------------------------------------------------------------------------- #
@@ -122,14 +155,11 @@ VERTEX_SHADER = """
 in vec4 osg_Vertex;
 in vec3 osg_Normal;
 in vec2 osg_MultiTexCoord0;
-in vec4 osg_Tangent;
 
 uniform mat4 osg_ModelViewProjectionMatrix;
 uniform mat4 osg_ModelViewMatrix;
 uniform mat3 osg_NormalMatrix;
 
-out vec3 vT;
-out vec3 vB;
 out vec3 vNGeom;
 out vec3 vPosition;
 out vec2 vUV;
@@ -138,15 +168,7 @@ void main() {
 	vec4 eyePos = osg_ModelViewMatrix * osg_Vertex;
 	vPosition = eyePos.xyz;
 	vUV = osg_MultiTexCoord0;
-
-	vec3 N = normalize(osg_NormalMatrix * osg_Normal);
-	vec3 T = normalize(osg_NormalMatrix * osg_Tangent.xyz);
-	T = normalize(T - dot(T, N) * N);
-	vec3 B = cross(N, T) * osg_Tangent.w;
-
-	vNGeom = N;
-	vT = T;
-	vB = B;
+	vNGeom = normalize(osg_NormalMatrix * osg_Normal);
 
 	gl_Position = osg_ModelViewProjectionMatrix * osg_Vertex;
 }
@@ -158,8 +180,6 @@ FRAGMENT_SHADER = """
 #define NUM_LIGHTS 3
 const float PI = 3.14159265359;
 
-in vec3 vT;
-in vec3 vB;
 in vec3 vNGeom;
 in vec3 vPosition;
 in vec2 vUV;
@@ -173,8 +193,13 @@ uniform samplerCube envMap; // unit 5: prefiltered cubemap
 uniform sampler2D brdfLUT; // unit 6: split-sum BRDF LUT
 
 uniform vec3 emissiveFactor;
-uniform float metallicFactor;
-uniform float roughnessFactor;
+uniform float osgGLTF_metallicFactor;
+uniform float osgGLTF_roughnessFactor;
+uniform bool osgGLTF_hasOcclusion;
+uniform bool osgGLTF_hasNormalMap;
+uniform bool osgGLTF_hasMetallicRoughnessMap;
+uniform bool osgGLTF_hasBaseColorMap;
+uniform vec4 osgGLTF_baseColorFactor;
 uniform float scanlineFreq;
 uniform float scanlineStrength;
 uniform float osg_SimulationTime;
@@ -251,18 +276,63 @@ vec3 sh_irradiance(vec3 N) {
 	);
 }
 
+// ---- Shading normal --------------------------------------------------------- //
+// TBN reconstructed per-pixel from screen-space derivatives of position/UV
+// (Christian Schuler's "normal mapping without precomputed tangents" --
+// http://www.thetenthplanet.de/archives/1180) rather than a vertex TANGENT
+// attribute. Matches VulkanSceneGraph's standard_pbr.frag exactly - glTF's
+// TANGENT accessor is optional and frequently absent (DamagedHelmet,
+// MetalRoughSpheres, Fox in glTF-Sample-Models all ship without one), and
+// osg_Tangent reading OpenGL's default (0,0,0,1) for an unbound attribute
+// produced NaN through normalize((0,0,0)) - this sidesteps that failure
+// mode entirely rather than requiring GLTFReader.hpp to synthesize tangents.
+vec3 getShadingNormal() {
+	vec3 Nb = normalize(vNGeom);
+	if (!osgGLTF_hasNormalMap) return Nb;
+
+	vec3 tangentNormal = texture(normalTex, vUV).rgb * 2.0 - 1.0;
+
+	vec3 q1 = dFdx(vPosition);
+	vec3 q2 = dFdy(vPosition);
+	vec2 st1 = dFdx(vUV);
+	vec2 st2 = dFdy(vUV);
+
+	vec3 T = normalize(q1 * st2.t - q2 * st1.t);
+	vec3 B = -normalize(cross(Nb, T));
+	mat3 TBN = mat3(T, B, Nb);
+
+	return normalize(TBN * tangentNormal);
+}
+
 // ---- Main ----------------------------------------------------------------- //
 
 void main() {
-	mat3 TBN = mat3(normalize(vT), normalize(vB), normalize(vNGeom));
-	vec3 nMap = texture(normalTex, vUV).rgb * 2.0 - 1.0;
-	vec3 N = normalize(TBN * nMap);
+	vec3 N = getShadingNormal();
 	vec3 V = normalize(-vPosition);
 
-	vec3 albedo = texture(baseColorTex, vUV).rgb;
-	float ao = texture(ormTex, vUV).r;
-	float roughness = texture(ormTex, vUV).g * roughnessFactor;
-	float metallic = texture(ormTex, vUV).b * metallicFactor;
+	// Same "unconditional texture() has no fallback" gap as occlusion below,
+	// but for baseColor - a factor-only material (no baseColorTexture, e.g.
+	// most of the glTF-Sample-Models *Test conformance set) would otherwise
+	// read an unbound unit 0 as black instead of its authored flat color.
+	vec3 albedo = osgGLTF_hasBaseColorMap ? texture(baseColorTex, vUV).rgb : osgGLTF_baseColorFactor.rgb;
+	// The R channel of a glTF metallicRoughnessTexture is spec-unused unless
+	// the material also declares an occlusionTexture pointing at the same
+	// (or a merged) image - osgGLTF_hasOcclusion reflects that, set by
+	// GLTFReader.hpp per-material. Trusting R unconditionally silently
+	// zeroes the entire ambient/IBL term below on any material that never
+	// authored real AO data.
+	float ao = osgGLTF_hasOcclusion ? texture(ormTex, vUV).r : 1.0;
+	// Same story for roughness/metallic: a material can be entirely
+	// factor-driven with no metallicRoughnessTexture at all (e.g. Fox:
+	// roughnessFactor=0.58, no texture) - multiplying an unbound unit 2's
+	// zero read by the factor silently discarded it, forcing roughness/
+	// metallic to 0 (mirror-smooth) regardless of what was authored.
+	float roughness = osgGLTF_hasMetallicRoughnessMap
+		? texture(ormTex, vUV).g * osgGLTF_roughnessFactor
+		: osgGLTF_roughnessFactor;
+	float metallic = osgGLTF_hasMetallicRoughnessMap
+		? texture(ormTex, vUV).b * osgGLTF_metallicFactor
+		: osgGLTF_metallicFactor;
 
 	// Specular AA: clamp roughness by how fast the shading normal (including
 	// normal map) rotates per pixel. Using N (post-normal-map) rather than
@@ -546,7 +616,11 @@ def make_brdf_lut(lut_size=512):
 	))
 
 	quad = osg.createTexturedQuadGeometry(
-		osg.Vec3(-1, -1, 0), osg.Vec3(2, 0, 0), osg.Vec3(0, 2, 0))
+		osg.Vec3(-1, -1, 0),
+		osg.Vec3(2, 0, 0),
+		osg.Vec3(0, 2, 0)
+	)
+
 	quad_geode = osg.Geode()
 	quad_geode.drawables.append(quad)
 
@@ -577,13 +651,9 @@ def make_brdf_lut(lut_size=512):
 
 	return lut_tex, bake_group
 
-# --------------------------------------------------------------------------- #
-# Main
-# --------------------------------------------------------------------------- #
-
-# If the passed-in file exists, simply return it; if not, try and find it inside
-# example data dir. For convenience, we'll try all the extensions we support, as
-# well as assuming cetain directory structures.
+# If the passed-in file exists, simply return it; if not, try and find it inside example data dir.
+# For convenience, we'll try all the extensions we support, as well as assuming cetain directory
+# structures.
 def data_dir_file(f, suffix=None):
 	if os.path.exists(f):
 		return f
@@ -643,12 +713,34 @@ if __name__ == "__main__":
 
 	args.path = data_dir_file(args.path, "gltf")
 	args.ktx2 = data_dir_file(args.ktx2, "ktx2")
-	args.hdr = data_dir_file(args.hdr, "hdr")
+
+	if args.hdr:
+		args.hdr = data_dir_file(args.hdr, "hdr")
 
 	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
-	# --- Load model --------------------------------------------------------- #
 	model = osgDB.readNodeFile(args.path)
+
+	# REFERENCE_RADIUS is the scale the hardcoded rig directions/distances were tuned against -
+	# never shrink below that (so already-good renders like BoomBox/Avocado/Cube are untouched),
+	# only grow proportionally for bigger meshes so direct lighting doesn't collapse to near-zero
+	# on anything larger (Lantern was the extreme case: ~15-unit bounding radius vs. fixed light
+	# positions ~1 unit from the origin).
+	bound = model.bound
+	bound_center = bound.center
+	bound_radius = bound.radius if bound.radius > 1e-6 else REFERENCE_RADIUS
+	light_scale = max(bound_radius / REFERENCE_RADIUS, 1.0)
+
+	print(
+		f"[lighting] model bound: center={tuple(bound_center)} "
+		f"radius={bound_radius:.4f}  light_scale={light_scale:.3f}",
+		flush=True
+	)
+
+	key_light_pos = bound_center + KEY_LIGHT_DIR * (KEY_LIGHT_DIST * light_scale)
+	fill_light_pos_0 = bound_center + FILL_LIGHT_DIR_0 * (FILL_LIGHT_DIST_0 * light_scale)
+	fill_light_pos_1 = bound_center + FILL_LIGHT_DIR_1 * (FILL_LIGHT_DIST_1 * light_scale)
+	light_radius_scaled = tuple(r * light_scale for r in LIGHT_RADII)
 
 	# --- Load prefiltered cubemap from KTX2 --------------------------------- #
 	prefilter_tex = osgDB.readObjectFile(args.ktx2)
@@ -670,17 +762,8 @@ if __name__ == "__main__":
 
 	# --- IBL uniforms ------------------------------------------------------- #
 	ibl_sh_u = osg.Uniform(osg.Uniform.Type.FLOAT_VEC3, "iblSH", (osg.Vec3(),) * 9)
-	ibl_enabled_u = osg.Uniform("iblEnabled", 1) # always 1 -- we have the cubemap
+	ibl_enabled_u = osg.Uniform("iblEnabled", 1) # always 1 - we have the cubemap
 	ibl_intensity_u = osg.Uniform("iblIntensity", args.ibl_intensity)
-
-	# SH computed in background so the window opens immediately
-	_sh_result = [None]
-
-	def _sh_thread():
-		_sh_result[0] = compute_sh(args.hdr)
-
-	if args.hdr:
-		threading.Thread(target=_sh_thread, daemon=True).start()
 
 	# --- PBR program -------------------------------------------------------- #
 	_define = "#version 460 core\n#define ANIMATED_LIGHTS" if args.animated_lights else "#version 460 core"
@@ -691,8 +774,6 @@ if __name__ == "__main__":
 		osg.Shader(osg.Shader.VERTEX, VERTEX_SHADER),
 		osg.Shader(osg.Shader.FRAGMENT, _frag),
 	))
-
-	p.bindAttribLocation["osg_Tangent"] = 7
 
 	ss = model.stateSet
 
@@ -716,9 +797,9 @@ if __name__ == "__main__":
 
 	# --- Shared light uniforms ---------------------------------------------- #
 	lightPos = osg.Uniform(osg.Uniform.Type.FLOAT_VEC3, "lightPos", (
-		KEY_LIGHT_POS,
-		FILL_LIGHT_POS_0,
-		FILL_LIGHT_POS_1,
+		key_light_pos,
+		fill_light_pos_0,
+		fill_light_pos_1,
 	))
 
 	if args.lights:
@@ -735,7 +816,7 @@ if __name__ == "__main__":
 			osg.Vec3()
 		))
 
-	lightRadius = osg.Uniform(osg.Uniform.Type.FLOAT, "lightRadius", (2.5, 1.5, 1.2))
+	lightRadius = osg.Uniform(osg.Uniform.Type.FLOAT, "lightRadius", light_radius_scaled)
 
 	shadow_matrix_u = osg.Uniform("shadowMatrix", osg.Matrixf.identity())
 
@@ -752,13 +833,32 @@ if __name__ == "__main__":
 	dummy_color.size = (SHADOW_SIZE, SHADOW_SIZE)
 	dummy_color.internalFormat = GL_RGB
 
+	# Shadow camera gets its OWN position - deliberately decoupled from key_light_pos (which stays
+	# exactly as validated for direct-light shading/attenuation). Reusing key_light_pos's distance
+	# here (a previous attempt) put the camera closer to the object than its own bounding radius
+	# for every model except BoomBox, forcing near->0.01 while far stretched out to cover the
+	# object - e.g. Lantern hit a ~2870:1 near:far ratio, which collapses shadow-map depth
+	# precision to nothing (the comparison in shadowFactor() never triggers - looks like "no
+	# shadow" but is really "no usable depth precision"). Cube was already at ~328:1, just not
+	# noticed. Fixing this needs the shadow camera to sit far enough back for a fixed, comfortable
+	# FOV, which bounds near:far to a healthy ratio by construction regardless of model size --
+	# same direction as the key light (still reads as "cast by the key light"), just a different
+	# vantage point purely for the depth pass.
+	SHADOW_HALF_FOV_DEG = 25.0
+	SHADOW_MARGIN = 1.3
+	shadow_distance = bound_radius * SHADOW_MARGIN / math.tan(math.radians(SHADOW_HALF_FOV_DEG))
+	shadow_light_pos = bound_center + KEY_LIGHT_DIR * shadow_distance
+
 	light_view = osg.Matrix.lookAt(
-		KEY_LIGHT_POS,
-		osg.Vec3(0, 0, 0),
+		shadow_light_pos,
+		bound_center,
 		osg.Vec3(0, 1, 0)
 	)
 
-	light_proj = osg.Matrix.perspective(8.0, 1.0, 0.8, 1.3)
+	shadow_near = max(0.01, shadow_distance - bound_radius * SHADOW_MARGIN)
+	shadow_far = shadow_distance + bound_radius * SHADOW_MARGIN
+
+	light_proj = osg.Matrix.perspective(2.0 * SHADOW_HALF_FOV_DEG, 1.0, shadow_near, shadow_far)
 
 	shadow_cam = osg.Camera()
 	shadow_cam.name = "ShadowCam"
@@ -834,11 +934,42 @@ if __name__ == "__main__":
 
 	v.camera.preDrawCallback = update_shadow
 
-	while not v.done:
-		v.frame()
+	# --- Async viewer loop -------------------------------------------------- #
+	loop = asyncio.new_event_loop()
+	queue = asyncio.Queue()
+	asyncio.set_event_loop(loop)
 
-		if _sh_result[0] is not None:
-			for i, rgb in enumerate(_sh_result[0]):
-				ibl_sh_u[i] = osg.Vec3(*rgb)
+	tasks = []
 
-			_sh_result[0] = None
+	if args.hdr:
+		tasks.append(loop.create_task(task_compute_sh(queue, args.hdr)))
+
+	try:
+		while not v.done:
+			v.frame()
+			loop.run_until_complete(asyncio.sleep(0))
+
+			try:
+				while True:
+					sh = queue.get_nowait()
+
+					for i, rgb in enumerate(sh):
+						ibl_sh_u[i] = osg.Vec3(*rgb)
+
+			except asyncio.QueueEmpty:
+				pass
+
+	finally:
+		for task in tasks:
+			task.cancel()
+
+		try:
+			for task in tasks:
+				loop.run_until_complete(task)
+
+		except asyncio.CancelledError:
+			pass
+
+		loop.run_until_complete(asyncio.sleep(0))
+		loop.stop()
+		loop.close()
