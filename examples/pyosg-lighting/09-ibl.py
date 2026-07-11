@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#vimrun! python3 ../examples/pyosg-lighting/09-ibl.py --no-floor --no-lights --ktx2 papermill --hdr papermill
+#vimrun! python3 ../examples/pyosg-lighting/09-ibl.py --no-lights --ktx2 papermill --hdr papermill
 
 # Step 9 - Image-Based Lighting (IBL) - static KTX2 path
 #
@@ -184,22 +184,38 @@ in vec3 vNGeom;
 in vec3 vPosition;
 in vec2 vUV;
 
-uniform sampler2D baseColorTex; // unit 0
-uniform sampler2D normalTex; // unit 1
-uniform sampler2D ormTex; // unit 2
-uniform sampler2D emissiveTex; // unit 3
 uniform sampler2D shadowMap; // unit 4
 uniform samplerCube envMap; // unit 5: prefiltered cubemap
 uniform sampler2D brdfLUT; // unit 6: split-sum BRDF LUT
 
 uniform vec3 emissiveFactor;
-uniform float osgGLTF_metallicFactor;
-uniform float osgGLTF_roughnessFactor;
-uniform bool osgGLTF_hasOcclusion;
-uniform bool osgGLTF_hasNormalMap;
-uniform bool osgGLTF_hasMetallicRoughnessMap;
-uniform bool osgGLTF_hasBaseColorMap;
-uniform vec4 osgGLTF_baseColorFactor;
+
+// ---- osgGLTF material inputs ------------------------------------------------ //
+// Everything below comes from osgGLTF's ReaderWriterGLTF (applyMaterial() in GLTFReader.hpp),
+// grouped here as the two osgGLTF_* declarations rather than scattered loose uniforms. Scalars/
+// flags arrive as a single UBO; textures can't join them there (GLSL disallows opaque/sampler
+// types inside a uniform block), so they're a parallel struct-of-samplers uniform instead -- as
+// close to "one place" as GLSL allows. Layout must match the std140 packing built in
+// GLTFReader.hpp exactly.
+layout(std140, binding = 0) uniform osgGLTF_Material {
+	vec4 baseColorFactor;
+	float roughnessFactor;
+	float metallicFactor;
+	float hasBaseColorMap;
+	float hasMetallicRoughnessMap;
+	float hasOcclusion;
+	float hasNormalMap;
+} osgGLTF_material;
+
+struct GLTFTextures {
+	sampler2D baseColor; // unit 0
+	sampler2D normal; // unit 1
+	sampler2D orm; // unit 2
+	sampler2D emissive; // unit 3
+};
+
+uniform GLTFTextures osgGLTF_textures;
+
 uniform float scanlineFreq;
 uniform float scanlineStrength;
 uniform float osg_SimulationTime;
@@ -212,6 +228,7 @@ uniform mat4 osg_ViewMatrix;
 uniform vec3 lightPos[NUM_LIGHTS];
 uniform vec3 lightColor[NUM_LIGHTS];
 uniform float lightRadius[NUM_LIGHTS];
+uniform bool animatedLights;
 
 uniform mat4 shadowMatrix;
 
@@ -257,8 +274,8 @@ float shadowFactor(vec3 eyePos) {
 	if (any(lessThan(uv, vec3(0.0))) || any(greaterThan(uv, vec3(1.0)))) return 1.0;
 	vec2 sz = 1.0 / vec2(textureSize(shadowMap, 0));
 	float shadow = 0.0;
-	for (int x = -1; x <= 1; ++x)
-		for (int y = -1; y <= 1; ++y)
+	for (int x = -1; x <= 1; x++)
+		for (int y = -1; y <= 1; y++)
 			shadow += (uv.z - 0.005 > texture(shadowMap, uv.xy + vec2(x, y) * sz).r) ? 1.0 : 0.0;
 	return mix(1.0, 0.3, shadow / 9.0);
 }
@@ -288,9 +305,9 @@ vec3 sh_irradiance(vec3 N) {
 // mode entirely rather than requiring GLTFReader.hpp to synthesize tangents.
 vec3 getShadingNormal() {
 	vec3 Nb = normalize(vNGeom);
-	if (!osgGLTF_hasNormalMap) return Nb;
+	if (!bool(osgGLTF_material.hasNormalMap)) return Nb;
 
-	vec3 tangentNormal = texture(normalTex, vUV).rgb * 2.0 - 1.0;
+	vec3 tangentNormal = texture(osgGLTF_textures.normal, vUV).rgb * 2.0 - 1.0;
 
 	vec3 q1 = dFdx(vPosition);
 	vec3 q2 = dFdy(vPosition);
@@ -304,35 +321,48 @@ vec3 getShadingNormal() {
 	return normalize(TBN * tangentNormal);
 }
 
-// ---- Main ----------------------------------------------------------------- //
+// ---- Material --------------------------------------------------------------- //
+// Bundles the per-fragment material values fed into both the direct-light loop
+// and the IBL ambient term, VSG-standard_pbr.frag-style (see PBRInfo in
+// ~/dev/vsgExamples/data/shaders/standard_pbr.frag) - just scoped to what our
+// single fixed GGX BRDF needs, not the full pluggable-diffuse-model struct VSG
+// uses to switch between Lambert/OrenNayar/Gotanda/Burley/Disney.
+struct Material {
+	vec3 albedo;
+	float ao;
+	float roughness;
+	float metallic;
+	vec3 F0;
+};
 
-void main() {
-	vec3 N = getShadingNormal();
-	vec3 V = normalize(-vPosition);
+Material getMaterial(vec3 N) {
+	Material mat;
 
 	// Same "unconditional texture() has no fallback" gap as occlusion below,
 	// but for baseColor - a factor-only material (no baseColorTexture, e.g.
 	// most of the glTF-Sample-Models *Test conformance set) would otherwise
 	// read an unbound unit 0 as black instead of its authored flat color.
-	vec3 albedo = osgGLTF_hasBaseColorMap ? texture(baseColorTex, vUV).rgb : osgGLTF_baseColorFactor.rgb;
+	mat.albedo = bool(osgGLTF_material.hasBaseColorMap)
+		? texture(osgGLTF_textures.baseColor, vUV).rgb
+		: osgGLTF_material.baseColorFactor.rgb;
 	// The R channel of a glTF metallicRoughnessTexture is spec-unused unless
 	// the material also declares an occlusionTexture pointing at the same
-	// (or a merged) image - osgGLTF_hasOcclusion reflects that, set by
+	// (or a merged) image - hasOcclusion reflects that, set by
 	// GLTFReader.hpp per-material. Trusting R unconditionally silently
 	// zeroes the entire ambient/IBL term below on any material that never
 	// authored real AO data.
-	float ao = osgGLTF_hasOcclusion ? texture(ormTex, vUV).r : 1.0;
+	mat.ao = bool(osgGLTF_material.hasOcclusion) ? texture(osgGLTF_textures.orm, vUV).r : 1.0;
 	// Same story for roughness/metallic: a material can be entirely
 	// factor-driven with no metallicRoughnessTexture at all (e.g. Fox:
 	// roughnessFactor=0.58, no texture) - multiplying an unbound unit 2's
 	// zero read by the factor silently discarded it, forcing roughness/
 	// metallic to 0 (mirror-smooth) regardless of what was authored.
-	float roughness = osgGLTF_hasMetallicRoughnessMap
-		? texture(ormTex, vUV).g * osgGLTF_roughnessFactor
-		: osgGLTF_roughnessFactor;
-	float metallic = osgGLTF_hasMetallicRoughnessMap
-		? texture(ormTex, vUV).b * osgGLTF_metallicFactor
-		: osgGLTF_metallicFactor;
+	mat.roughness = bool(osgGLTF_material.hasMetallicRoughnessMap)
+		? texture(osgGLTF_textures.orm, vUV).g * osgGLTF_material.roughnessFactor
+		: osgGLTF_material.roughnessFactor;
+	mat.metallic = bool(osgGLTF_material.hasMetallicRoughnessMap)
+		? texture(osgGLTF_textures.orm, vUV).b * osgGLTF_material.metallicFactor
+		: osgGLTF_material.metallicFactor;
 
 	// Specular AA: clamp roughness by how fast the shading normal (including
 	// normal map) rotates per pixel. Using N (post-normal-map) rather than
@@ -342,30 +372,41 @@ void main() {
 		max(abs(dFdx(N.x)), abs(dFdx(N.y))),
 		max(abs(dFdy(N.x)), abs(dFdy(N.y)))
 	);
-	roughness = max(roughness, normalDelta);
+	mat.roughness = max(mat.roughness, normalDelta);
 
-	float NdotV = max(dot(N, V), 0.0);
-	vec3 F0 = mix(vec3(0.04), albedo, metallic);
+	mat.F0 = mix(vec3(0.04), mat.albedo, mat.metallic);
 
-	// Analytical lights
+	return mat;
+}
+
+// ---- Direct lighting -------------------------------------------------------- //
+
+// Light i orbits the origin and pulses in intensity; only used when the animatedLights
+// uniform is set (see --animated-lights). Replaces lightPos[i]/a flat 1.0 pulse.
+void getAnimatedLight(int i, float t, out vec3 lp, out float pulse) {
+	if (i == 0) {
+		lp = vec3(cos(t*0.8)*1.0, sin(t*0.8)*1.0, 0.8);
+		pulse = 0.8 + 0.2*sin(t*1.3);
+	} else if (i == 1) {
+		lp = vec3(cos(t*0.5+6.28318/3.0)*0.9, sin(t*0.5+6.28318/3.0)*0.9, 0.3);
+		pulse = 0.8 + 0.2*sin(t*0.9+1.0);
+	} else {
+		lp = vec3(cos(t*0.3+6.28318/1.5)*0.7, sin(t*0.3+6.28318/1.5)*0.7,-0.2);
+		pulse = 0.8 + 0.2*sin(t*0.6+2.1);
+	}
+}
+
+vec3 evaluateDirectLighting(Material mat, vec3 N, vec3 V, float NdotV) {
 	vec3 Lo = vec3(0.0);
-#ifdef ANIMATED_LIGHTS
-	float _t = osg_SimulationTime;
-	vec3 _lp[NUM_LIGHTS];
-	float _pulse[NUM_LIGHTS];
-	_lp[0] = vec3(cos(_t*0.8)*1.0, sin(_t*0.8)*1.0, 0.8);
-	_lp[1] = vec3(cos(_t*0.5+6.28318/3.0)*0.9, sin(_t*0.5+6.28318/3.0)*0.9, 0.3);
-	_lp[2] = vec3(cos(_t*0.3+6.28318/1.5)*0.7, sin(_t*0.3+6.28318/1.5)*0.7,-0.2);
-	_pulse[0] = 0.8 + 0.2*sin(_t*1.3);
-	_pulse[1] = 0.8 + 0.2*sin(_t*0.9+1.0);
-	_pulse[2] = 0.8 + 0.2*sin(_t*0.6+2.1);
-#endif
+	float t = osg_SimulationTime;
+
 	for (int i = 0; i < NUM_LIGHTS; i++) {
-#ifdef ANIMATED_LIGHTS
-		vec3 lEye = (osg_ViewMatrix * vec4(_lp[i], 1.0)).xyz;
-#else
-		vec3 lEye = (osg_ViewMatrix * vec4(lightPos[i], 1.0)).xyz;
-#endif
+		vec3 lp = lightPos[i];
+		float pulse = 1.0;
+
+		if (animatedLights) getAnimatedLight(i, t, lp, pulse);
+
+		vec3 lEye = (osg_ViewMatrix * vec4(lp, 1.0)).xyz;
 		vec3 lVec = lEye - vPosition;
 		float dist = length(lVec);
 		vec3 L = lVec / dist;
@@ -375,71 +416,90 @@ void main() {
 		float NdotL = max(dot(N, L), 0.0);
 		float NdotH = max(dot(N, H), 0.0);
 		float HdotV = max(dot(H, V), 0.0);
-		float D = D_GGX(NdotH, roughness);
-		float G = G_Smith(NdotV, NdotL, roughness);
-		vec3 F = F_Schlick(HdotV, F0);
-		vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
-		vec3 diffuse = kD * albedo / PI;
+		float D = D_GGX(NdotH, mat.roughness);
+		float G = G_Smith(NdotV, NdotL, mat.roughness);
+		vec3 F = F_Schlick(HdotV, mat.F0);
+		vec3 kD = (vec3(1.0) - F) * (1.0 - mat.metallic);
+		vec3 diffuse = kD * mat.albedo / PI;
 		vec3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 0.001);
 		float shad = (i == 0) ? shadowFactor(vPosition) : 1.0;
-#ifdef ANIMATED_LIGHTS
-		Lo += (diffuse + specular) * lightColor[i] * _pulse[i] * NdotL * atten * shad;
-#else
-		Lo += (diffuse + specular) * lightColor[i] * NdotL * atten * shad;
-#endif
+
+		Lo += (diffuse + specular) * lightColor[i] * pulse * NdotL * atten * shad;
 	}
 
-	// Ambient
-	vec3 ambient;
+	return Lo;
+}
+
+// ---- IBL ambient ------------------------------------------------------------ //
+
+vec3 evaluateIBL(Material mat, vec3 N, vec3 V, float NdotV) {
 	if (iblEnabled == 0) {
 		vec3 worldUp = normalize(mat3(osg_ViewMatrix) * vec3(0.0, 0.0, 1.0));
 		float hemi = dot(N, worldUp) * 0.5 + 0.5;
-		ambient = mix(groundColor, skyColor, hemi) * albedo * ao;
-	} else {
-		mat3 invView = transpose(mat3(osg_ViewMatrix));
-		vec3 N_world = invView * N;
-		vec3 V_world = invView * V;
-		vec3 R_world = reflect(-V_world, N_world);
-
-		vec3 F_ibl = F_Schlick_roughness(NdotV, F0, roughness);
-		vec3 kD_ibl = (1.0 - F_ibl) * (1.0 - metallic);
-		vec3 ibl_diff = sh_irradiance(N_world) * albedo * kD_ibl * iblIntensity;
-
-		float maxMip = float(textureQueryLevels(envMap) - 1);
-		float lod = roughness * maxMip;
-		vec3 r_gl = vec3(R_world.x, R_world.z, -R_world.y);
-		vec3 prefilt = textureLod(envMap, r_gl, lod).rgb;
-		vec2 brdf = texture(brdfLUT, vec2(NdotV, roughness)).rg;
-		vec3 ibl_spec = prefilt * (F0 * brdf.x + brdf.y);
-
-		ambient = (ibl_diff + ibl_spec) * ao;
+		return mix(groundColor, skyColor, hemi) * mat.albedo * mat.ao;
 	}
 
-	// Emissive
-	vec3 emissive = texture(emissiveTex, vUV).rgb * emissiveFactor;
+	mat3 invView = transpose(mat3(osg_ViewMatrix));
+	vec3 N_world = invView * N;
+	vec3 V_world = invView * V;
+	vec3 R_world = reflect(-V_world, N_world);
+
+	vec3 F_ibl = F_Schlick_roughness(NdotV, mat.F0, mat.roughness);
+	vec3 kD_ibl = (1.0 - F_ibl) * (1.0 - mat.metallic);
+	vec3 ibl_diff = sh_irradiance(N_world) * mat.albedo * kD_ibl * iblIntensity;
+
+	float maxMip = float(textureQueryLevels(envMap) - 1);
+	float lod = mat.roughness * maxMip;
+	vec3 r_gl = vec3(R_world.x, R_world.z, -R_world.y);
+	vec3 prefilt = textureLod(envMap, r_gl, lod).rgb;
+	vec2 brdf = texture(brdfLUT, vec2(NdotV, mat.roughness)).rg;
+	vec3 ibl_spec = prefilt * (mat.F0 * brdf.x + brdf.y);
+
+	return (ibl_diff + ibl_spec) * mat.ao;
+}
+
+// ---- Emissive ---------------------------------------------------------------- //
+
+vec3 getEmissive() {
+	vec3 emissive = texture(osgGLTF_textures.emissive, vUV).rgb * emissiveFactor;
 	float scanline = 0.5 + 0.5 * sin(vUV.y * scanlineFreq - osg_SimulationTime * 10.0);
-	emissive *= mix(1.0, scanline, scanlineStrength);
+	return emissive * mix(1.0, scanline, scanlineStrength);
+}
+
+// ---- Tonemap ------------------------------------------------------------------ //
+// Khronos PBR Neutral tonemapping (matches Babylon.js "PBR Neutral" preset).
+// Hue-preserving, no ACES orange shift at high luminance.
+vec3 tonemapPBRNeutral(vec3 color) {
+	const float startCompression = 0.8 - 0.04;
+	const float desaturation = 0.15;
+	float x = min(color.r, min(color.g, color.b));
+	float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
+	color -= offset;
+	float peak = max(color.r, max(color.g, color.b));
+	if (peak >= startCompression) {
+		float d = 1.0 - startCompression;
+		float newPeak = 1.0 - d * d / (peak + d - startCompression);
+		color *= newPeak / peak;
+		float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
+		color = mix(color, vec3(newPeak), g);
+	}
+	return clamp(color, 0.0, 1.0);
+}
+
+// ---- Main ----------------------------------------------------------------- //
+
+void main() {
+	vec3 N = getShadingNormal();
+	vec3 V = normalize(-vPosition);
+	Material mat = getMaterial(N);
+	float NdotV = max(dot(N, V), 0.0);
+
+	vec3 Lo = evaluateDirectLighting(mat, N, V, NdotV);
+	vec3 ambient = evaluateIBL(mat, N, V, NdotV);
+	vec3 emissive = getEmissive();
 
 	vec3 color = ambient + Lo + emissive;
-
-	// Khronos PBR Neutral tonemapping (matches Babylon.js "PBR Neutral" preset)
-	// Hue-preserving, no ACES orange shift at high luminance.
-	{
-		const float startCompression = 0.8 - 0.04;
-		const float desaturation = 0.15;
-		float x = min(color.r, min(color.g, color.b));
-		float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
-		color -= offset;
-		float peak = max(color.r, max(color.g, color.b));
-		if (peak >= startCompression) {
-			float d = 1.0 - startCompression;
-			float newPeak = 1.0 - d * d / (peak + d - startCompression);
-			color *= newPeak / peak;
-			float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
-			color = mix(color, vec3(newPeak), g);
-		}
-		color = clamp(color, 0.0, 1.0);
-	}
+	color = tonemapPBRNeutral(color);
 	color = pow(color, vec3(1.0 / 2.2));
 
 	fragColor = vec4(color, 1.0);
@@ -478,6 +538,7 @@ in vec3 vNormal;
 uniform vec3 lightPos[NUM_LIGHTS];
 uniform vec3 lightColor[NUM_LIGHTS];
 uniform float lightRadius[NUM_LIGHTS];
+uniform bool animatedLights;
 uniform mat4 shadowMatrix;
 uniform sampler2D shadowMap;
 uniform mat4 osg_ViewMatrix;
@@ -492,29 +553,41 @@ float shadowFactor(vec3 eyePos) {
 	if (any(lessThan(uv, vec3(0.0))) || any(greaterThan(uv, vec3(1.0)))) return 1.0;
 	vec2 sz = 1.0 / vec2(textureSize(shadowMap, 0));
 	float shadow = 0.0;
-	for (int x = -1; x <= 1; ++x)
-		for (int y = -1; y <= 1; ++y)
+	for (int x = -1; x <= 1; x++)
+		for (int y = -1; y <= 1; y++)
 			shadow += (uv.z - 0.005 > texture(shadowMap, uv.xy + vec2(x, y) * sz).r) ? 1.0 : 0.0;
 	return mix(1.0, 0.3, shadow / 9.0);
+}
+
+// Light i orbits the origin; only used when the animatedLights uniform is set (see
+// --animated-lights). Replaces lightPos[i]. The floor never modulates by pulse, so it's
+// computed here for symmetry with the PBR fragment shader's getAnimatedLight() but discarded.
+void getAnimatedLight(int i, float t, out vec3 lp, out float pulse) {
+	if (i == 0) {
+		lp = vec3(cos(t*0.8)*1.0, sin(t*0.8)*1.0, 0.8);
+		pulse = 0.8 + 0.2*sin(t*1.3);
+	} else if (i == 1) {
+		lp = vec3(cos(t*0.5+6.28318/3.0)*0.9, sin(t*0.5+6.28318/3.0)*0.9, 0.3);
+		pulse = 0.8 + 0.2*sin(t*0.9+1.0);
+	} else {
+		lp = vec3(cos(t*0.3+6.28318/1.5)*0.7, sin(t*0.3+6.28318/1.5)*0.7,-0.2);
+		pulse = 0.8 + 0.2*sin(t*0.6+2.1);
+	}
 }
 
 void main() {
 	vec3 N = normalize(vNormal);
 	vec3 albedo = vec3(0.82, 0.76, 0.62);
 	vec3 Lo = vec3(0.0);
-#ifdef ANIMATED_LIGHTS
-	float _t = osg_SimulationTime;
-	vec3 _lp[NUM_LIGHTS];
-	_lp[0] = vec3(cos(_t*0.8)*1.0, sin(_t*0.8)*1.0, 0.8);
-	_lp[1] = vec3(cos(_t*0.5+6.28318/3.0)*0.9, sin(_t*0.5+6.28318/3.0)*0.9, 0.3);
-	_lp[2] = vec3(cos(_t*0.3+6.28318/1.5)*0.7, sin(_t*0.3+6.28318/1.5)*0.7,-0.2);
-#endif
+	float t = osg_SimulationTime;
+
 	for (int i = 0; i < NUM_LIGHTS; i++) {
-#ifdef ANIMATED_LIGHTS
-		vec3 lEye = (osg_ViewMatrix * vec4(_lp[i], 1.0)).xyz;
-#else
-		vec3 lEye = (osg_ViewMatrix * vec4(lightPos[i], 1.0)).xyz;
-#endif
+		vec3 lp = lightPos[i];
+		float pulse = 1.0;
+
+		if (animatedLights) getAnimatedLight(i, t, lp, pulse);
+
+		vec3 lEye = (osg_ViewMatrix * vec4(lp, 1.0)).xyz;
 		vec3 lVec = lEye - vPosition;
 		float dist = length(lVec);
 		vec3 L = lVec / dist;
@@ -599,6 +672,30 @@ void main() {
 }
 """
 
+# ---- One-shot bake helper --------------------------------------------------- #
+# Disables a PRE_RENDER bake group's nodeMask after it has rendered exactly one
+# frame (so a startup-only bake camera doesn't keep re-rendering every frame).
+# Call bake() to re-enable it for exactly one more frame (e.g. to re-bake after
+# swapping the bake's source data).
+class SingleBake:
+	def __init__(self, group):
+		self.group = group
+		self.done = False
+
+		group.updateCallback = self
+
+	def __call__(self, node, nv):
+		if self.done:
+			node.nodeMask = 0
+
+		self.done = True
+
+		return True
+
+	def bake(self):
+		self.group.nodeMask = 0xFFFFFFFF
+		self.done = False
+
 # --------------------------------------------------------------------------- #
 # BRDF LUT bake (environment-independent - fires once at startup)
 # --------------------------------------------------------------------------- #
@@ -625,15 +722,8 @@ def make_brdf_lut(lut_size=512):
 	quad_geode.drawables.append(quad)
 
 	bake_group = osg.Group()
-	_done = [False]
 
-	def bake_once(node, nv):
-		if _done[0]:
-			node.nodeMask = 0
-		_done[0] = True
-		return True
-
-	bake_group.updateCallback = bake_once
+	SingleBake(bake_group)
 
 	cam = osg.Camera()
 	cam.name = "BRDFLutBake"
@@ -704,12 +794,15 @@ if __name__ == "__main__":
 	)
 	ap.add_argument("--no-lights", dest="lights", action="store_false", default=True)
 	ap.add_argument("--animated-lights", dest="animated_lights", action="store_true", default=False)
-	ap.add_argument("--floor", dest="floor", action="store_true", default=True)
-	ap.add_argument("--no-floor", dest="floor", action="store_false")
-	ap.add_argument("--floor-z", type=float, default=-0.07)
-	ap.add_argument("--floor-size", type=float, default=0.30)
+	ap.add_argument("--floor-z", type=float, default=None)
+	ap.add_argument("--floor-size", type=float, default=None)
 
 	args = ap.parse_args()
+
+	# No floor by default; passing either flag activates it.
+	args.floor = args.floor_z is not None or args.floor_size is not None
+	args.floor_z = -0.07 if args.floor_z is None else args.floor_z
+	args.floor_size = 0.30 if args.floor_size is None else args.floor_size
 
 	args.path = data_dir_file(args.path, "gltf")
 	args.ktx2 = data_dir_file(args.ktx2, "ktx2")
@@ -766,13 +859,9 @@ if __name__ == "__main__":
 	ibl_intensity_u = osg.Uniform("iblIntensity", args.ibl_intensity)
 
 	# --- PBR program -------------------------------------------------------- #
-	_define = "#version 460 core\n#define ANIMATED_LIGHTS" if args.animated_lights else "#version 460 core"
-	_frag = FRAGMENT_SHADER.replace("#version 460 core", _define, 1)
-	_floor_frag = FLOOR_FRAGMENT.replace("#version 460 core", _define, 1)
-
 	p = osg.Program(name="pbr_ibl", shaders=(
 		osg.Shader(osg.Shader.VERTEX, VERTEX_SHADER),
-		osg.Shader(osg.Shader.FRAGMENT, _frag),
+		osg.Shader(osg.Shader.FRAGMENT, FRAGMENT_SHADER),
 	))
 
 	ss = model.stateSet
@@ -782,10 +871,10 @@ if __name__ == "__main__":
 		osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE | osg.StateAttribute.PROTECTED
 	)
 
-	ss.uniforms["baseColorTex"] = 0
-	ss.uniforms["normalTex"] = 1
-	ss.uniforms["ormTex"] = 2
-	ss.uniforms["emissiveTex"] = 3
+	ss.uniforms["osgGLTF_textures.baseColor"] = 0
+	ss.uniforms["osgGLTF_textures.normal"] = 1
+	ss.uniforms["osgGLTF_textures.orm"] = 2
+	ss.uniforms["osgGLTF_textures.emissive"] = 3
 	ss.uniforms["shadowMap"] = 4
 	ss.uniforms["envMap"] = 5
 	ss.uniforms["brdfLUT"] = 6
@@ -888,7 +977,7 @@ if __name__ == "__main__":
 
 		floor_p = osg.Program(name="floor_ibl", shaders=(
 			osg.Shader(osg.Shader.VERTEX, FLOOR_VERTEX),
-			osg.Shader(osg.Shader.FRAGMENT, _floor_frag),
+			osg.Shader(osg.Shader.FRAGMENT, FLOOR_FRAGMENT),
 		))
 
 		floor_geode.stateSet.setAttributeAndModes(floor_p)
@@ -909,6 +998,7 @@ if __name__ == "__main__":
 		ibl_intensity_u,
 		ibl_sh_u
 	))
+	mg_ss.uniforms["animatedLights"] = args.animated_lights
 
 	main_group.children.append(model)
 
@@ -947,6 +1037,7 @@ if __name__ == "__main__":
 	try:
 		while not v.done:
 			v.frame()
+
 			loop.run_until_complete(asyncio.sleep(0))
 
 			try:

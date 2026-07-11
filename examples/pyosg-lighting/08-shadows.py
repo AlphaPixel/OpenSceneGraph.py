@@ -324,21 +324,24 @@ if __name__ == "__main__":
 			"data/BoomBox/glTF/BoomBox.gltf"
 		)
 	)
-	ap.add_argument("--floor", dest="floor", action="store_true", default=True)
-	ap.add_argument("--no-floor", dest="floor", action="store_false")
 	ap.add_argument(
 		"--floor-z",
 		type=float,
-		default=-0.04,
-		help="Floor Z in Z-up world space (default: -0.04)"
+		default=None,
+		help="Floor Z in Z-up world space (default: -0.04); passing this or --floor-size activates the floor"
 	)
 	ap.add_argument(
 		"--floor-size",
 		type=float,
-		default=0.15,
-		help="Floor quad side length in metres (default: 0.15)"
+		default=None,
+		help="Floor quad side length in metres (default: 0.15); passing this or --floor-z activates the floor"
 	)
 	args = ap.parse_args()
+
+	# No floor by default; passing either flag activates it.
+	args.floor = args.floor_z is not None or args.floor_size is not None
+	args.floor_z = -0.04 if args.floor_z is None else args.floor_z
+	args.floor_size = 0.15 if args.floor_size is None else args.floor_size
 
 	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
