@@ -66,7 +66,8 @@ uniform vec3 groundColor;
 uniform mat4 osg_ViewMatrix;
 uniform vec3 lightPos[NUM_LIGHTS];
 uniform vec3 lightColor[NUM_LIGHTS];
-uniform float lightRadius[NUM_LIGHTS];
+uniform float lightRadius[NUM_LIGHTS]; // attenuation falloff distance only -- NOT physical size
+uniform float lightSourceRadius[NUM_LIGHTS]; // physical sphere radius -- widens the highlight itself
 
 out vec4 fragColor;
 
@@ -91,6 +92,21 @@ vec3 F_Schlick(float HdotV, vec3 F0) {
 	return F0 + (1.0 - F0) * pow(1.0 - HdotV, 5.0);
 }
 
+// Sphere light "representative point" trick (Karis, "Real Shading in Unreal Engine 4", 2013):
+// bends the light direction used for the specular term toward the closest point on the light's
+// physical sphere to the ideal mirror-reflection ray, instead of always pointing at its center.
+// This is what actually makes a highlight bigger/softer as the light gets larger -- unlike
+// lightRadius above, which only changes attenuation. toLightCenter is UNNORMALIZED (light center
+// minus shading point); R is the normalized reflection vector.
+vec3 sphereLightDir(vec3 toLightCenter, vec3 R, float sourceRadius) {
+	vec3 centerToRay = dot(toLightCenter, R) * R - toLightCenter;
+	vec3 closestPoint = toLightCenter + centerToRay * clamp(
+		sourceRadius / max(length(centerToRay), 0.0001), 0.0, 1.0
+	);
+
+	return normalize(closestPoint);
+}
+
 void main() {
 	// Derivative TBN: recovers tangent frame from screen-space derivatives.
 	// Works on any mesh with UVs - no tangent vertex attribute required.
@@ -106,6 +122,7 @@ void main() {
 	vec3 nMap = texture(normalTex, vUV).rgb * 2.0 - 1.0;
 	vec3 N = normalize(TBN * nMap);
 	vec3 V = normalize(-vPosition);
+	vec3 R = reflect(-V, N);
 
 	vec3 albedo = texture(baseColorTex, vUV).rgb;
 	float ao = texture(ormTex, vUV).r;
@@ -119,26 +136,43 @@ void main() {
 		vec3 lEye = (osg_ViewMatrix * vec4(lightPos[i], 1.0)).xyz;
 		vec3 lVec = lEye - vPosition;
 		float dist = length(lVec);
-		vec3 L = lVec / dist;
+		vec3 L = lVec / dist; // true direction to light center -- used for diffuse/atten
 
 		float r = lightRadius[i];
 		float atten = 1.0 / (1.0 + (dist * dist) / (r * r));
-
-		vec3 H = normalize(L + V);
-		float NdotL = max(dot(N, L), 0.0);
 		float NdotV = max(dot(N, V), 0.0);
-		float NdotH = max(dot(N, H), 0.0);
-		float HdotV = max(dot(H, V), 0.0);
 
-		float D = D_GGX(NdotH, roughness);
-		float G = G_Smith(NdotV, NdotL, roughness);
-		vec3 F = F_Schlick(HdotV, F0);
-
-		vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+		// Diffuse stays on the true light direction -- Lambertian doesn't have a highlight-size
+		// problem, only specular does.
+		float NdotL = max(dot(N, L), 0.0);
+		vec3 F_diffuse = F_Schlick(max(dot(normalize(L + V), V), 0.0), F0);
+		vec3 kD = (vec3(1.0) - F_diffuse) * (1.0 - metallic);
 		vec3 diffuse = kD * albedo / PI;
-		vec3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 0.001);
 
-		Lo += (diffuse + specular) * lightColor[i] * NdotL * atten;
+		// Specular uses the sphere-light representative point instead of L -- this is what
+		// actually makes the highlight bigger/softer as lightSourceRadius grows, unlike
+		// lightRadius (attenuation only, see uniform declaration above).
+		vec3 Lspec = sphereLightDir(lVec, R, lightSourceRadius[i]);
+		vec3 Hspec = normalize(Lspec + V);
+		float NdotLspec = max(dot(N, Lspec), 0.0);
+		float NdotHspec = max(dot(N, Hspec), 0.0);
+		float HdotVspec = max(dot(Hspec, V), 0.0);
+
+		// Widen roughness to conserve energy as the sphere gets bigger/closer -- otherwise a
+		// large source would just paint a brighter SMALL highlight instead of a genuinely
+		// bigger/softer one (same normalization Karis 2013 uses).
+		float alpha = roughness * roughness;
+		float alphaPrime = clamp(alpha + lightSourceRadius[i] / (2.0 * dist), 0.0, 1.0);
+		float roughnessPrime = sqrt(alphaPrime);
+
+		float D = D_GGX(NdotHspec, roughnessPrime);
+		float G = G_Smith(NdotV, NdotLspec, roughnessPrime);
+		vec3 F = F_Schlick(HdotVspec, F0);
+
+		vec3 specular = (D * G * F) / max(4.0 * NdotV * NdotLspec, 0.001);
+
+		Lo += diffuse * lightColor[i] * NdotL * atten
+			+ specular * lightColor[i] * NdotLspec * atten;
 	}
 
 	vec3 worldUp = normalize(mat3(osg_ViewMatrix) * vec3(0.0, 0.0, 1.0));
@@ -226,6 +260,12 @@ if __name__ == "__main__":
 		"--res", default="2k", choices=["1k", "2k", "4k"],
 		help="Download resolution (default: 2k)"
 	)
+	ap.add_argument(
+		"--light-source-radius", type=float, default=1.0,
+		help="Physical sphere radius of both lights, in scene units -- widens/softens the "
+			"specular highlight itself (0 = point light, sharp). NOT the same as the "
+			"existing per-light falloff distance. Default: 1.0"
+	)
 	args = ap.parse_args()
 
 	src = args.source
@@ -265,9 +305,13 @@ if __name__ == "__main__":
 		osg.Vec3(1.5, 1.8, 4.0) # cool blue fill
 	))
 
-	lightRadius = osg.Uniform(osg.Uniform.Type.FLOAT, "lightRadius", (8.0, 6.0))
+	lightRadius = osg.Uniform(osg.Uniform.Type.FLOAT, "lightRadius", (28.0, 26.0))
 
-	ss.uniforms.extend((lightPos, lightColor, lightRadius))
+	lightSourceRadius = osg.Uniform(osg.Uniform.Type.FLOAT, "lightSourceRadius", (
+		args.light_source_radius, args.light_source_radius
+	))
+
+	ss.uniforms.extend((lightPos, lightColor, lightRadius, lightSourceRadius))
 
 	v = osgViewer.Viewer()
 
