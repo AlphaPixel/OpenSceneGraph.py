@@ -48,6 +48,14 @@ void bind_Buffer(py::module_& m) {
 	>(m, "ShaderStorageBufferObject")
 		.def(py::init<>())
 	;
+
+	py::class_<
+		osg::UniformBufferObject,
+		osg::BufferObject,
+		osg::ref_ptr<osg::UniformBufferObject>
+	>(m, "UniformBufferObject")
+		.def(py::init<>())
+	;
 }
 
 }

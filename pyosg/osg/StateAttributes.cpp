@@ -125,6 +125,19 @@ void bind_StateAttributes(py::module_& m) {
 			"size"_a=0
 		)
 	;
+
+	py::class_<
+		osg::UniformBufferBinding,
+		osg::BufferIndexBinding,
+		osg::ref_ptr<osg::UniformBufferBinding>
+	>(m, "UniformBufferBinding")
+		.def(py::init<GLuint, osg::BufferData*, GLintptr, GLsizeiptr>(),
+			"index"_a,
+			"bd"_a,
+			"offset"_a=0,
+			"size"_a=0
+		)
+	;
 }
 
 }
