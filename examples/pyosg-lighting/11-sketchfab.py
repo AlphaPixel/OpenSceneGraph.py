@@ -1,28 +1,36 @@
 #!/usr/bin/env python3
 #vimrun! python3 ../examples/pyosg-lighting/11-sketchfab.py --ktx2 papermill --hdr papermill
 
-# Step 11 - Sketchfab-parity capstone (first increment: deferred G-buffer restructuring)
+# Step 11 - Sketchfab-parity capstone (increment 2: post-processing chain)
 #
-# This is 09-ibl.py's exact PBR+IBL lighting math (direct lights, shadow, IBL, emissive,
-# tonemap), restructured into the deferred G-buffer + composite architecture proven by
-# examples/pyosg-mrt.py -- one geometry pass writes raw material/geometric data to four
-# color attachments + depth via MRT (layout(location = n) out), a second fullscreen
-# composite pass reads that G-buffer back and does ALL of the actual PBR shading. This is
-# NOT the full Sketchfab-parity capstone yet -- no SSAO/SSR/bloom/vignette/TAA, that's
-# later work once this deferred skeleton is proven (see ai/context-todo-lighting-class.md
-# for the full research). Animation/skinning (09-ibl-animation.py) and live dynamic-probe
-# rebaking (10-dynamicprobes.py) are both explicitly out of scope here.
+# Increment 1 (commit c5a3359) restructured 09-ibl.py's PBR+IBL lighting into a deferred
+# G-buffer + composite architecture and validated it against Sketchfab itself -- see
+# ai/context-todo-lighting-class.md for the full comparison writeup. This increment adds
+# most of Sketchfab's post-processing filter chain on top of that G-buffer: SSAO, bloom,
+# and a final LDR pass (tonemap, vignette, grain, chromatic aberration, sharpening, color
+# balance). SSR/DOF/TAA stay out of scope -- the research doc flags those as the hardest/
+# most artifact-prone of the chain, better as their own later increment.
 #
-# Why bother deferring at all for this increment: it's the prerequisite architecture the
-# later post-processing passes need (they read a G-buffer, not the model's own textures/
-# varyings), and it happens to buy a free Sketchfab-style "render level" layer toggle
-# (press 0-8) as a side effect of having isolated the pipeline's intermediate values.
+# Pipeline shape:
+# shadow_cam -> gbuffer_cam (MRT: albedo/normal/material/emissive/depth) -> ssao_cam ->
+# ssao_blur_cam -> composite_cam (PBR+IBL+shadow+SSAO, writes LINEAR HDR, no tonemap) ->
+# bloom_threshold_cam -> bloom_blur_h_cam -> bloom_blur_v_cam -> final_cam (bloom add,
+# tonemap, gamma, vignette/grain/CA/sharpen/color-balance -> window).
 #
-# Texture units:
-# Geometry pass (model's own textures, unchanged from 09-ibl.py): 0 baseColor 1 normal
-# 2 orm 3 emissive
-# Composite pass (new namespace): 0 gAlbedo 1 gNormal 2 gMaterial 3 gEmissive 4 gDepth
-# 5 shadowMap 6 envMap 7 brdfLUT
+# Press 0-9 to inspect individual G-buffer/pipeline layers (Sketchfab-style render-level
+# toggle); press 'p' to toggle the whole post-processing chain on/off (Sketchfab's own
+# "No Post-Processing" button).
+#
+# Texture units (independent namespace per camera):
+# gbuffer_cam (model's own textures):  0 baseColor 1 normal 2 orm 3 emissive
+# ssao_cam:                            0 gDepth 1 gNormal 2 ssaoNoise
+# ssao_blur_cam:                       0 aoRawTex
+# composite_cam:                       0 gAlbedo 1 gNormal 2 gMaterial 3 gEmissive 4 gDepth
+#                                      5 shadowMap 6 envMap 7 brdfLUT 8 aoTex
+#                                      9 gPosition
+# bloom_threshold_cam:                 0 hdrColorTex
+# bloom_blur_h_cam / bloom_blur_v_cam: 0 inputTex
+# final_cam:                           0 hdrColorTex 1 bloomTex
 
 import sys
 import os
@@ -45,6 +53,8 @@ import cv2
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
+import osgDebug
+
 W, H = 800, 600
 
 # --------------------------------------------------------------------------- #
@@ -53,19 +63,26 @@ W, H = 800, 600
 
 SHADOW_SIZE = 1024
 
-# Same light rig as 09-ibl.py -- see that file for the full rationale on why light
-# positions scale by bounding radius (Lantern-sized models vs. BoomBox-sized ones).
+# Not in OpenSceneGraph.GL's hand-curated allowlist -- raw GL enums defined locally,
+# same workaround already needed for GL_TEXTURE_CUBE_MAP_SEAMLESS below.
+GL_R8 = 0x8229
+GL_RGB32F = 0x8815
+GL_TEXTURE_CUBE_MAP_SEAMLESS = 0x884F
+
+SSAO_KERNEL_SIZE = 16
+SSAO_NOISE_SIZE = 4
+
+# Single directional key light -- temporary simplification (2026-07-11) while
+# debugging the shadow-drift bug (mode 8's shadowFactor() visibly swims as the
+# camera orbits, unlike Sketchfab's stable self-shadowing). A point light has no
+# single canonical direction to reason about; a directional light matches
+# shadow_cam's own fixed-direction assumption exactly, removing one variable
+# while isolating the shadowMatrix math. Fill lights 0/1 and per-light distance/
+# radius attenuation are dropped entirely, not just zeroed -- see 09-ibl.py for
+# the original 3-point-light rig if this needs reverting.
 REFERENCE_RADIUS = 1.7
 
-KEY_LIGHT_DIR = osg.Vec3( 0.1, 0.1, 1.0).normalized()
-FILL_LIGHT_DIR_0 = osg.Vec3(-0.8, 0.3, 0.5).normalized()
-FILL_LIGHT_DIR_1 = osg.Vec3( 0.0, -0.6, 0.2).normalized()
-
-KEY_LIGHT_DIST = osg.Vec3( 0.1, 0.1, 1.0).length()
-FILL_LIGHT_DIST_0 = osg.Vec3(-0.8, 0.3, 0.5).length()
-FILL_LIGHT_DIST_1 = osg.Vec3( 0.0, -0.6, 0.2).length()
-
-LIGHT_RADII = (2.5, 1.5, 1.2)
+KEY_LIGHT_DIR = osg.Vec3(0.1, 0.1, 1.0).normalized()
 
 # --------------------------------------------------------------------------- #
 # SH projection (verbatim from 09-ibl.py -- only iblSH's stateSet home moves)
@@ -144,6 +161,49 @@ async def task_compute_sh(queue, hdr_path):
 		print(f"[ibl] ERROR computing SH: {e}", flush=True)
 
 # --------------------------------------------------------------------------- #
+# SSAO kernel + noise (Python-side setup, same numpy -> osg.Image -> Texture2D
+# pattern already proven in 10-dynamicprobes.py's paint_random_faces())
+# --------------------------------------------------------------------------- #
+
+def generate_ssao_kernel(n=SSAO_KERNEL_SIZE, seed=0):
+	"""Hemisphere-oriented sample kernel, quadratically clustered toward the origin --
+	the standard SSAO kernel shape (Crysis-era; still the baseline technique today)."""
+	rng = np.random.default_rng(seed)
+	kernel = []
+
+	for i in range(n):
+		v = np.array([rng.uniform(-1.0, 1.0), rng.uniform(-1.0, 1.0), rng.uniform(0.05, 1.0)])
+		v /= np.linalg.norm(v)
+		v *= rng.uniform(0.0, 1.0)
+
+		scale = 0.1 + 0.9 * (i / n) ** 2
+
+		kernel.append(osg.Vec3(*(v * scale)))
+
+	return kernel
+
+def make_ssao_noise_texture(size=SSAO_NOISE_SIZE, seed=1):
+	"""Tiny tiled texture of random tangent-space rotation vectors -- removes the visible
+	banding a fixed kernel would otherwise leave (every pixel sampling identical relative
+	directions)."""
+	rng = np.random.default_rng(seed)
+
+	img = osg.Image()
+	img.allocateImage(size, size, 1, GL_RGB, GL_FLOAT)
+
+	arr = np.asarray(img)
+	arr[..., 0] = rng.uniform(-1.0, 1.0, (size, size))
+	arr[..., 1] = rng.uniform(-1.0, 1.0, (size, size))
+	arr[..., 2] = 0.0
+
+	tex = osg.Texture2D()
+	tex.image = [img]
+	tex.filter = osg.Texture.NEAREST
+	tex.wrap = osg.Texture.REPEAT
+
+	return tex
+
+# --------------------------------------------------------------------------- #
 # Shaders
 # --------------------------------------------------------------------------- #
 
@@ -218,6 +278,7 @@ layout(location = 0) out vec4 outAlbedo;   // gAlbedo
 layout(location = 1) out vec4 outNormal;   // gNormal (view-space, RGB16F, no encode needed)
 layout(location = 2) out vec4 outMaterial; // gMaterial: R=roughness G=metallic B=ao (glTF ORM order)
 layout(location = 3) out vec4 outEmissive; // gEmissive (fully resolved, RGB16F for HDR headroom)
+layout(location = 4) out vec4 outPosition; // gPosition (actual view-space position; avoids depth reconstruction drift)
 
 // ---- Shading normal --------------------------------------------------------- //
 // TBN reconstructed per-pixel from screen-space derivatives (Christian Schuler's
@@ -303,6 +364,7 @@ void main() {
 	outNormal = vec4(N, 0.0);
 	outMaterial = vec4(mat.roughness, mat.metallic, mat.ao, 1.0);
 	outEmissive = vec4(getEmissive(), 1.0);
+	outPosition = vec4(vPosition, 1.0);
 }
 """
 
@@ -319,12 +381,15 @@ in vec4 osg_Vertex;
 in vec3 osg_Normal;
 
 uniform mat4 osg_ModelViewProjectionMatrix;
+uniform mat4 osg_ModelViewMatrix;
 uniform mat3 osg_NormalMatrix;
 
 out vec3 vNormal;
+out vec3 vPosition;
 
 void main() {
 	vNormal = normalize(osg_NormalMatrix * osg_Normal);
+	vPosition = (osg_ModelViewMatrix * osg_Vertex).xyz;
 
 	gl_Position = osg_ModelViewProjectionMatrix * osg_Vertex;
 }
@@ -334,22 +399,25 @@ FLOOR_GBUFFER_FRAGMENT = """
 #version 460 core
 
 in vec3 vNormal;
+in vec3 vPosition;
 
 layout(location = 0) out vec4 outAlbedo;
 layout(location = 1) out vec4 outNormal;
 layout(location = 2) out vec4 outMaterial;
 layout(location = 3) out vec4 outEmissive;
+layout(location = 4) out vec4 outPosition;
 
 void main() {
 	outAlbedo = vec4(0.82, 0.76, 0.62, 1.0);
 	outNormal = vec4(normalize(vNormal), 0.0);
 	outMaterial = vec4(1.0, 0.0, 1.0, 1.0); // roughness=1 (matte), metallic=0, ao=1
 	outEmissive = vec4(0.0);
+	outPosition = vec4(vPosition, 1.0);
 }
 """
 
-# Fullscreen NDC quad vertex shader -- shared between the BRDF LUT bake and the
-# composite pass (same convention as 09-ibl.py).
+# Fullscreen NDC quad vertex shader -- shared between the BRDF LUT bake and every
+# post-processing pass below (same convention as 09-ibl.py).
 FULLSCREEN_VERTEX = """
 #version 460 core
 in vec4 osg_Vertex;
@@ -361,13 +429,159 @@ void main() {
 }
 """
 
-# Composite pass: reads the 5-attachment G-buffer back and does ALL of 09-ibl.py's PBR+
-# IBL shading here instead of inline during the geometry pass -- true deferred shading.
-# Also implements the 0-8 render-level visualize toggle (Sketchfab-style layer switch).
+# SSAO pass: hemisphere-kernel screen-space ambient occlusion, reading the G-buffer's
+# depth+normal directly. Outputs a single raw (noisy) occlusion value; ssao_blur_cam
+# denoises it before composite_cam consumes it.
+SSAO_FRAGMENT_SHADER = """
+#version 460 core
+
+#define NUM_SAMPLES 16
+
+uniform sampler2D gDepth;    // unit 0
+uniform sampler2D gNormal;   // unit 1
+uniform sampler2D ssaoNoise; // unit 2
+
+uniform mat4 invProjectionMatrix;
+uniform mat4 projectionMatrix; // forward -- projects hemisphere samples back to screen space
+
+uniform vec3 samples[NUM_SAMPLES];
+uniform float ssaoRadius;
+uniform float ssaoBias;
+
+in vec2 vUV;
+
+out vec4 fragColor;
+
+vec3 reconstructViewPos(vec2 uv, float d) {
+	vec4 clip = vec4(vec3(uv, d) * 2.0 - 1.0, 1.0);
+	vec4 viewPos = invProjectionMatrix * clip;
+
+	return viewPos.xyz / viewPos.w;
+}
+
+void main() {
+	vec3 rawN = texture(gNormal, vUV).rgb;
+
+	// Same background sentinel as the composite pass -- an unwritten pixel has a
+	// zero-length normal; normalize(0) would produce NaN, and there's no real geometry
+	// to occlude anyway, so just report "no occlusion" immediately.
+	if (dot(rawN, rawN) < 0.0001) {
+		fragColor = vec4(1.0, 0.0, 0.0, 1.0);
+
+		return;
+	}
+
+	vec3 N = normalize(rawN);
+	vec3 fragPos = reconstructViewPos(vUV, texture(gDepth, vUV).r);
+
+	vec2 noiseScale = vec2(textureSize(gDepth, 0)) / float(textureSize(ssaoNoise, 0).x);
+	vec3 rvec = texture(ssaoNoise, vUV * noiseScale).xyz;
+	vec3 tangent = normalize(rvec - N * dot(rvec, N));
+	vec3 bitangent = cross(N, tangent);
+	mat3 TBN = mat3(tangent, bitangent, N);
+
+	float occlusion = 0.0;
+
+	for (int i = 0; i < NUM_SAMPLES; i++) {
+		vec3 samplePos = fragPos + (TBN * samples[i]) * ssaoRadius;
+
+		vec4 offset = projectionMatrix * vec4(samplePos, 1.0);
+		offset.xyz /= offset.w;
+		offset.xyz = offset.xyz * 0.5 + 0.5;
+
+		float sampleDepth = reconstructViewPos(offset.xy, texture(gDepth, offset.xy).r).z;
+		float rangeCheck = smoothstep(0.0, 1.0, ssaoRadius / max(abs(fragPos.z - sampleDepth), 0.0001));
+
+		occlusion += (sampleDepth >= samplePos.z + ssaoBias ? 1.0 : 0.0) * rangeCheck;
+	}
+
+	fragColor = vec4(vec3(1.0 - occlusion / float(NUM_SAMPLES)), 1.0);
+}
+"""
+
+# Small fixed-radius box blur to denoise the hemisphere-kernel noise -- deliberately NOT
+# the two-pass separable Gaussian bloom uses below; a small fixed radius doesn't benefit
+# from separability the way a large-radius bloom blur does.
+SSAO_BLUR_FRAGMENT_SHADER = """
+#version 460 core
+
+uniform sampler2D aoRawTex;
+
+in vec2 vUV;
+
+out vec4 fragColor;
+
+void main() {
+	vec2 texel = 1.0 / vec2(textureSize(aoRawTex, 0));
+	float sum = 0.0;
+
+	for (int x = -2; x < 2; x++)
+		for (int y = -2; y < 2; y++)
+			sum += texture(aoRawTex, vUV + vec2(x, y) * texel).r;
+
+	fragColor = vec4(vec3(sum / 16.0), 1.0);
+}
+"""
+
+# Bloom bright-pass extract -- soft-knee smoothstep rather than a hard cutoff, so bloom
+# doesn't flicker as luminance crosses the threshold frame to frame.
+BLOOM_THRESHOLD_FRAGMENT_SHADER = """
+#version 460 core
+
+uniform sampler2D hdrColorTex;
+uniform float bloomThreshold;
+
+in vec2 vUV;
+
+out vec4 fragColor;
+
+void main() {
+	vec3 c = texture(hdrColorTex, vUV).rgb;
+	float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+
+	fragColor = vec4(c * smoothstep(bloomThreshold, bloomThreshold + 0.5, lum), 1.0);
+}
+"""
+
+# Generic separable-Gaussian blur pass -- same 9-tap weights as examples/pyosg-blur.py,
+# duplicated here rather than imported (every examples/pyosg-lighting/*.py file is
+# self-contained; no cross-example imports anywhere in this repo). Used twice for bloom
+# (horizontal then vertical, each into its own texture -- not ping-ponged).
+BLUR_FRAGMENT_SHADER = """
+#version 460 core
+
+uniform sampler2D inputTex;
+uniform vec2 texelStep;
+
+in vec2 vUV;
+
+out vec4 fragColor;
+
+void main() {
+	vec4 sum = vec4(0.0);
+
+	sum += texture(inputTex, vUV - 4.0 * texelStep) * 0.0162162162;
+	sum += texture(inputTex, vUV - 3.0 * texelStep) * 0.0540540541;
+	sum += texture(inputTex, vUV - 2.0 * texelStep) * 0.1216216216;
+	sum += texture(inputTex, vUV - 1.0 * texelStep) * 0.1945945946;
+	sum += texture(inputTex, vUV) * 0.2270270270;
+	sum += texture(inputTex, vUV + 1.0 * texelStep) * 0.1945945946;
+	sum += texture(inputTex, vUV + 2.0 * texelStep) * 0.1216216216;
+	sum += texture(inputTex, vUV + 3.0 * texelStep) * 0.0540540541;
+	sum += texture(inputTex, vUV + 4.0 * texelStep) * 0.0162162162;
+
+	fragColor = sum;
+}
+"""
+
+# Composite pass: reads the 5-attachment G-buffer + blurred SSAO back and does ALL of
+# 09-ibl.py's PBR+IBL shading here instead of inline during the geometry pass -- true
+# deferred shading. Writes LINEAR HDR color (no tonemap/gamma -- that moved to
+# final_cam, since bloom needs to sample pre-tonemap HDR). Also implements the 0-9
+# render-level visualize toggle (Sketchfab-style layer switch).
 COMPOSITE_FRAGMENT_SHADER = """
 #version 460 core
 
-#define NUM_LIGHTS 3
 const float PI = 3.14159265359;
 
 uniform sampler2D gAlbedo;   // unit 0
@@ -378,33 +592,36 @@ uniform sampler2D gDepth;    // unit 4
 uniform sampler2D shadowMap; // unit 5
 uniform samplerCube envMap;  // unit 6: prefiltered cubemap
 uniform sampler2D brdfLUT;   // unit 7: split-sum BRDF LUT
+uniform sampler2D aoTex;     // unit 8: blurred SSAO
+uniform sampler2D gPosition; // unit 9: view-space position written by the geometry pass
 
 uniform mat4 invProjectionMatrix;
 uniform float znear;
 uniform float zfar;
 uniform int visualizeMode; // 0=composite 1=albedo 2=normal 3=depth 4=material
-                            // 5=direct-only 6=IBL-only 7=emissive-only 8=shadow-only
+                            // 5=direct-only 6=IBL-only 7=emissive-only 8=shadow-only 9=AO-only
 
 // v.camera's real view matrix. NOT the same as GLSL's automatic osg_ViewMatrix here --
-// this composite camera is a POST_RENDER, ABSOLUTE_RF, identity-view fullscreen quad, so
+// this composite camera is an ABSOLUTE_RF, identity-view fullscreen quad, so
 // osg_ViewMatrix would resolve to identity (it tracks whichever camera is currently
 // drawing), silently freezing world-space lighting/reflections to whatever direction the
 // viewer faced at startup. Set every frame from v.camera.viewMatrix instead.
 uniform mat4 mainViewMatrix;
 uniform mat4 shadowMatrix;
+uniform float shadowBias;
 
-uniform vec3 lightPos[NUM_LIGHTS];
-uniform vec3 lightColor[NUM_LIGHTS];
-uniform float lightRadius[NUM_LIGHTS];
-uniform bool animatedLights;
-uniform float osg_SimulationTime;
+uniform vec3 lightDir;   // world-space direction FROM the surface TOWARD the light (normalized)
+uniform vec3 lightColor;
 
 uniform vec3 skyColor;
 uniform vec3 groundColor;
 
 uniform int iblEnabled;
 uniform vec3 iblSH[9];
-uniform float iblIntensity;
+// Independent diffuse-irradiance/specular-reflection intensity, not one shared
+// iblIntensity -- see evaluateIBL() below for why they used to have to move together.
+uniform float iblDiffuseIntensity;
+uniform float iblSpecularIntensity;
 
 in vec2 vUV;
 
@@ -463,7 +680,7 @@ float shadowFactor(vec3 eyePos) {
 	float shadow = 0.0;
 	for (int x = -1; x <= 1; x++)
 		for (int y = -1; y <= 1; y++)
-			shadow += (uv.z - 0.005 > texture(shadowMap, uv.xy + vec2(x, y) * sz).r) ? 1.0 : 0.0;
+			shadow += (uv.z - shadowBias > texture(shadowMap, uv.xy + vec2(x, y) * sz).r) ? 1.0 : 0.0;
 	return mix(1.0, 0.3, shadow / 9.0);
 }
 
@@ -502,51 +719,24 @@ Material unpackMaterial(vec3 albedo, vec3 ormRaw) {
 
 // ---- Direct lighting -------------------------------------------------------- //
 
-void getAnimatedLight(int i, float t, out vec3 lp, out float pulse) {
-	if (i == 0) {
-		lp = vec3(cos(t*0.8)*1.0, sin(t*0.8)*1.0, 0.8);
-		pulse = 0.8 + 0.2*sin(t*1.3);
-	} else if (i == 1) {
-		lp = vec3(cos(t*0.5+6.28318/3.0)*0.9, sin(t*0.5+6.28318/3.0)*0.9, 0.3);
-		pulse = 0.8 + 0.2*sin(t*0.9+1.0);
-	} else {
-		lp = vec3(cos(t*0.3+6.28318/1.5)*0.7, sin(t*0.3+6.28318/1.5)*0.7,-0.2);
-		pulse = 0.8 + 0.2*sin(t*0.6+2.1);
-	}
-}
-
 vec3 evaluateDirectLighting(Material mat, vec3 N, vec3 V, float NdotV, vec3 eyePos) {
-	vec3 Lo = vec3(0.0);
-	float t = osg_SimulationTime;
+	// Single directional light -- no position, no distance attenuation. L is the
+	// same direction everywhere in the scene, so unlike the old point-light rig
+	// there's no per-fragment lVec/dist to get wrong.
+	vec3 L = normalize(mat3(mainViewMatrix) * lightDir);
+	vec3 H = normalize(L + V);
+	float NdotL = max(dot(N, L), 0.0);
+	float NdotH = max(dot(N, H), 0.0);
+	float HdotV = max(dot(H, V), 0.0);
+	float D = D_GGX(NdotH, mat.roughness);
+	float G = G_Smith(NdotV, NdotL, mat.roughness);
+	vec3 F = F_Schlick(HdotV, mat.F0);
+	vec3 kD = (vec3(1.0) - F) * (1.0 - mat.metallic);
+	vec3 diffuse = kD * mat.albedo / PI;
+	vec3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 0.001);
+	float shad = shadowFactor(eyePos);
 
-	for (int i = 0; i < NUM_LIGHTS; i++) {
-		vec3 lp = lightPos[i];
-		float pulse = 1.0;
-
-		if (animatedLights) getAnimatedLight(i, t, lp, pulse);
-
-		vec3 lEye = (mainViewMatrix * vec4(lp, 1.0)).xyz;
-		vec3 lVec = lEye - eyePos;
-		float dist = length(lVec);
-		vec3 L = lVec / dist;
-		float r = lightRadius[i];
-		float atten = 1.0 / (1.0 + (dist * dist) / (r * r));
-		vec3 H = normalize(L + V);
-		float NdotL = max(dot(N, L), 0.0);
-		float NdotH = max(dot(N, H), 0.0);
-		float HdotV = max(dot(H, V), 0.0);
-		float D = D_GGX(NdotH, mat.roughness);
-		float G = G_Smith(NdotV, NdotL, mat.roughness);
-		vec3 F = F_Schlick(HdotV, mat.F0);
-		vec3 kD = (vec3(1.0) - F) * (1.0 - mat.metallic);
-		vec3 diffuse = kD * mat.albedo / PI;
-		vec3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 0.001);
-		float shad = (i == 0) ? shadowFactor(eyePos) : 1.0;
-
-		Lo += (diffuse + specular) * lightColor[i] * pulse * NdotL * atten * shad;
-	}
-
-	return Lo;
+	return (diffuse + specular) * lightColor * NdotL * shad;
 }
 
 // ---- IBL ambient ------------------------------------------------------------ //
@@ -565,35 +755,23 @@ vec3 evaluateIBL(Material mat, vec3 N, vec3 V, float NdotV) {
 
 	vec3 F_ibl = F_Schlick_roughness(NdotV, mat.F0, mat.roughness);
 	vec3 kD_ibl = (1.0 - F_ibl) * (1.0 - mat.metallic);
-	vec3 ibl_diff = sh_irradiance(N_world) * mat.albedo * kD_ibl * iblIntensity;
+	vec3 ibl_diff = sh_irradiance(N_world) * mat.albedo * kD_ibl * iblDiffuseIntensity;
 
 	float maxMip = float(textureQueryLevels(envMap) - 1);
 	float lod = mat.roughness * maxMip;
 	vec3 r_gl = vec3(R_world.x, R_world.z, -R_world.y);
 	vec3 prefilt = textureLod(envMap, r_gl, lod).rgb;
 	vec2 brdf = texture(brdfLUT, vec2(NdotV, mat.roughness)).rg;
-	vec3 ibl_spec = prefilt * (mat.F0 * brdf.x + brdf.y);
+	// A single shared iblIntensity used to force ambient fill and mirror-like
+	// reflections to move together -- turning up the diffuse SH term enough to read
+	// as ambient fill also blew out reflections, and turning down reflections to a
+	// sane brightness crushed ambient back to near-black. Independent controls let
+	// the "how strong is the environment's soft fill" and "how strong are its
+	// reflections" questions be answered separately, which is what actually
+	// differs between our render and Sketchfab's -- see BUG.md item 1.
+	vec3 ibl_spec = prefilt * (mat.F0 * brdf.x + brdf.y) * iblSpecularIntensity;
 
 	return (ibl_diff + ibl_spec) * mat.ao;
-}
-
-// ---- Tonemap ------------------------------------------------------------------ //
-// Khronos PBR Neutral tonemapping (matches Babylon.js "PBR Neutral" preset).
-vec3 tonemapPBRNeutral(vec3 color) {
-	const float startCompression = 0.8 - 0.04;
-	const float desaturation = 0.15;
-	float x = min(color.r, min(color.g, color.b));
-	float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
-	color -= offset;
-	float peak = max(color.r, max(color.g, color.b));
-	if (peak >= startCompression) {
-		float d = 1.0 - startCompression;
-		float newPeak = 1.0 - d * d / (peak + d - startCompression);
-		color *= newPeak / peak;
-		float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
-		color = mix(color, vec3(newPeak), g);
-	}
-	return clamp(color, 0.0, 1.0);
 }
 
 // ---- Main ----------------------------------------------------------------- //
@@ -609,7 +787,7 @@ void main() {
 	// e.g. mode 3's depth view legitimately shows far-plane white where nothing was
 	// ever drawn). Albedo is stored linear (same convention as mat.albedo everywhere
 	// else in this shader), so it needs the same gamma re-encode as the final
-	// composite to look right on screen; normal/depth/material are raw data views,
+	// composite to look right on screen; normal/depth/material/AO are raw data views,
 	// not display colors, so they're left un-gamma-corrected.
 	if (visualizeMode == 1) {
 		fragColor = vec4(pow(albedo.rgb, vec3(1.0 / 2.2)), 1.0);
@@ -638,6 +816,12 @@ void main() {
 		return;
 	}
 
+	if (visualizeMode == 9) {
+		fragColor = vec4(vec3(texture(aoTex, vUV).r), 1.0);
+
+		return;
+	}
+
 	// A cleared-but-never-written background pixel has a zero-length normal (real
 	// written normals are always unit length) -- same sentinel technique as
 	// pyosg-mrt.py, needed only for the modes below that actually shade something.
@@ -648,10 +832,15 @@ void main() {
 	}
 
 	vec3 N = normalize(rawNormal);
-	vec3 eyePos = reconstructViewPos(vUV, d);
+	// Use the exact position that the geometry pass shaded. Reconstructing this from
+	// depth is fragile when OSG tightens the main camera's near/far planes during
+	// culling: the depth buffer then reflects an adjusted projection matrix that is
+	// not necessarily the matrix exposed as v.camera.projectionMatrix.
+	vec3 eyePos = texture(gPosition, vUV).xyz;
 	vec3 V = normalize(-eyePos);
 	float NdotV = max(dot(N, V), 0.0);
 	Material mat = unpackMaterial(albedo.rgb, ormRaw);
+	float ssao = texture(aoTex, vUV).r;
 
 	if (visualizeMode == 5) {
 		fragColor = vec4(pow(evaluateDirectLighting(mat, N, V, NdotV, eyePos), vec3(1.0 / 2.2)), 1.0);
@@ -660,7 +849,7 @@ void main() {
 	}
 
 	if (visualizeMode == 6) {
-		fragColor = vec4(pow(evaluateIBL(mat, N, V, NdotV), vec3(1.0 / 2.2)), 1.0);
+		fragColor = vec4(pow(evaluateIBL(mat, N, V, NdotV) * ssao, vec3(1.0 / 2.2)), 1.0);
 
 		return;
 	}
@@ -677,12 +866,17 @@ void main() {
 		return;
 	}
 
+	// SSAO multiplies (doesn't replace) the material's own baked AO -- they're
+	// complementary: gMaterial.b is a static, authored/texture-baked value, ssao is a
+	// live screen-space approximation of contact occlusion neither texture nor a flat
+	// light rig can know about.
 	vec3 Lo = evaluateDirectLighting(mat, N, V, NdotV, eyePos);
-	vec3 ambient = evaluateIBL(mat, N, V, NdotV);
+	vec3 ambient = evaluateIBL(mat, N, V, NdotV) * ssao;
 	vec3 color = ambient + Lo + rawEmissive;
-	color = tonemapPBRNeutral(color);
-	color = pow(color, vec3(1.0 / 2.2));
 
+	// No tonemap/gamma here anymore -- this is now a LINEAR HDR intermediate that
+	// bloom_threshold_cam needs to sample before anything gets compressed to LDR;
+	// final_cam does tonemap+gamma once, after bloom is added back in.
 	fragColor = vec4(color, 1.0);
 }
 """
@@ -742,6 +936,115 @@ void main() {
 		}
 	}
 	fragColor = vec4(F_scale / float(SAMPLES), F_bias / float(SAMPLES), 0.0, 1.0);
+}
+"""
+
+# Final LDR pass: additively composites bloom into the HDR color, tonemaps, gamma-
+# encodes, then applies vignette/grain/chromatic-aberration/sharpening/color-balance --
+# all cheap single-pass color-only effects per the research doc's own complexity tiering,
+# so they share one shader rather than a pass each. Relays composite_cam's debug output
+# untouched whenever visualizeMode != 0 (see the module docstring at the top of this file
+# for why that's the correct fix rather than re-deriving debug views here).
+FINAL_FRAGMENT_SHADER = """
+#version 460 core
+
+uniform sampler2D hdrColorTex; // unit 0
+uniform sampler2D bloomTex;    // unit 1
+
+uniform int visualizeMode;
+uniform bool postEnabled;
+
+uniform float bloomStrength;
+uniform float caStrength;
+uniform float sharpenStrength;
+uniform float vignetteStrength;
+uniform float grainStrength;
+uniform float colorLift;
+uniform float colorGamma;
+uniform float colorGain;
+uniform float osg_SimulationTime;
+
+in vec2 vUV;
+
+out vec4 fragColor;
+
+// Khronos PBR Neutral tonemapping -- identical to composite_cam's old inline version,
+// just relocated here: bloom needs to sample pre-tonemap HDR (research doc's ordering
+// rule), so tonemap can only happen once bloom has already been added back in.
+vec3 tonemapPBRNeutral(vec3 color) {
+	const float startCompression = 0.8 - 0.04;
+	const float desaturation = 0.15;
+	float x = min(color.r, min(color.g, color.b));
+	float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
+	color -= offset;
+	float peak = max(color.r, max(color.g, color.b));
+	if (peak >= startCompression) {
+		float d = 1.0 - startCompression;
+		float newPeak = 1.0 - d * d / (peak + d - startCompression);
+		color *= newPeak / peak;
+		float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
+		color = mix(color, vec3(newPeak), g);
+	}
+	return clamp(color, 0.0, 1.0);
+}
+
+void main() {
+	if (visualizeMode != 0) {
+		fragColor = texture(hdrColorTex, vUV);
+
+		return;
+	}
+
+	vec3 hdr;
+
+	if (postEnabled) {
+		// Chromatic aberration has to happen WHILE assembling color, not after -- you
+		// can't offset one channel of an already-combined vec3. Each offset sample
+		// includes its own bloom contribution so CA and bloom don't visibly separate.
+		vec2 caDir = (vUV - 0.5) * caStrength;
+
+		float r = texture(hdrColorTex, vUV - caDir).r + texture(bloomTex, vUV - caDir).r * bloomStrength;
+		float g = texture(hdrColorTex, vUV).g          + texture(bloomTex, vUV).g          * bloomStrength;
+		float b = texture(hdrColorTex, vUV + caDir).b + texture(bloomTex, vUV + caDir).b * bloomStrength;
+
+		hdr = vec3(r, g, b);
+
+		// Sharpen (unsharp mask), in linear HDR, on the un-aberrated center sample --
+		// sharpening the CA-offset channels separately would just resharpen the
+		// aberration itself. 4-tap cross pattern, no extra RTT pass needed.
+		vec2 texel = 1.0 / vec2(textureSize(hdrColorTex, 0));
+		vec3 center = texture(hdrColorTex, vUV).rgb;
+		vec3 blurred = (
+			texture(hdrColorTex, vUV + vec2(texel.x, 0.0)).rgb +
+			texture(hdrColorTex, vUV - vec2(texel.x, 0.0)).rgb +
+			texture(hdrColorTex, vUV + vec2(0.0, texel.y)).rgb +
+			texture(hdrColorTex, vUV - vec2(0.0, texel.y)).rgb
+		) * 0.25;
+
+		hdr += (center - blurred) * sharpenStrength;
+
+	} else {
+		hdr = texture(hdrColorTex, vUV).rgb;
+	}
+
+	vec3 color = tonemapPBRNeutral(hdr);
+	color = pow(color, vec3(1.0 / 2.2));
+
+	if (postEnabled) {
+		// Color balance -- simplified single-range lift/gamma/gain (not the full
+		// shadow/midtone/highlight split a real grading tool exposes -- more uniforms
+		// than a teaching example needs without a UI to scrub them live).
+		color = pow(max(color + colorLift, 0.0), vec3(1.0 / colorGamma)) * colorGain;
+
+		float d = distance(vUV, vec2(0.5));
+		float vig = smoothstep(0.8, 0.2, d);
+		color *= mix(1.0 - vignetteStrength, 1.0, vig);
+
+		float g = fract(sin(dot(gl_FragCoord.xy + osg_SimulationTime, vec2(12.9898, 78.233))) * 43758.5453);
+		color += (g - 0.5) * grainStrength;
+	}
+
+	fragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }
 """
 
@@ -812,11 +1115,11 @@ def make_brdf_lut(lut_size=512):
 	return lut_tex, bake_group
 
 # --------------------------------------------------------------------------- #
-# G-buffer + composite cameras
+# G-buffer + post-processing cameras
 # --------------------------------------------------------------------------- #
 
-# Five simultaneous attachments from one geometry pass -- albedo/normal/material/emissive
-# color buffers plus real scene depth (distinct from shadow_tex's light-space depth).
+# Six simultaneous attachments from one geometry pass -- albedo/normal/material/emissive/
+# view-position color buffers plus real scene depth (distinct from shadow_tex's light-space depth).
 # RELATIVE_RF (no explicit view/projection set) so this camera inherits v.camera's actual
 # view/projection every frame during its PRE_RENDER traversal, same as pyosg-mrt.py's
 # gbuffer camera -- that's what keeps eye-space consistent between here and the composite
@@ -842,6 +1145,11 @@ def create_gbuffer_camera(w=W, h=H):
 	emissive_tex.internalFormat = GL_RGB16F
 	emissive_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
 
+	position_tex = osg.Texture2D()
+	position_tex.size = (w, h)
+	position_tex.internalFormat = GL_RGB32F
+	position_tex.filter = (osg.Texture.NEAREST, osg.Texture.NEAREST)
+
 	depth_tex = osg.Texture2D()
 	depth_tex.size = (w, h)
 	depth_tex.internalFormat = GL_DEPTH_COMPONENT24
@@ -849,8 +1157,16 @@ def create_gbuffer_camera(w=W, h=H):
 	depth_tex.sourceType = GL_FLOAT
 	depth_tex.filter = (osg.Texture.NEAREST, osg.Texture.NEAREST)
 
+	# Marked DYNAMIC (not left at OSG's default) since each of these is both a render
+	# target here AND a sampler input in later passes -- same fix
+	# ~/dev/slughorn/ai/enterprise-hud3d.py applies to all of its RTT textures. Without
+	# it, OSG's default caching can treat a texture as static after its first successful
+	# bind and skip properly re-applying it on later frames.
+	for tex in (albedo_tex, normal_tex, material_tex, emissive_tex, position_tex, depth_tex):
+		tex.dataVariance = osg.Object.DYNAMIC
+
 	cam = osg.Camera()
-	cam.renderOrder = osg.Camera.PRE_RENDER
+	cam.renderOrder = (osg.Camera.PRE_RENDER, 1)
 	cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
 	cam.clearMask = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT
 	cam.clearColor = osg.Vec4(0.0, 0.0, 0.0, 0.0)
@@ -861,24 +1177,144 @@ def create_gbuffer_camera(w=W, h=H):
 	cam.attach(osg.Camera.COLOR_BUFFER1, normal_tex)
 	cam.attach(osg.Camera.COLOR_BUFFER2, material_tex)
 	cam.attach(osg.Camera.COLOR_BUFFER3, emissive_tex)
+	cam.attach(osg.Camera.COLOR_BUFFER4, position_tex)
 	cam.attach(osg.Camera.DEPTH_BUFFER, depth_tex)
 
-	return cam, albedo_tex, normal_tex, material_tex, emissive_tex, depth_tex
+	return cam, albedo_tex, normal_tex, material_tex, emissive_tex, position_tex, depth_tex
 
-# Fullscreen composite/HUD camera -- samples the G-buffer plus shadow/IBL textures and
-# runs COMPOSITE_FRAGMENT_SHADER. No renderTargetImplementation set, so (like
-# pyosg-mrt.py's HUD camera) it draws straight to the default/window framebuffer.
-def create_composite_camera(gbuf, shadow_tex, prefilter_tex, lut_tex):
-	albedo_tex, normal_tex, material_tex, emissive_tex, depth_tex = gbuf
+# Generic fullscreen post-process RTT camera factory -- adapted from examples/
+# pyosg-blur.py's make_fullscreen_rtt_pass()/make_blur_pass(), generalized to accept
+# multiple input textures (pyosg-blur.py's version only ever needed one) since ssao_cam
+# samples three. `textures` is {unit: (texture, uniform_name)}.
+def make_fullscreen_rtt_pass(textures, output_tex, frag_shader, w, h, name="Post RTT", order=1, extra_uniforms=None):
+	cam = osg.Camera()
+
+	cam.name = name
+	cam.renderOrder = (osg.Camera.PRE_RENDER, order)
+	cam.dataVariance = osg.Object.DYNAMIC
+	cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
+	cam.clearMask = GL_COLOR_BUFFER_BIT
+	cam.clearColor = osg.Vec4(0.0, 0.0, 0.0, 0.0)
+	cam.viewport = osg.Viewport(0, 0, w, h)
+	cam.projectionMatrix = osg.Matrix.identity()
+	cam.viewMatrix = osg.Matrix.identity()
+	cam.referenceFrame = osg.Transform.ABSOLUTE_RF
+	cam.allowEventFocus = False
+
+	cam.attach(osg.Camera.COLOR_BUFFER0, output_tex)
+
+	ss = cam.stateSet
+	# Fullscreen passes have no depth relationship. OSG gives this FBO an implicit
+	# depth renderbuffer; if depth testing is inherited while only color is cleared,
+	# frame 0 writes depth and identical frame-1 fragments all fail GL_LESS.
+	ss.setMode(
+		GL_DEPTH_TEST,
+		osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
+	)
+
+	for unit, (tex, uniform_name) in textures.items():
+		ss.textureAttributes[unit] = tex
+		ss.uniforms[uniform_name] = unit
+
+	if extra_uniforms:
+		for k, val in extra_uniforms.items():
+			ss.uniforms[k] = val
+
+	p = osg.Program(name=f"{name}_program", shaders=(
+		osg.Shader(osg.Shader.VERTEX, FULLSCREEN_VERTEX),
+		osg.Shader(osg.Shader.FRAGMENT, frag_shader),
+	))
+
+	ss.setAttributeAndModes(p)
+
+	g = osg.Geode()
+	g.drawables.append(osg.createTexturedQuadGeometry(
+		osg.Vec3(-1.0, -1.0, -1.0),
+		osg.Vec3(2.0, 0.0, 0.0),
+		osg.Vec3(0.0, 2.0, 0.0)
+	))
+
+	cam.children.append(g)
+
+	return cam
+
+# SSAO raw pass + denoise blur -- reads gDepth/gNormal directly, no dependency on
+# composite_cam (runs before it). ssao_radius is in view-space world units, scaled by
+# the caller against the model's bounding radius (same reasoning 09-ibl.py applies to
+# its point-light radii -- a fixed-world-unit radius doesn't generalize between
+# BoomBox-scale and Lantern-scale models).
+def create_ssao_camera(depth_tex, normal_tex, noise_tex, samples_u, radius, bias=0.02, w=W, h=H):
+	ao_raw_tex = osg.Texture2D()
+	ao_raw_tex.size = (w, h)
+	ao_raw_tex.internalFormat = GL_R8
+	ao_raw_tex.sourceFormat = GL_RED
+	ao_raw_tex.sourceType = GL_UNSIGNED_BYTE
+	ao_raw_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
+	ao_raw_tex.dataVariance = osg.Object.DYNAMIC
+
+	cam = make_fullscreen_rtt_pass(
+		textures={
+			0: (depth_tex, "gDepth"),
+			1: (normal_tex, "gNormal"),
+			2: (noise_tex, "ssaoNoise"),
+		},
+		output_tex=ao_raw_tex,
+		frag_shader=SSAO_FRAGMENT_SHADER,
+		w=w, h=h,
+		name="SSAO",
+		order=2,
+		extra_uniforms={
+			"ssaoRadius": radius,
+			"ssaoBias": bias,
+		}
+	)
+
+	cam.stateSet.uniforms.extend((samples_u,))
+
+	return cam, ao_raw_tex
+
+def create_ssao_blur_camera(ao_raw_tex, w=W, h=H):
+	ao_tex = osg.Texture2D()
+	ao_tex.size = (w, h)
+	ao_tex.internalFormat = GL_R8
+	ao_tex.sourceFormat = GL_RED
+	ao_tex.sourceType = GL_UNSIGNED_BYTE
+	ao_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
+	ao_tex.dataVariance = osg.Object.DYNAMIC
+
+	cam = make_fullscreen_rtt_pass(
+		textures={0: (ao_raw_tex, "aoRawTex")},
+		output_tex=ao_tex,
+		frag_shader=SSAO_BLUR_FRAGMENT_SHADER,
+		w=w, h=h,
+		name="SSAOBlur",
+		order=3,
+	)
+
+	return cam, ao_tex
+
+# Composite camera -- now a PRE_RENDER FBO pass writing linear HDR (previously POST_
+# RENDER, drawing straight to the window; see the module docstring). Needs its OWN
+# explicit viewport now that it owns an FBO -- absent, this silently produces a black/
+# empty hdrColorTex, since a fresh FBO pass doesn't inherit the default framebuffer's
+# viewport the way the old draw-straight-to-window version implicitly did.
+def create_composite_camera(gbuf, shadow_tex, prefilter_tex, lut_tex, ao_tex, hdr_color_tex, w=W, h=H):
+	albedo_tex, normal_tex, material_tex, emissive_tex, position_tex, depth_tex = gbuf
 
 	cam = osg.Camera()
 	cam.referenceFrame = osg.Transform.ABSOLUTE_RF
-	cam.renderOrder = osg.Camera.POST_RENDER
-	cam.clearMask = 0
+	cam.renderOrder = (osg.Camera.PRE_RENDER, 4)
+	cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
+	cam.dataVariance = osg.Object.DYNAMIC
+	cam.clearMask = GL_COLOR_BUFFER_BIT
+	cam.clearColor = osg.Vec4(0.0, 0.0, 0.0, 0.0)
+	cam.viewport = osg.Viewport(0, 0, w, h)
 	cam.allowEventFocus = False
 	cam.projectionMatrix = osg.Matrix.identity()
 	cam.viewMatrix = osg.Matrix.identity()
 	cam.name = "Composite"
+
+	cam.attach(osg.Camera.COLOR_BUFFER0, hdr_color_tex)
 
 	g = osg.Geode()
 	g.drawables.append(osg.createTexturedQuadGeometry(
@@ -890,6 +1326,12 @@ def create_composite_camera(gbuf, shadow_tex, prefilter_tex, lut_tex):
 	cam.children.append(g)
 
 	ss = cam.stateSet
+	# See make_fullscreen_rtt_pass(): prevent the implicit FBO depth buffer from
+	# rejecting this same fullscreen quad on frame 1 and every frame thereafter.
+	ss.setMode(
+		GL_DEPTH_TEST,
+		osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
+	)
 	ss.textureAttributes[0] = albedo_tex
 	ss.textureAttributes[1] = normal_tex
 	ss.textureAttributes[2] = material_tex
@@ -898,6 +1340,8 @@ def create_composite_camera(gbuf, shadow_tex, prefilter_tex, lut_tex):
 	ss.textureAttributes[5] = shadow_tex
 	ss.textureAttributes[6] = prefilter_tex
 	ss.textureAttributes[7] = lut_tex
+	ss.textureAttributes[8] = ao_tex
+	ss.textureAttributes[9] = position_tex
 
 	ss.uniforms["gAlbedo"] = 0
 	ss.uniforms["gNormal"] = 1
@@ -907,6 +1351,8 @@ def create_composite_camera(gbuf, shadow_tex, prefilter_tex, lut_tex):
 	ss.uniforms["shadowMap"] = 5
 	ss.uniforms["envMap"] = 6
 	ss.uniforms["brdfLUT"] = 7
+	ss.uniforms["aoTex"] = 8
+	ss.uniforms["gPosition"] = 9
 
 	p = osg.Program(name="composite_pbr_ibl", shaders=(
 		osg.Shader(osg.Shader.VERTEX, FULLSCREEN_VERTEX),
@@ -917,12 +1363,231 @@ def create_composite_camera(gbuf, shadow_tex, prefilter_tex, lut_tex):
 
 	return cam
 
+# Bloom: threshold-extract -> horizontal blur -> vertical blur, all reusing
+# make_fullscreen_rtt_pass(). Single-scale two-pass blur, not a downsample/upsample mip
+# pyramid -- the sanctioned simplification for a teaching example (real engines pyramid
+# for a wider, cheaper glow; footnote only, not built here).
+def create_bloom_cameras(hdr_color_tex, w=W, h=H):
+	bright_tex = osg.Texture2D()
+	bright_tex.size = (w, h)
+	bright_tex.internalFormat = GL_RGB16F
+	bright_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
+
+	blur_a_tex = osg.Texture2D()
+	blur_a_tex.size = (w, h)
+	blur_a_tex.internalFormat = GL_RGB16F
+	blur_a_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
+
+	blur_b_tex = osg.Texture2D()
+	blur_b_tex.size = (w, h)
+	blur_b_tex.internalFormat = GL_RGB16F
+	blur_b_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
+
+	for tex in (bright_tex, blur_a_tex, blur_b_tex):
+		tex.dataVariance = osg.Object.DYNAMIC
+
+	threshold_cam = make_fullscreen_rtt_pass(
+		textures={0: (hdr_color_tex, "hdrColorTex")},
+		output_tex=bright_tex,
+		frag_shader=BLOOM_THRESHOLD_FRAGMENT_SHADER,
+		w=w, h=h,
+		name="BloomThreshold",
+		order=5,
+		extra_uniforms={"bloomThreshold": 1.0},
+	)
+
+	blur_h_cam = make_fullscreen_rtt_pass(
+		textures={0: (bright_tex, "inputTex")},
+		output_tex=blur_a_tex,
+		frag_shader=BLUR_FRAGMENT_SHADER,
+		w=w, h=h,
+		name="BloomBlurH",
+		order=6,
+		extra_uniforms={"texelStep": osg.Vec2(1.0 / float(w), 0.0)},
+	)
+
+	blur_v_cam = make_fullscreen_rtt_pass(
+		textures={0: (blur_a_tex, "inputTex")},
+		output_tex=blur_b_tex,
+		frag_shader=BLUR_FRAGMENT_SHADER,
+		w=w, h=h,
+		name="BloomBlurV",
+		order=7,
+		extra_uniforms={"texelStep": osg.Vec2(0.0, 1.0 / float(h))},
+	)
+
+	return threshold_cam, blur_h_cam, blur_v_cam, blur_b_tex
+
+# Final LDR pass -- new last camera in the chain, takes over composite_cam's old role of
+# drawing straight to the window (no renderTargetImplementation set, same as pyosg-mrt.py's
+# HUD camera / composite_cam's own pre-increment-2 shape).
+def create_final_camera(hdr_color_tex, bloom_tex, w=W, h=H):
+	cam = osg.Camera()
+	cam.referenceFrame = osg.Transform.ABSOLUTE_RF
+	cam.renderOrder = osg.Camera.POST_RENDER
+	cam.clearMask = 0
+	cam.allowEventFocus = False
+	cam.projectionMatrix = osg.Matrix.identity()
+	cam.viewMatrix = osg.Matrix.identity()
+	cam.name = "Final"
+
+	g = osg.Geode()
+	g.drawables.append(osg.createTexturedQuadGeometry(
+		osg.Vec3(-1.0, -1.0, -1.0),
+		osg.Vec3(2.0, 0.0, 0.0),
+		osg.Vec3(0.0, 2.0, 0.0)
+	))
+
+	cam.children.append(g)
+
+	ss = cam.stateSet
+	# The final fullscreen pass does not use depth either. Keep its state explicit
+	# instead of inheriting GL_DEPTH_TEST from the viewer's real-geometry pass.
+	ss.setMode(
+		GL_DEPTH_TEST,
+		osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
+	)
+	ss.textureAttributes[0] = hdr_color_tex
+	ss.textureAttributes[1] = bloom_tex
+	ss.uniforms["hdrColorTex"] = 0
+	ss.uniforms["bloomTex"] = 1
+
+	p = osg.Program(name="final_post", shaders=(
+		osg.Shader(osg.Shader.VERTEX, FULLSCREEN_VERTEX),
+		osg.Shader(osg.Shader.FRAGMENT, FINAL_FRAGMENT_SHADER),
+	))
+
+	g.stateSet.setAttributeAndModes(p)
+
+	return cam
+
+# --------------------------------------------------------------------------- #
+# Light gizmo: a small sphere marking a display position along lightDir, plus a
+# line from the model's bounding center to that sphere -- a debug/teaching
+# visual, not part of the actual lighting math. Position/color are recomputed
+# every frame from the live lightDir/lightColor uniforms via an updateCallback,
+# so edits made through --repl (see IPython.embed() setup below) are reflected
+# immediately without rebuilding the scene graph. Rendered as its own
+# POST_RENDER pass after final_cam, RELATIVE_RF (inherits the real viewer
+# camera's view/projection, same as gbuffer_cam) with depth test off -- always
+# visible, simplest possible overlay. Not depth-tested against the real scene:
+# final_cam already wrote straight to the backbuffer, so there's no usable
+# depth buffer left to test against at this point in the pipeline.
+# --------------------------------------------------------------------------- #
+
+GIZMO_VERTEX_SHADER = """
+#version 460 core
+
+in vec4 osg_Vertex;
+
+uniform mat4 osg_ModelViewProjectionMatrix;
+
+void main() {
+	gl_Position = osg_ModelViewProjectionMatrix * osg_Vertex;
+}
+"""
+
+GIZMO_FRAGMENT_SHADER = """
+#version 460 core
+
+uniform vec3 gizmoColor;
+
+out vec4 fragColor;
+
+void main() {
+	fragColor = vec4(gizmoColor, 1.0);
+}
+"""
+
+class LightGizmoCallback:
+	def __init__(self, bound_center, sphere_xform, line_geom, color_u, light_dir_u, light_color_u, radius):
+		self.bound_center = bound_center
+		self.sphere_xform = sphere_xform
+		self.line_geom = line_geom
+		self.color_u = color_u
+		self.light_dir_u = light_dir_u
+		self.light_color_u = light_color_u
+		self.radius = radius
+
+	def __call__(self, node, nv):
+		d = self.light_dir_u.value
+		marker_pos = self.bound_center + d
+		r = self.radius
+
+		# Anchor the line to the model's central vertical (Z-up) axis, AT the light's
+		# current rung height -- not the raw bound_center, which stays fixed no matter
+		# what z/Z sets. A fixed anchor made the line's tilt conflate "which rung" with
+		# "how far out," so pressing z/Z alone (radius/azimuth unchanged) didn't visibly
+		# read as "the whole ring moved up/down." With this anchor the line is always
+		# horizontal, lying in the same rung plane as the sphere.
+		rung_anchor = self.bound_center + osg.Vec3(0.0, 0.0, d.z)
+
+		self.sphere_xform.matrix = osg.Matrix.scale(r, r, r) * osg.Matrix.translate(marker_pos)
+		self.line_geom.setVertexArray(osg.Vec3Array([rung_anchor, marker_pos]))
+
+		c = self.light_color_u.value
+		m = max(c.x, c.y, c.z, 1e-4)
+
+		self.color_u.value = osg.Vec3(c.x / m, c.y / m, c.z / m)
+
+		return True
+
+def create_light_gizmo(bound_center, bound_radius, light_dir_u, light_color_u):
+	# Stay proportional across differently-scaled assets. An absolute world-unit
+	# minimum made the marker dwarf legitimately small models.
+	radius = bound_radius * 0.10
+
+	p = osg.Program(name="light_gizmo", shaders=(
+		osg.Shader(osg.Shader.VERTEX, GIZMO_VERTEX_SHADER),
+		osg.Shader(osg.Shader.FRAGMENT, GIZMO_FRAGMENT_SHADER),
+	))
+
+	# Sphere marker -- a fixed unit sphere, repositioned/rescaled every frame via
+	# its MatrixTransform rather than mutating ShapeDrawable geometry directly.
+	sphere_xform = osg.MatrixTransform()
+	sphere_geode = osg.Geode()
+	sphere_geode.drawables.append(osg.ShapeDrawable(osg.Sphere(osg.Vec3(0, 0, 0), 1.0)))
+	sphere_xform.children.append(sphere_geode)
+
+	# Direction line -- vertex array replaced wholesale each frame (only 2
+	# points; cheaper to rebuild than to reason about in-place mutation).
+	line_geom = osg.Geometry()
+	line_geom.setVertexArray(osg.Vec3Array([bound_center, bound_center]))
+	line_geom.addPrimitiveSet(osg.DrawArrays(osg.PrimitiveSet.LINES, 0, 2))
+	line_geom.useVertexBufferObjects = True
+	line_geode = osg.Geode()
+	line_geode.drawables.append(line_geom)
+
+	group = osg.Group()
+	group.children.extend((sphere_xform, line_geode))
+	group.cullingActive = False
+
+	color_u = osg.Uniform("gizmoColor", osg.Vec3(1.0, 1.0, 1.0))
+	ss = group.stateSet
+	ss.setAttributeAndModes(p)
+	ss.uniforms.extend((color_u,))
+
+	group.updateCallback = LightGizmoCallback(
+		bound_center, sphere_xform, line_geom, color_u, light_dir_u, light_color_u, radius
+	)
+
+	cam = osg.Camera()
+	cam.name = "LightGizmo"
+	cam.renderOrder = (osg.Camera.POST_RENDER, 1)
+	cam.clearMask = 0
+	cam.allowEventFocus = False
+	cam.cullingActive = False
+	cam.stateSet.setMode(GL_DEPTH_TEST, osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE)
+	cam.children.append(group)
+
+	return cam
+
 # --------------------------------------------------------------------------- #
 # Input
 # --------------------------------------------------------------------------- #
 
 class VisualizeModeHandler(osgGA.GUIEventHandler):
-	"""Press 0-8 to switch the composite pass's render level (Sketchfab-style layer toggle)."""
+	"""Press 0-9 to switch the composite pass's render level (Sketchfab-style layer toggle)."""
 
 	def __init__(self, mode_uniform):
 		super().__init__()
@@ -934,12 +1599,129 @@ class VisualizeModeHandler(osgGA.GUIEventHandler):
 
 		key = ea.key
 
-		if ord("0") <= key <= ord("8"):
+		if ord("0") <= key <= ord("9"):
 			self.mode_uniform.value = key - ord("0")
 
 			return True
 
 		return False
+
+class PostEnabledHandler(osgGA.GUIEventHandler):
+	"""Press 'p' to toggle the whole post-processing chain (Sketchfab's own "No
+	Post-Processing" button)."""
+
+	def __init__(self, enabled_uniform):
+		super().__init__()
+		self.enabled_uniform = enabled_uniform
+		self.enabled = True
+
+	def handle(self, ea, aa):
+		if ea.handled or ea.type != osgGA.GUIEventAdapter.KEYUP:
+			return False
+
+		if ea.key == ord("p"):
+			self.enabled = not self.enabled
+			self.enabled_uniform.value = self.enabled
+
+			return True
+
+		return False
+
+class IBLIntensityHandler(osgGA.GUIEventHandler):
+	"""i/I = diffuse (SH ambient fill) intensity down/up, s/S = specular (prefiltered
+	reflection) intensity down/up. Multiplicative steps, not additive -- intensity/
+	exposure values read naturally in stops (e.g. "half as bright"/"twice as bright"),
+	and a fixed additive step would feel enormous near zero and imperceptible once the
+	value has grown. Pure post-bake shading multipliers (see evaluateIBL()) -- neither
+	compute_sh() nor the prefiltered-cubemap bake reads these, so there's no rebake
+	lag, unlike lightDir's one-frame shadow-camera delay."""
+
+	STEP = 1.1
+
+	def __init__(self, diffuse_uniform, specular_uniform):
+		super().__init__()
+		self.diffuse_uniform = diffuse_uniform
+		self.specular_uniform = specular_uniform
+
+	def handle(self, ea, aa):
+		if ea.handled or ea.type != osgGA.GUIEventAdapter.KEYUP:
+			return False
+
+		key = ea.key
+
+		if key == ord("i"):
+			self.diffuse_uniform.value /= self.STEP
+		elif key == ord("I"):
+			self.diffuse_uniform.value *= self.STEP
+		elif key == ord("s"):
+			self.specular_uniform.value /= self.STEP
+		elif key == ord("S"):
+			self.specular_uniform.value *= self.STEP
+		else:
+			return False
+
+		print(
+			f"[ibl] diffuse={self.diffuse_uniform.value:.4f} "
+			f"specular={self.specular_uniform.value:.4f}",
+			flush=True
+		)
+
+		return True
+
+class LightOrbitHandler(osgGA.GUIEventHandler):
+	"""Predictable cylindrical orbit controls around the model's Z-up axis.
+
+	The uniform stores the moon's world-space offset from the model center. Lighting
+	and the shadow camera normalize that offset to obtain the inward/outward ray
+	direction; the gizmo uses its full value so radius and rung remain visible.
+	"""
+
+	def __init__(self, light_dir_u, bound_radius):
+		super().__init__()
+		self.light_dir_u = light_dir_u
+		self.rung_step = bound_radius * 0.2 # 10% of the full spherical bound
+		self.radius_step = bound_radius * 0.1
+		self.min_radius = bound_radius * 0.1
+		self.angle_step = math.radians(10.0)
+
+		initial_distance = bound_radius * 1.5
+		d = KEY_LIGHT_DIR.normalized() * initial_distance
+		self.azimuth = math.atan2(d.y, d.x)
+		self.orbit_radius = max(math.hypot(d.x, d.y), self.min_radius)
+		self.height = d.z
+		self._sync()
+
+	def _sync(self):
+		self.light_dir_u.value = osg.Vec3(
+			math.cos(self.azimuth) * self.orbit_radius,
+			math.sin(self.azimuth) * self.orbit_radius,
+			self.height
+		)
+
+	def handle(self, ea, aa):
+		if ea.handled or ea.type != osgGA.GUIEventAdapter.KEYUP:
+			return False
+
+		key = ea.key
+
+		if key == ord("z"):
+			self.height += self.rung_step
+		elif key == ord("Z"):
+			self.height -= self.rung_step
+		elif key == ord("r"): # clockwise when viewed from +Z
+			self.azimuth -= self.angle_step
+		elif key == ord("R"):
+			self.azimuth += self.angle_step
+		elif key == ord("d"):
+			self.orbit_radius += self.radius_step
+		elif key == ord("D"):
+			self.orbit_radius = max(self.min_radius, self.orbit_radius - self.radius_step)
+		else:
+			return False
+
+		self._sync()
+
+		return True
 
 # If the passed-in file exists, simply return it; if not, try and find it inside example data dir.
 def data_dir_file(f, suffix=None):
@@ -983,15 +1765,36 @@ if __name__ == "__main__":
 		help="Equirectangular HDR for SH diffuse (optional; hemisphere fallback if omitted)"
 	)
 	ap.add_argument(
-		"--ibl-intensity",
+		"--ibl-diffuse-intensity",
 		type=float,
 		default=0.1,
-		help="IBL exposure scale (default: 0.1)"
+		help="IBL ambient-fill (SH diffuse irradiance) exposure scale (default: 0.1)"
+	)
+	ap.add_argument(
+		"--ibl-specular-intensity",
+		type=float,
+		default=0.1,
+		help="IBL reflection (prefiltered specular) exposure scale (default: 0.1)"
 	)
 	ap.add_argument("--no-lights", dest="lights", action="store_false", default=True)
-	ap.add_argument("--animated-lights", dest="animated_lights", action="store_true", default=False)
 	ap.add_argument("--floor-z", type=float, default=None)
 	ap.add_argument("--floor-size", type=float, default=None)
+	ap.add_argument(
+		"--repl",
+		action="store_true",
+		default=False,
+		help="Run the viewer in a background thread and drop into IPython.embed() "
+			"on the main thread, so uniforms/lights can be tweaked live while "
+			"watching the render window."
+	)
+	ap.add_argument(
+		"--no-gui",
+		dest="gui",
+		action="store_false",
+		default=True,
+		help="Disable the osgDebug ImGui panel exposing the IBL/light knobs as sliders "
+			"(the i/I s/S d/D r/R z/Z keyboard controls still work either way)."
+	)
 
 	args = ap.parse_args()
 
@@ -1012,18 +1815,11 @@ if __name__ == "__main__":
 	bound = model.bound
 	bound_center = bound.center
 	bound_radius = bound.radius if bound.radius > 1e-6 else REFERENCE_RADIUS
-	light_scale = max(bound_radius / REFERENCE_RADIUS, 1.0)
 
 	print(
-		f"[sketchfab] model bound: center={tuple(bound_center)} "
-		f"radius={bound_radius:.4f}  light_scale={light_scale:.3f}",
+		f"[sketchfab] model bound: center={tuple(bound_center)} radius={bound_radius:.4f}",
 		flush=True
 	)
-
-	key_light_pos = bound_center + KEY_LIGHT_DIR * (KEY_LIGHT_DIST * light_scale)
-	fill_light_pos_0 = bound_center + FILL_LIGHT_DIR_0 * (FILL_LIGHT_DIST_0 * light_scale)
-	fill_light_pos_1 = bound_center + FILL_LIGHT_DIR_1 * (FILL_LIGHT_DIST_1 * light_scale)
-	light_radius_scaled = tuple(r * light_scale for r in LIGHT_RADII)
 
 	# --- Load prefiltered cubemap from KTX2 --------------------------------- #
 	prefilter_tex = osgDB.readObjectFile(args.ktx2)
@@ -1042,10 +1838,11 @@ if __name__ == "__main__":
 	# --- BRDF split-sum LUT (environment-independent, baked once) ----------- #
 	lut_tex, lut_group = make_brdf_lut()
 
-	# --- IBL uniforms (now live on composite_cam's stateSet) ---------------- #
+	# --- IBL uniforms (live on composite_cam's stateSet) --------------------- #
 	ibl_sh_u = osg.Uniform(osg.Uniform.Type.FLOAT_VEC3, "iblSH", (osg.Vec3(),) * 9)
 	ibl_enabled_u = osg.Uniform("iblEnabled", 1) # always 1 - we have the cubemap
-	ibl_intensity_u = osg.Uniform("iblIntensity", args.ibl_intensity)
+	ibl_diffuse_intensity_u = osg.Uniform("iblDiffuseIntensity", args.ibl_diffuse_intensity)
+	ibl_specular_intensity_u = osg.Uniform("iblSpecularIntensity", args.ibl_specular_intensity)
 
 	# --- G-buffer geometry-pass program -------------------------------------- #
 	p = osg.Program(name="gbuffer_pbr", shaders=(
@@ -1068,31 +1865,36 @@ if __name__ == "__main__":
 	ss.uniforms["scanlineFreq"] = 1000.0
 	ss.uniforms["scanlineStrength"] = 0.5
 
-	# --- Shared light uniforms (now live on composite_cam's stateSet) ------- #
-	lightPos = osg.Uniform(osg.Uniform.Type.FLOAT_VEC3, "lightPos", (
-		key_light_pos,
-		fill_light_pos_0,
-		fill_light_pos_1,
-	))
+	# --- Key light uniforms (live on composite_cam's stateSet) -------------- #
+	# lightColor is raw linear HDR radiance, not a display color -- values around
+	# 1.0 read as quite dim once BRDF/NdotL/tonemap all take their cut, which is why
+	# direct lighting was barely visible in mode 0 next to full-strength IBL
+	# reflections. 3x brighter (same warm hue) makes direct lighting actually read.
+	light_dir_u = osg.Uniform("lightDir", KEY_LIGHT_DIR)
+	light_color_u = osg.Uniform(
+		"lightColor",
+		osg.Vec3(3.0, 2.7, 2.1) if args.lights else osg.Vec3()
+	)
+	# Was hardcoded (0.005) directly in shadowFactor() -- a single FIXED bias is a
+	# textbook-known-insufficient technique at grazing angles (the bias needed to
+	# avoid false self-shadowing/"acne" scales with how grazing the angle between
+	# the surface normal and the light is; a fixed value is only ever "enough" at
+	# some angles). Exposed as a uniform so it can be tuned live via --repl instead
+	# of guessing at a shader-source constant and restarting every time.
+	shadow_bias_u = osg.Uniform("shadowBias", 0.005)
 
-	if args.lights:
-		lightColor = osg.Uniform(osg.Uniform.Type.FLOAT_VEC3, "lightColor", (
-			osg.Vec3(1.0, 0.9, 0.7),
-			osg.Vec3(0.3, 0.5, 1.0),
-			osg.Vec3(1.0, 0.5, 0.2),
-		))
-
-	else:
-		lightColor = osg.Uniform(osg.Uniform.Type.FLOAT_VEC3, "lightColor", (
-			osg.Vec3(),
-			osg.Vec3(),
-			osg.Vec3()
-		))
-
-	lightRadius = osg.Uniform(osg.Uniform.Type.FLOAT, "lightRadius", light_radius_scaled)
-
+	# --- Frame-global uniforms (live on root.stateSet -- inherited by every camera
+	# under it regardless of PRE_RENDER/POST_RENDER order; see the update_uniforms
+	# comment below for why they're updated from shadow_cam's preDrawCallback, not
+	# v.camera's) ------------------------------------------------------------- #
 	shadow_matrix_u = osg.Uniform("shadowMatrix", osg.Matrixf.identity())
 	main_view_u = osg.Uniform("mainViewMatrix", osg.Matrixf.identity())
+	znear_u = osg.Uniform("znear", 0.0)
+	zfar_u = osg.Uniform("zfar", 0.0)
+	inv_proj_u = osg.Uniform("invProjectionMatrix", osg.Matrixf.identity())
+	proj_forward_u = osg.Uniform("projectionMatrix", osg.Matrixf.identity())
+	visualize_mode_u = osg.Uniform("visualizeMode", 0)
+	post_enabled_u = osg.Uniform("postEnabled", True)
 
 	# --- Shadow map (verbatim from 09-ibl.py) -------------------------------- #
 	shadow_tex = osg.Texture2D()
@@ -1107,9 +1909,16 @@ if __name__ == "__main__":
 	dummy_color.size = (SHADOW_SIZE, SHADOW_SIZE)
 	dummy_color.internalFormat = GL_RGB
 
-	SHADOW_HALF_FOV_DEG = 25.0
+	shadow_tex.dataVariance = osg.Object.DYNAMIC
+	dummy_color.dataVariance = osg.Object.DYNAMIC
+
 	SHADOW_MARGIN = 1.3
-	shadow_distance = bound_radius * SHADOW_MARGIN / math.tan(math.radians(SHADOW_HALF_FOV_DEG))
+	# This is a directional light, so its rays must be parallel.  The old
+	# perspective projection made it behave like a spotlight whose rays diverged
+	# from shadow_light_pos, even though direct lighting used one constant direction
+	# everywhere.  An orthographic box makes the lighting and shadow models agree.
+	shadow_extent = bound_radius * SHADOW_MARGIN
+	shadow_distance = shadow_extent * 2.0
 	shadow_light_pos = bound_center + KEY_LIGHT_DIR * shadow_distance
 
 	light_view = osg.Matrix.lookAt(
@@ -1118,14 +1927,18 @@ if __name__ == "__main__":
 		osg.Vec3(0, 1, 0)
 	)
 
-	shadow_near = max(0.01, shadow_distance - bound_radius * SHADOW_MARGIN)
-	shadow_far = shadow_distance + bound_radius * SHADOW_MARGIN
+	shadow_near = max(0.01, shadow_distance - shadow_extent)
+	shadow_far = shadow_distance + shadow_extent
 
-	light_proj = osg.Matrix.perspective(2.0 * SHADOW_HALF_FOV_DEG, 1.0, shadow_near, shadow_far)
+	light_proj = osg.Matrix.ortho(
+		-shadow_extent, shadow_extent,
+		-shadow_extent, shadow_extent,
+		shadow_near, shadow_far
+	)
 
 	shadow_cam = osg.Camera()
 	shadow_cam.name = "ShadowCam"
-	shadow_cam.renderOrder = osg.Camera.PRE_RENDER
+	shadow_cam.renderOrder = (osg.Camera.PRE_RENDER, 0)
 	shadow_cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
 	shadow_cam.referenceFrame = osg.Transform.ABSOLUTE_RF
 	shadow_cam.clearMask = GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT
@@ -1136,6 +1949,14 @@ if __name__ == "__main__":
 	shadow_cam.viewMatrix = light_view
 	shadow_cam.projectionMatrix = light_proj
 	shadow_cam.children.append(model)
+	# Disable frustum culling for this camera's own subgraph -- same fix
+	# ~/dev/slughorn/ai/enterprise-hud3d.py uses on its real-geometry RTT passes
+	# (ent_pass.cullingActive = False). Without it, OSG's automatic scene-bounding-
+	# volume computation across root (now spanning several ABSOLUTE_RF fullscreen
+	# quads in unrelated reference frames alongside real geometry) can produce a bad
+	# bound for a nested camera's subgraph once cull caching settles in -- symptom is
+	# "renders fine for one frame, then gets culled out."
+	shadow_cam.cullingActive = False
 
 	# --- Floor (optional) -- routed through the G-buffer, see FLOOR_GBUFFER_* -- #
 	if args.floor:
@@ -1156,118 +1977,312 @@ if __name__ == "__main__":
 
 		floor_geode.stateSet.setAttributeAndModes(floor_p)
 
-	# --- G-buffer + composite cameras ---------------------------------------- #
-	gbuffer_cam, albedo_tex, normal_tex, material_tex, emissive_tex, depth_tex = create_gbuffer_camera(W, H)
+	# --- G-buffer -------------------------------------------------------------- #
+	gbuffer_cam, albedo_tex, normal_tex, material_tex, emissive_tex, position_tex, depth_tex = create_gbuffer_camera(W, H)
 
 	gbuffer_cam.children.append(model)
 
 	if args.floor:
 		gbuffer_cam.children.append(floor_geode)
 
+	# Same reasoning as shadow_cam.cullingActive above.
+	gbuffer_cam.cullingActive = False
+
+	# --- SSAO -------------------------------------------------------------------- #
+	ssao_kernel_u = osg.Uniform(osg.Uniform.Type.FLOAT_VEC3, "samples", tuple(generate_ssao_kernel()))
+	ssao_noise_tex = make_ssao_noise_texture()
+	ssao_radius = max(0.05, bound_radius * 0.15)
+
+	ssao_cam, ao_raw_tex = create_ssao_camera(
+		depth_tex, normal_tex, ssao_noise_tex, ssao_kernel_u, ssao_radius, w=W, h=H
+	)
+	ssao_blur_cam, ao_tex = create_ssao_blur_camera(ao_raw_tex, W, H)
+
+	# --- Composite (PRE_RENDER, writes linear HDR) ------------------------------ #
+	hdr_color_tex = osg.Texture2D()
+	hdr_color_tex.size = (W, H)
+	hdr_color_tex.internalFormat = GL_RGB16F
+	hdr_color_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
+	hdr_color_tex.dataVariance = osg.Object.DYNAMIC
+
 	composite_cam = create_composite_camera(
-		(albedo_tex, normal_tex, material_tex, emissive_tex, depth_tex),
+		(albedo_tex, normal_tex, material_tex, emissive_tex, position_tex, depth_tex),
 		shadow_tex,
 		prefilter_tex,
-		lut_tex
+		lut_tex,
+		ao_tex,
+		hdr_color_tex,
+		W, H
 	)
 
 	cc_ss = composite_cam.stateSet
 	cc_ss.uniforms.extend((
-		lightPos,
-		lightColor,
-		lightRadius,
-		shadow_matrix_u,
-		main_view_u,
+		light_dir_u,
+		light_color_u,
+		shadow_bias_u,
 		ibl_enabled_u,
-		ibl_intensity_u,
+		ibl_diffuse_intensity_u,
+		ibl_specular_intensity_u,
 		ibl_sh_u
 	))
-	cc_ss.uniforms["animatedLights"] = args.animated_lights
 	cc_ss.uniforms["skyColor"] = osg.Vec3(0.15, 0.20, 0.35)
 	cc_ss.uniforms["groundColor"] = osg.Vec3(0.12, 0.08, 0.05)
 
-	znear_u = osg.Uniform("znear", 0.0)
-	zfar_u = osg.Uniform("zfar", 0.0)
-	inv_proj_u = osg.Uniform("invProjectionMatrix", osg.Matrixf.identity())
-	visualize_mode_u = osg.Uniform("visualizeMode", 0)
+	# --- Bloom -------------------------------------------------------------------- #
+	bloom_threshold_cam, bloom_blur_h_cam, bloom_blur_v_cam, bloom_blur_b_tex = create_bloom_cameras(hdr_color_tex, W, H)
 
-	cc_ss.uniforms.extend((znear_u, zfar_u, inv_proj_u, visualize_mode_u))
+	# --- Final LDR pass ------------------------------------------------------------ #
+	final_cam = create_final_camera(hdr_color_tex, bloom_blur_b_tex, W, H)
+
+	fc_ss = final_cam.stateSet
+	fc_ss.uniforms["bloomStrength"] = 0.5
+	fc_ss.uniforms["caStrength"] = 0.003
+	fc_ss.uniforms["sharpenStrength"] = 0.25
+	fc_ss.uniforms["vignetteStrength"] = 0.35
+	fc_ss.uniforms["grainStrength"] = 0.02
+	fc_ss.uniforms["colorLift"] = 0.0
+	fc_ss.uniforms["colorGamma"] = 1.0
+	fc_ss.uniforms["colorGain"] = 1.0
+
+	# --- Light gizmo (sphere marker + direction line) ------------------------ #
+	gizmo_cam = create_light_gizmo(bound_center, bound_radius, light_dir_u, light_color_u)
 
 	root = osg.Group()
-	root.children.extend((shadow_cam, lut_group, gbuffer_cam, composite_cam))
-
-	GL_TEXTURE_CUBE_MAP_SEAMLESS = 0x884F
+	root.children.extend((
+		shadow_cam,
+		lut_group,
+		gbuffer_cam,
+		ssao_cam,
+		ssao_blur_cam,
+		composite_cam,
+		bloom_threshold_cam,
+		bloom_blur_h_cam,
+		bloom_blur_v_cam,
+		final_cam,
+		gizmo_cam,
+	))
 
 	root.stateSet.setMode(GL_TEXTURE_CUBE_MAP_SEAMLESS, osg.StateAttribute.ON)
+	root.stateSet.uniforms.extend((
+		znear_u,
+		zfar_u,
+		inv_proj_u,
+		proj_forward_u,
+		main_view_u,
+		shadow_matrix_u,
+		visualize_mode_u,
+		post_enabled_u,
+	))
 
 	# --- Viewer ------------------------------------------------------------- #
-	v = osgViewer.Viewer()
-	v.sceneData = root
-	v.cameraManipulator = osgGA.TrackballManipulator()
+	manip = osgGA.TrackballManipulator()
+	manip.node = model
 
-	# Combined per-frame uniform update: shadow matrix (needs the real view matrix to
-	# map composite-reconstructed eyePos -> light clip space), inverse projection +
-	# znear/zfar (depth reconstruction), and mainViewMatrix (see COMPOSITE_FRAGMENT_
-	# SHADER's comment on why osg_ViewMatrix can't be trusted on that camera).
+	# View.setCameraManipulator() targets the full scene root by default, which makes
+	# the orbiting gizmo inflate the computed model size and home distance. Retarget
+	# the manipulator after attaching it so only the actual asset defines its bounds.
+	v = osgViewer.Viewer()
+
+	v.sceneData = root
+	v.cameraManipulator = manip
+
+	# Combined per-frame uniform update: shadow matrix, inverse+forward projection,
+	# znear/zfar, and mainViewMatrix (see COMPOSITE_FRAGMENT_SHADER's comment on why
+	# osg_ViewMatrix can't be trusted on these cameras).
+	#
+	# Attached to shadow_cam.preDrawCallback, NOT v.camera.preDrawCallback -- verified
+	# directly against OSG 3.6.5's RenderStage::draw() (osgUtil/RenderStage.cpp):
+	# drawPreRenderStages() runs BEFORE this camera's own getPreDrawCallback(), which
+	# runs before drawInner(), which runs before drawPostRenderStages(). That means
+	# every PRE_RENDER camera nested under v.camera finishes drawing BEFORE
+	# v.camera.preDrawCallback ever fires for that frame -- a PRE_RENDER consumer of
+	# these uniforms would silently read a one-frame-stale value if this callback
+	# stayed on v.camera (increment 1 never hit this because composite_cam was its
+	# only consumer, and was POST_RENDER -- drawn after v.camera's own preDrawCallback).
+	# shadow_cam is the numerically-first PRE_RENDER camera (order 0), so attaching it
+	# there guarantees this fires before every other PRE_RENDER stage this frame.
 	def update_uniforms(ri):
 		cam_view = v.camera.viewMatrix
-		pm = ri.state.projectionMatrix
+		pm = v.camera.projectionMatrix
 		fovy, aspect, near, far = pm.getPerspective()
 
 		znear_u.value = float(near)
 		zfar_u.value = float(far)
 		inv_proj_u.value = osg.Matrixf(osg.Matrix.inverse(pm))
+		proj_forward_u.value = osg.Matrixf(pm)
 		main_view_u.value = osg.Matrixf(cam_view)
 
-		shadow_mat = osg.Matrix.inverse(cam_view) * light_view * light_proj
+		# Shadow camera tracks the LIVE lightDir uniform every frame now, instead of
+		# the KEY_LIGHT_DIR constant frozen at startup -- previously, moving the
+		# light interactively (REPL or x/y/z keys) changed mode 5 (direct lighting)
+		# immediately but had zero effect on mode 8 (shadowFactor), since the actual
+		# shadow-casting camera never knew the light had moved. Only the VIEW
+		# direction depends on lightDir; near/far/FOV (light_proj) depend only on
+		# bound_radius, so that stays fixed. Setting shadow_cam.viewMatrix here
+		# (inside its own preDrawCallback, i.e. during THIS frame's draw phase)
+		# takes effect for next frame's cull, not this one -- a one-frame lag,
+		# imperceptible once the light stops moving.
+		d = light_dir_u.value
+		light_dir_now = d.normalized() if d.length() > 1e-5 else KEY_LIGHT_DIR
+		shadow_light_pos_now = bound_center + light_dir_now * shadow_distance
+		current_light_view = osg.Matrix.lookAt(shadow_light_pos_now, bound_center, osg.Vec3(0, 1, 0))
+		shadow_cam.viewMatrix = current_light_view
+
+		# OSG row-vector convention: v' = v * M applies matrices left-to-right, so
+		# "eye -> world -> light-eye -> light-clip" composes in that literal
+		# reading order. Verified 2026-07-11 with a pure Python/OSG-space
+		# diagnostic (transforming bound_center through this exact chain and
+		# comparing against a camera-independent ground truth computed straight
+		# from light_view/light_proj) -- this order cancels cam_view exactly
+		# regardless of zoom/rotation; a reversed order (chasing a GLSL
+		# column-vector argument that doesn't apply to CPU-side composition)
+		# did not.
+		shadow_mat = osg.Matrix.inverse(cam_view) * current_light_view * light_proj
 		shadow_matrix_u.value = osg.Matrixf(shadow_mat)
 
-	v.camera.preDrawCallback = update_uniforms
+	shadow_cam.preDrawCallback = update_uniforms
 	v.addEventHandler(VisualizeModeHandler(visualize_mode_u))
+	v.addEventHandler(PostEnabledHandler(post_enabled_u))
+	light_orbit_handler = LightOrbitHandler(light_dir_u, bound_radius)
+	ibl_intensity_handler = IBLIntensityHandler(ibl_diffuse_intensity_u, ibl_specular_intensity_u)
+	v.addEventHandler(light_orbit_handler)
+	v.addEventHandler(ibl_intensity_handler)
+
+	# --- ImGui panel: the same IBL/light knobs as the i/I s/S d/D r/R z/Z keys, ---
+	# --- exposed as sliders (osgDebug.imgui.Widget -- see osgdebug's TODO.md's ---
+	# --- "Knobs, not frameworks" section). Keyboard controls keep working too, ---
+	# --- both drive the same uniforms/handler state so they can't drift apart. --
+	if args.gui:
+		# final_cam draws last (POST_RENDER, nested under root -- not a View slave),
+		# so it must be the explicit draw_camera: Widget defaults to v.camera/
+		# slave-0, whose PostDrawCallback fires BEFORE final_cam's later fullscreen
+		# composite overwrite -- ImGui would render then be immediately erased,
+		# while its mouse-capture bookkeeping stayed live (an invisible rectangle
+		# eating mouse input). See osgDebug.hpp's Widget constructor comment.
+		gui = osgDebug.imgui.Widget(v, final_cam)
+
+		def draw_lighting_knobs(ri):
+			changed, value = osgDebug.imgui.slider_float(
+				"IBL Diffuse", ibl_diffuse_intensity_u.value, 0.0, 2.0
+			)
+			if changed: ibl_diffuse_intensity_u.value = value
+
+			changed, value = osgDebug.imgui.slider_float(
+				"IBL Specular", ibl_specular_intensity_u.value, 0.0, 2.0
+			)
+			if changed: ibl_specular_intensity_u.value = value
+
+			osgDebug.imgui.separator()
+
+			h = light_orbit_handler
+
+			changed, value = osgDebug.imgui.slider_float(
+				"Light Azimuth", math.degrees(h.azimuth), -180.0, 180.0, "%.1f deg"
+			)
+			if changed:
+				h.azimuth = math.radians(value)
+				h._sync()
+
+			changed, value = osgDebug.imgui.slider_float(
+				"Light Orbit Radius", h.orbit_radius, h.min_radius, bound_radius * 3.0
+			)
+			if changed:
+				h.orbit_radius = value
+				h._sync()
+
+			changed, value = osgDebug.imgui.slider_float(
+				"Light Height", h.height, -bound_radius * 3.0, bound_radius * 3.0
+			)
+			if changed:
+				h.height = value
+				h._sync()
+
+		gui.addSection("Lighting", draw_lighting_knobs)
 
 	print(
 		"Press 0=composite 1=albedo 2=normal 3=depth 4=material "
-		"5=direct 6=IBL 7=emissive 8=shadow",
+		"5=direct 6=IBL 7=emissive 8=shadow 9=AO -- p=toggle post-processing -- "
+		"z/Z=vertical rung +/-  r/R=clockwise/counterclockwise  d/D=orbit radius +/- "
+		"i/I=ibl diffuse -/+  s/S=ibl specular -/+",
 		flush=True
 	)
 
-	# --- Async viewer loop (verbatim from 09-ibl.py) -------------------------- #
-	loop = asyncio.new_event_loop()
-	queue = asyncio.Queue()
-	asyncio.set_event_loop(loop)
+	# --- --repl: background render thread + IPython.embed() on the main thread -- #
+	# Lets uniforms/lights/SSAO params be edited live from a REPL while the window
+	# keeps rendering, instead of 11-bug.py/12-bug.py's pattern of pausing before
+	# any v.frame() call for manual single-step debugging. SH is computed
+	# synchronously (blocking, once, at startup) rather than via the async task
+	# below -- simpler than wiring an event loop through a second thread, and
+	# a one-time startup stall is a fine tradeoff for an interactive debug entry
+	# point.
+	if args.repl:
+		import threading
 
-	tasks = []
+		if args.hdr:
+			for i, rgb in enumerate(compute_sh(args.hdr)):
+				ibl_sh_u[i] = osg.Vec3(*rgb)
 
-	if args.hdr:
-		tasks.append(loop.create_task(task_compute_sh(queue, args.hdr)))
+		stop_event = threading.Event()
 
-	try:
-		while not v.done:
-			v.frame()
+		def _render_loop():
+			while not v.done and not stop_event.is_set():
+				v.frame()
 
-			loop.run_until_complete(asyncio.sleep(0))
+		render_thread = threading.Thread(target=_render_loop, daemon=True)
 
-			try:
-				while True:
-					sh = queue.get_nowait()
+		render_thread.start()
 
-					for i, rgb in enumerate(sh):
-						ibl_sh_u[i] = osg.Vec3(*rgb)
+		# See the "apitrace + IPython.embed() SIGINT crash" note in
+		# ai/context-todo-lighting-class.md -- harmless to set unconditionally.
+		import signal
 
-			except asyncio.QueueEmpty:
-				pass
+		signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-	finally:
-		for task in tasks:
-			task.cancel()
+		import IPython
+
+		IPython.embed()
+
+		stop_event.set()
+		render_thread.join()
+
+	else:
+		# --- Async viewer loop (verbatim from 09-ibl.py) ------------------------ #
+		loop = asyncio.new_event_loop()
+		queue = asyncio.Queue()
+		asyncio.set_event_loop(loop)
+
+		tasks = []
+
+		if args.hdr:
+			tasks.append(loop.create_task(task_compute_sh(queue, args.hdr)))
 
 		try:
+			while not v.done:
+				v.frame()
+
+				loop.run_until_complete(asyncio.sleep(0))
+
+				try:
+					while True:
+						sh = queue.get_nowait()
+
+						for i, rgb in enumerate(sh):
+							ibl_sh_u[i] = osg.Vec3(*rgb)
+
+				except asyncio.QueueEmpty:
+					pass
+
+		finally:
 			for task in tasks:
-				loop.run_until_complete(task)
+				task.cancel()
 
-		except asyncio.CancelledError:
-			pass
+			try:
+				for task in tasks:
+					loop.run_until_complete(task)
 
-		loop.run_until_complete(asyncio.sleep(0))
-		loop.stop()
-		loop.close()
+			except asyncio.CancelledError:
+				pass
+
+			loop.run_until_complete(asyncio.sleep(0))
+			loop.stop()
+			loop.close()
