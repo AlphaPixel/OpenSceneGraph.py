@@ -150,6 +150,14 @@ void bind(py::module_& m) {
 			osgGA::GUIActionAdapter&
 		>(&osgGA::CameraManipulator::home))
 		.def("home", py::overload_cast<double>(&osgGA::CameraManipulator::home))
+		// TODO: This should be an `osgx::PropertySlot` instead!
+		.def_property(
+			"node",
+			py::overload_cast<>(&osgGA::CameraManipulator::getNode),
+			&osgGA::CameraManipulator::setNode,
+			py::return_value_policy::reference_internal,
+			py::doc("Scene node used for bounds, home-position, and model-size calculations.")
+		)
 		.def_property(
 			"homePosition",
 			py::cpp_function([](osgGA::CameraManipulator& self) {
