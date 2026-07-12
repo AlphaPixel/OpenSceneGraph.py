@@ -2207,30 +2207,77 @@ if __name__ == "__main__":
 		flush=True
 	)
 
-	# --- --repl: background render thread + IPython.embed() on the main thread -- #
+	# --- --repl: async render loop sharing IPython's OWN event loop, no threading -- #
 	# Lets uniforms/lights/SSAO params be edited live from a REPL while the window
 	# keeps rendering, instead of 11-bug.py/12-bug.py's pattern of pausing before
-	# any v.frame() call for manual single-step debugging. SH is computed
-	# synchronously (blocking, once, at startup) rather than via the async task
-	# below -- simpler than wiring an event loop through a second thread, and
-	# a one-time startup stall is a fine tradeoff for an interactive debug entry
-	# point.
+	# any v.frame() call for manual single-step debugging. Previously used a
+	# background threading.Thread -- replaced so this matches 09-ibl.py's async/
+	# await-only style, and so the window opens immediately instead of blocking
+	# on a synchronous compute_sh() call before the first v.frame().
+	#
+	# IPython.embed(using='asyncio') alone is NOT enough to keep render_task
+	# pumped while idling at the prompt: it only sets loop_runner (how a typed
+	# top-level `await ...` expression gets executed via
+	# IPython.core.interactiveshell._asyncio_runner), it does NOT make the
+	# PROMPT READ ITSELF cooperate with the loop. That second, separate piece
+	# is TerminalInteractiveShell._use_asyncio_inputhook, which is ONLY set by
+	# calling shell.enable_gui("asyncio") -- normally triggered interactively
+	# via the `%gui asyncio` magic (see IPython.terminal.pt_inputhooks.asyncio's
+	# own docstring/example, which schedules a task with asyncio.ensure_future()
+	# right after running that magic -- exactly our shape). Without it,
+	# render_task/sh_task below only get pumped when the user explicitly types
+	# something that drives the loop (an `await ...` expression) -- confirmed
+	# directly against the installed IPython 8.20 source, 2026-07-12, after
+	# `using="asyncio"` alone left v.frame() not being called automatically.
+	#
+	# Fix requires NOT calling the top-level IPython.embed() convenience
+	# function at all: its own source (IPython.terminal.embed.embed) does
+	# `if InteractiveShell._instance is not None: clear_instance()` right
+	# before building its OWN fresh InteractiveShellEmbed -- so any
+	# pre-configured instance we hand it (even one with enable_gui("asyncio")
+	# already called) gets thrown away and replaced. Confirmed the hard way:
+	# a pre-built, pre-enable_gui'd instance passed to IPython.embed() still
+	# left render_task un-pumped while idling at the prompt. Replicating
+	# embed()'s own body ourselves (construct the singleton, call
+	# shell.enable_gui("asyncio"), then call shell() directly -- skipping
+	# embed()'s wrapper function entirely) is the only way to keep our
+	# configuration. No manual frame introspection needed on our end for
+	# either call: InteractiveShellEmbed.__init__() already computes its own
+	# _init_location_id via sys._getframe(1) when none is passed, and
+	# shell()'s own default stack_depth=1 already resolves local_ns to
+	# whoever calls shell() directly (which is us, one frame closer than
+	# embed()'s internal stack_depth=2, since we skip its wrapper frame) --
+	# verified against the installed IPython 8.20 source, 2026-07-12.
 	if args.repl:
-		import threading
+		from IPython.core.async_helpers import get_asyncio_loop
+		from IPython.terminal.embed import InteractiveShellEmbed
+		from IPython.terminal.ipapp import load_default_config
 
-		if args.hdr:
-			for i, rgb in enumerate(compute_sh(args.hdr)):
-				ibl_sh_u[i] = osg.Vec3(*rgb)
+		loop = get_asyncio_loop()
+		queue = asyncio.Queue()
 
-		stop_event = threading.Event()
+		asyncio.set_event_loop(loop)
 
-		def _render_loop():
-			while not v.done and not stop_event.is_set():
+		async def render_loop():
+			while not v.done:
 				v.frame()
 
-		render_thread = threading.Thread(target=_render_loop, daemon=True)
+				try:
+					while True:
+						sh = queue.get_nowait()
 
-		render_thread.start()
+						for i, rgb in enumerate(sh):
+							ibl_sh_u[i] = osg.Vec3(*rgb)
+
+				except asyncio.QueueEmpty:
+					pass
+
+				await asyncio.sleep(0)
+
+		tasks = [loop.create_task(render_loop())]
+
+		if args.hdr:
+			tasks.append(loop.create_task(task_compute_sh(queue, args.hdr)))
 
 		# See the "apitrace + IPython.embed() SIGINT crash" note in
 		# ai/context-todo-lighting-class.md -- harmless to set unconditionally.
@@ -2238,12 +2285,26 @@ if __name__ == "__main__":
 
 		signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-		import IPython
+		ipy_config = load_default_config()
+		ipy_config.InteractiveShellEmbed = ipy_config.TerminalInteractiveShell
+		ipy_config.TerminalInteractiveShell.loop_runner = "asyncio"
+		ipy_config.TerminalInteractiveShell.autoawait = True
 
-		IPython.embed()
+		ipy_shell = InteractiveShellEmbed.instance(config=ipy_config)
 
-		stop_event.set()
-		render_thread.join()
+		ipy_shell.enable_gui("asyncio")
+		ipy_shell()
+
+		InteractiveShellEmbed.clear_instance()
+
+		for task in tasks:
+			task.cancel()
+
+		try:
+			loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
+
+		except asyncio.CancelledError:
+			pass
 
 	else:
 		# --- Async viewer loop (verbatim from 09-ibl.py) ------------------------ #
