@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-instanced-ssbo.py
+#vimrun! ../examples/pyosg-instanced-ssbo.py --samples 4 --clear-color 0.1,0.2,0.3
 
+import sys
 import os
 import time
 
@@ -98,7 +99,7 @@ if __name__ == "__main__":
 	g.stateSet.setAttributeAndModes(p)
 	g.stateSet.setAttributeAndModes(ssbb)
 
-	v = osgViewer.Viewer()
+	v = osgViewer.Viewer(osg.ArgumentParser("pyosg-instanced-ssbo.py", sys.argv))
 
 	v.sceneData = g
 	v.cameraManipulator = osgGA.TrackballManipulator()
