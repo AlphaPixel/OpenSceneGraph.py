@@ -23,7 +23,7 @@
 #
 # Texture units (independent namespace per camera):
 # gbuffer_cam (model's own textures):  0 baseColor 1 normal 2 orm 3 emissive
-# ssao_cam:                            0 gDepth 1 gNormal 2 ssaoNoise
+# ssao_cam:                            0 gDepth 1 gNormal 2 ssaoNoise 3 gPosition
 # ssao_blur_cam:                       0 aoRawTex
 # composite_cam:                       0 gAlbedo 1 gNormal 2 gMaterial 3 gEmissive 4 gDepth
 #                                      5 shadowMap 6 envMap 7 brdfLUT 8 aoTex
@@ -437,12 +437,24 @@ SSAO_FRAGMENT_SHADER = """
 
 #define NUM_SAMPLES 16
 
-uniform sampler2D gDepth;    // unit 0
+uniform sampler2D gDepth;    // unit 0 (used only for its size, below -- see gPosition)
 uniform sampler2D gNormal;   // unit 1
 uniform sampler2D ssaoNoise; // unit 2
+uniform sampler2D gPosition; // unit 3: real view-space position (same buffer the composite
+                             // pass uses) -- avoids reconstructing position from gDepth via
+                             // invProjectionMatrix, which depends on v.camera's own near/far.
+                             // v.camera never directly culls the model (it's nested two Camera
+                             // levels down inside gbuffer_cam), so its OSG-auto-tightened near/
+                             // far doesn't reliably track gbuffer_cam's own (separately
+                             // tightened) near/far -- the same near/far-mismatch class BUG.md's
+                             // gPosition fix solved for the composite pass's shading.
 
-uniform mat4 invProjectionMatrix;
-uniform mat4 projectionMatrix; // forward -- projects hemisphere samples back to screen space
+uniform mat4 projectionMatrix; // forward -- projects hemisphere samples back to screen space.
+                                // Near/far-agnostic: for a symmetric frustum, the x/y terms used
+                                // below (offset.xy) reduce to 1/tan(fovy/2 or fovx/2), with the
+                                // near-plane distance canceling out algebraically -- only fovy/
+                                // aspect matter, so this stays correct even though it's still
+                                // sourced from v.camera's projectionMatrix, not gbuffer_cam's.
 
 uniform vec3 samples[NUM_SAMPLES];
 uniform float ssaoRadius;
@@ -451,13 +463,6 @@ uniform float ssaoBias;
 in vec2 vUV;
 
 out vec4 fragColor;
-
-vec3 reconstructViewPos(vec2 uv, float d) {
-	vec4 clip = vec4(vec3(uv, d) * 2.0 - 1.0, 1.0);
-	vec4 viewPos = invProjectionMatrix * clip;
-
-	return viewPos.xyz / viewPos.w;
-}
 
 void main() {
 	vec3 rawN = texture(gNormal, vUV).rgb;
@@ -472,7 +477,7 @@ void main() {
 	}
 
 	vec3 N = normalize(rawN);
-	vec3 fragPos = reconstructViewPos(vUV, texture(gDepth, vUV).r);
+	vec3 fragPos = texture(gPosition, vUV).xyz;
 
 	vec2 noiseScale = vec2(textureSize(gDepth, 0)) / float(textureSize(ssaoNoise, 0).x);
 	vec3 rvec = texture(ssaoNoise, vUV * noiseScale).xyz;
@@ -489,7 +494,7 @@ void main() {
 		offset.xyz /= offset.w;
 		offset.xyz = offset.xyz * 0.5 + 0.5;
 
-		float sampleDepth = reconstructViewPos(offset.xy, texture(gDepth, offset.xy).r).z;
+		float sampleDepth = texture(gPosition, offset.xy).z;
 		float rangeCheck = smoothstep(0.0, 1.0, ssaoRadius / max(abs(fragPos.z - sampleDepth), 0.0001));
 
 		occlusion += (sampleDepth >= samplePos.z + ssaoBias ? 1.0 : 0.0) * rangeCheck;
@@ -595,7 +600,6 @@ uniform sampler2D brdfLUT;   // unit 7: split-sum BRDF LUT
 uniform sampler2D aoTex;     // unit 8: blurred SSAO
 uniform sampler2D gPosition; // unit 9: view-space position written by the geometry pass
 
-uniform mat4 invProjectionMatrix;
 uniform float znear;
 uniform float zfar;
 uniform int visualizeMode; // 0=composite 1=albedo 2=normal 3=depth 4=material
@@ -626,21 +630,6 @@ uniform float iblSpecularIntensity;
 in vec2 vUV;
 
 out vec4 fragColor;
-
-// ---- Depth / position reconstruction --------------------------------------- //
-
-float linearizeDepth(float d, float near, float far) {
-	float z = d * 2.0 - 1.0;
-
-	return (2.0 * near * far) / (far + near - z * (far - near));
-}
-
-vec3 reconstructViewPos(vec2 uv, float d) {
-	vec4 clip = vec4(vec3(uv, d) * 2.0 - 1.0, 1.0);
-	vec4 viewPos = invProjectionMatrix * clip;
-
-	return viewPos.xyz / viewPos.w;
-}
 
 // ---- PBR helpers ---------------------------------------------------------- //
 
@@ -784,11 +773,11 @@ void main() {
 	float d = texture(gDepth, vUV).r;
 
 	// --- Raw G-buffer dump modes (bypass lighting entirely, including background --
-	// e.g. mode 3's depth view legitimately shows far-plane white where nothing was
-	// ever drawn). Albedo is stored linear (same convention as mat.albedo everywhere
-	// else in this shader), so it needs the same gamma re-encode as the final
-	// composite to look right on screen; normal/depth/material/AO are raw data views,
-	// not display colors, so they're left un-gamma-corrected.
+	// e.g. mode 2's normal view reads flat mid-gray where nothing was ever drawn).
+	// Albedo is stored linear (same convention as mat.albedo everywhere else in this
+	// shader), so it needs the same gamma re-encode as the final composite to look
+	// right on screen; normal/depth/material/AO are raw data views, not display
+	// colors, so they're left un-gamma-corrected.
 	if (visualizeMode == 1) {
 		fragColor = vec4(pow(albedo.rgb, vec3(1.0 / 2.2)), 1.0);
 
@@ -802,7 +791,20 @@ void main() {
 	}
 
 	if (visualizeMode == 3) {
-		float lin = linearizeDepth(d, znear, zfar);
+		// Was: linearizeDepth(d, znear, zfar) straight off gDepth. gDepth was
+		// written by gbuffer_cam's OWN near/far-tightened projection -- its cull
+		// traversal only sees "model" (+floor), a different/smaller subgraph than
+		// v.camera's -- so its actual near/far need not match znear/zfar (from
+		// v.camera.projectionMatrix, used below only as a display range). Same
+		// mismatch class as the reconstructViewPos() bug BUG.md's gPosition fix
+		// solved for shading; it silently compressed every model fragment toward
+		// t=0 (black) while cleared background pixels (d=1 exactly) still landed
+		// at t=1 regardless of the mismatch, since linearizeDepth(1, near, far)
+		// == far for ANY near/far -- hence "black model on white background."
+		// gPosition.z depends only on the VIEW matrix (shared by both cameras),
+		// never the projection, so it stays correct regardless of that mismatch.
+		vec3 posEye = texture(gPosition, vUV).xyz;
+		float lin = -posEye.z;
 		float t = clamp((lin - znear) / (zfar - znear), 0.0, 1.0);
 
 		fragColor = vec4(vec3(t), 1.0);
@@ -1243,7 +1245,7 @@ def make_fullscreen_rtt_pass(textures, output_tex, frag_shader, w, h, name="Post
 # the caller against the model's bounding radius (same reasoning 09-ibl.py applies to
 # its point-light radii -- a fixed-world-unit radius doesn't generalize between
 # BoomBox-scale and Lantern-scale models).
-def create_ssao_camera(depth_tex, normal_tex, noise_tex, samples_u, radius, bias=0.02, w=W, h=H):
+def create_ssao_camera(depth_tex, normal_tex, noise_tex, position_tex, samples_u, radius, bias=0.02, w=W, h=H):
 	ao_raw_tex = osg.Texture2D()
 	ao_raw_tex.size = (w, h)
 	ao_raw_tex.internalFormat = GL_R8
@@ -1257,6 +1259,7 @@ def create_ssao_camera(depth_tex, normal_tex, noise_tex, samples_u, radius, bias
 			0: (depth_tex, "gDepth"),
 			1: (normal_tex, "gNormal"),
 			2: (noise_tex, "ssaoNoise"),
+			3: (position_tex, "gPosition"),
 		},
 		output_tex=ao_raw_tex,
 		frag_shader=SSAO_FRAGMENT_SHADER,
@@ -1891,7 +1894,6 @@ if __name__ == "__main__":
 	main_view_u = osg.Uniform("mainViewMatrix", osg.Matrixf.identity())
 	znear_u = osg.Uniform("znear", 0.0)
 	zfar_u = osg.Uniform("zfar", 0.0)
-	inv_proj_u = osg.Uniform("invProjectionMatrix", osg.Matrixf.identity())
 	proj_forward_u = osg.Uniform("projectionMatrix", osg.Matrixf.identity())
 	visualize_mode_u = osg.Uniform("visualizeMode", 0)
 	post_enabled_u = osg.Uniform("postEnabled", True)
@@ -1994,7 +1996,7 @@ if __name__ == "__main__":
 	ssao_radius = max(0.05, bound_radius * 0.15)
 
 	ssao_cam, ao_raw_tex = create_ssao_camera(
-		depth_tex, normal_tex, ssao_noise_tex, ssao_kernel_u, ssao_radius, w=W, h=H
+		depth_tex, normal_tex, ssao_noise_tex, position_tex, ssao_kernel_u, ssao_radius, w=W, h=H
 	)
 	ssao_blur_cam, ao_tex = create_ssao_blur_camera(ao_raw_tex, W, H)
 
@@ -2066,7 +2068,6 @@ if __name__ == "__main__":
 	root.stateSet.uniforms.extend((
 		znear_u,
 		zfar_u,
-		inv_proj_u,
 		proj_forward_u,
 		main_view_u,
 		shadow_matrix_u,
@@ -2104,11 +2105,26 @@ if __name__ == "__main__":
 	def update_uniforms(ri):
 		cam_view = v.camera.viewMatrix
 		pm = v.camera.projectionMatrix
-		fovy, aspect, near, far = pm.getPerspective()
 
-		znear_u.value = float(near)
-		zfar_u.value = float(far)
-		inv_proj_u.value = osg.Matrixf(osg.Matrix.inverse(pm))
+		# znear/zfar are a pure DISPLAY range for mode 3's depth visualization now
+		# (see COMPOSITE_FRAGMENT_SHADER's mode-3 comment) -- not used to reconstruct
+		# or un-project anything, so they don't need to match any camera's actual
+		# clip planes. bound_radius-derived constants instead of pm.getPerspective():
+		# v.camera never directly culls the model (it sits two Camera levels down,
+		# inside gbuffer_cam), so OSG's own near/far auto-tightening on v.camera
+		# itself doesn't track the model's actual scale the way gbuffer_cam's own
+		# (separately computed) near/far does -- verified against OSG 3.6.5's
+		# CullVisitor::apply(Camera&)/popProjectionMatrix() (osgUtil/CullVisitor.cpp):
+		# each Camera clamps a private, per-camera projection copy on its OWN cull,
+		# never writing the result back onto the Camera object itself, so
+		# v.camera.projectionMatrix read from Python is always whatever fixed matrix
+		# was set at startup -- unrelated to bound_radius. This was previously
+		# invisible because mode 3 also read gDepth (written by gbuffer_cam) through
+		# that same wrong znear/zfar; switching mode 3 to gPosition (view-matrix-only,
+		# so immune to the mismatch) exposed that znear/zfar itself was never
+		# meaningful, rather than just mismatched between two cameras.
+		znear_u.value = max(bound_radius * 0.01, 1e-4)
+		zfar_u.value = bound_radius * 20.0
 		proj_forward_u.value = osg.Matrixf(pm)
 		main_view_u.value = osg.Matrixf(cam_view)
 
@@ -2159,7 +2175,28 @@ if __name__ == "__main__":
 		# composite overwrite -- ImGui would render then be immediately erased,
 		# while its mouse-capture bookkeeping stayed live (an invisible rectangle
 		# eating mouse input). See osgDebug.hpp's Widget constructor comment.
-		gui = osgDebug.imgui.Widget(v, final_cam)
+		# Pinned to the left edge -- see osgDebug.hpp's Dock enum comment: the
+		# system imgui package isn't built from the docking branch, so this is a
+		# fixed sidebar (no drag-to-dock like osgEarth's ImGuiEventHandler), just
+		# enough to keep the panel out of the way of the model.
+		gui_opts = osgDebug.imgui.Options()
+		gui_opts.dock = osgDebug.imgui.Dock.LEFT
+		gui_opts.dock_width = 320.0
+
+		gui = osgDebug.imgui.Widget(v, final_cam, gui_opts)
+
+		def draw_visualize_mode(ri):
+			mode_labels = [
+				"0: Composite", "1: Albedo", "2: Normal", "3: Depth", "4: Material",
+				"5: Direct", "6: IBL", "7: Emissive", "8: Shadow", "9: AO"
+			]
+
+			changed, value = osgDebug.imgui.radio_group(
+				int(visualize_mode_u.value), mode_labels, False
+			)
+			if changed: visualize_mode_u.value = value
+
+		gui.addSection("Visualize Mode", draw_visualize_mode)
 
 		def draw_lighting_knobs(ri):
 			changed, value = osgDebug.imgui.slider_float(
