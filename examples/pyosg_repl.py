@@ -40,6 +40,8 @@ import traceback
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
+_kernel_repl_driver = None
+
 class DebugHandler(osgGA.GUIEventHandler):
 	debug = False
 
@@ -83,8 +85,12 @@ class WriteFramebufferCallback(osg.Camera.DrawCallback):
 
 		self.camera = camera
 		self.filename = filename
+		self.done = False
 
 	def __call__(self, ri):
+		if self.done:
+			return
+
 		vp = self.camera.viewport
 
 		if vp is None or not vp.valid:
@@ -102,9 +108,9 @@ class WriteFramebufferCallback(osg.Camera.DrawCallback):
 		if not osgDB.writeImageFile(image, self.filename):
 			raise RuntimeError(f"failed to write framebuffer capture {self.filename!r}")
 
-		print(f"Wrote final framebuffer: {self.filename}", flush=True)
+		self.done = True
 
-		self.camera.finalDrawCallback = None
+		print(f"Wrote final framebuffer: {self.filename}", flush=True)
 
 class WriteTextureCallback(osg.Camera.DrawCallback):
 	"""One-shot GPU texture readback for an RTT/MRT attachment."""
@@ -116,8 +122,12 @@ class WriteTextureCallback(osg.Camera.DrawCallback):
 		self.texture = texture
 		self.filename = filename
 		self.data_type = data_type
+		self.done = False
 
 	def __call__(self, ri):
+		if self.done:
+			return
+
 		# apply() binds/realizes this texture in the callback's current context;
 		# readImageFromCurrentTexture() then copies its actual GPU contents.
 		self.texture.apply(ri.state)
@@ -131,9 +141,9 @@ class WriteTextureCallback(osg.Camera.DrawCallback):
 		if not osgDB.writeImageFile(image, self.filename):
 			raise RuntimeError(f"failed to write texture capture {self.filename!r}")
 
-		print(f"Wrote texture: {self.filename}", flush=True)
+		self.done = True
 
-		self.camera.finalDrawCallback = None
+		print(f"Wrote texture: {self.filename}", flush=True)
 
 def capture_framebuffer(viewer, filename="frame.png"):
 	"""Capture the completed window framebuffer on the next rendered frame."""
@@ -153,31 +163,110 @@ def capture_texture(viewer, texture, filename="texture.png", data_type=GL_UNSIGN
 
 	return callback
 
-def repl(viewer, namespace=None, frame_callback=None):
-	"""Run *viewer* continuously while an embedded IPython prompt is idle.
+def _new_repl_state(backend):
+	return {
+		"backend": backend,
+		"frames": 0,
+		"errors": 0,
+		"last_exception": None,
+	}
 
-	`namespace` is passed explicitly to IPython so live cameras, textures, uniforms,
-	and other example locals are reliably available without caller-frame guessing.
-	`frame_callback`, when supplied, runs after each viewer.frame() for applications
-	that also need to drain queues or perform other per-frame Python work.
-	"""
+def _frame_once(viewer, frame_callback, repl_state, catch_keyboard_interrupt=False):
+	try:
+		viewer.frame()
+
+		repl_state["frames"] += 1
+
+		if frame_callback is not None:
+			frame_callback()
+
+		return True
+
+	except BaseException as exc:
+		# asyncio cancellation and process-exit requests must retain their normal
+		# semantics. KeyboardInterrupt is recoverable only in the terminal backend,
+		# where Ctrl-C must not destroy the viewer process.
+		if not isinstance(exc, Exception) and not (
+			catch_keyboard_interrupt and isinstance(exc, KeyboardInterrupt)
+		):
+			raise
+
+		repl_state["errors"] += 1
+		failure = (type(exc), str(exc))
+
+		if failure != repl_state["last_exception"]:
+			repl_state["last_exception"] = failure
+
+			traceback.print_exc()
+
+		return False
+
+def _kernel_repl(viewer, namespace, frame_callback):
+	"""Install an ipykernel GUI loop and return control to the kernel."""
+
+	import time
+
+	import ipykernel.eventloops as eventloops
+	from IPython import get_ipython
+
+	global _kernel_repl_driver
+
+	repl_state = _new_repl_state("kernel")
+	namespace["_osg_repl_state"] = repl_state
+
+	_kernel_repl_driver = {
+		"viewer": viewer,
+		"frame_callback": frame_callback,
+		"state": repl_state,
+	}
+
+	@eventloops.register_integration("osg")
+	def osg_kernel_loop(kernel):
+		while True:
+			driver = _kernel_repl_driver
+
+			if driver is not None and not driver["viewer"].done:
+				succeeded = _frame_once(
+					driver["viewer"],
+					driver["frame_callback"],
+					driver["state"],
+				)
+
+				if not succeeded:
+					time.sleep(0.05)
+
+			if kernel.shell_stream.flush(limit=1):
+				return
+
+			time.sleep(min(kernel._poll_interval, 1.0 / 60.0))
+
+	shell = get_ipython()
+
+	# An explicit namespace remains authoritative in kernel mode too. This makes
+	# repl(viewer, locals()) useful from functions and from C++ wrapper frames,
+	# instead of relying on `%run -i` or caller-frame introspection.
+	shell.user_ns.update(namespace)
+	shell.enable_gui("osg")
+
+	print(
+		"OSG kernel REPL ready; the viewer continues rendering between requests.",
+		flush=True,
+	)
+
+	return repl_state
+
+def _terminal_repl(viewer, namespace, frame_callback):
+	"""Run *viewer* continuously while an embedded terminal prompt is idle."""
 
 	from IPython.core.async_helpers import get_asyncio_loop
 	from IPython.terminal.embed import InteractiveShellEmbed
 	from IPython.terminal.ipapp import load_default_config
 
-	if namespace is None:
-		namespace = {}
-
 	# InteractiveShellEmbed imports namespace entries into its user namespace; an
 	# immutable integer would therefore remain the initially imported value when
 	# this function later replaced namespace["..."] with a new integer. Keep one
 	# shared mutable object so diagnostics observed at the prompt stay live.
-	repl_state = {
-		"frames": 0,
-		"errors": 0,
-		"last_exception": None,
-	}
+	repl_state = _new_repl_state("terminal")
 
 	namespace["_osg_repl_state"] = repl_state
 
@@ -187,29 +276,18 @@ def repl(viewer, namespace=None, frame_callback=None):
 
 	async def render_loop():
 		while not viewer.done:
-			try:
-				viewer.frame()
+			succeeded = _frame_once(
+				viewer, frame_callback, repl_state,
+				catch_keyboard_interrupt=True,
+			)
 
-				repl_state["frames"] += 1
-
-				if frame_callback is not None:
-					frame_callback()
-
-			except Exception as exc:
+			if not succeeded:
 				# A Python draw/update/event callback can propagate through
 				# viewer.frame(). Without this boundary, asyncio permanently marks
 				# render_loop failed: IPython remains alive but the window freezes.
 				# Keep the task recoverable so the offending callback can be fixed
 				# live. Report a repeating failure only once to avoid flooding the
 				# terminal at render-loop speed.
-				repl_state["errors"] += 1
-				failure = (type(exc), str(exc))
-
-				if failure != repl_state["last_exception"]:
-					repl_state["last_exception"] = failure
-
-					traceback.print_exc()
-
 				await asyncio.sleep(0.05)
 
 				continue
@@ -220,9 +298,13 @@ def repl(viewer, namespace=None, frame_callback=None):
 
 	render_task = loop.create_task(render_loop())
 
-	# Avoid IPython/apitrace's SIGINT interaction seen while developing the
-	# lighting example. This is harmless for the ordinary embedded shell too.
-	signal.signal(signal.SIGINT, signal.SIG_DFL)
+	# Keep Ctrl-C recoverable. SIG_DFL terminates the entire process, which makes
+	# it impossible to interrupt a stuck live query without also losing the
+	# viewer. Preserve the embedding application's handler and restore it when the
+	# REPL exits rather than permanently changing process-wide signal behavior.
+	previous_sigint_handler = signal.getsignal(signal.SIGINT)
+
+	signal.signal(signal.SIGINT, signal.default_int_handler)
 
 	config = load_default_config()
 
@@ -249,6 +331,35 @@ def repl(viewer, namespace=None, frame_callback=None):
 
 		except asyncio.CancelledError:
 			pass
+
+		signal.signal(signal.SIGINT, previous_sigint_handler)
+
+	return repl_state
+
+def repl(viewer, namespace=None, frame_callback=None):
+	"""Run *viewer* continuously alongside terminal IPython or ipykernel.
+
+	`namespace` is made explicitly available so live cameras, textures, uniforms,
+	and other example locals remain reliable without caller-frame guessing.
+	`frame_callback`, when supplied, runs after each viewer.frame() for applications
+	that also need to drain queues or perform other per-frame Python work.
+
+	Terminal IPython embeds a configured asyncio-aware prompt and blocks until that
+	prompt exits. Under ipykernel, this registers an OSG event-loop integration and
+	returns immediately so Jupyter/MCP requests retain structured results.
+	"""
+
+	from IPython import get_ipython
+
+	if namespace is None:
+		namespace = {}
+
+	shell = get_ipython()
+
+	if shell is not None and getattr(shell, "kernel", None) is not None:
+		return _kernel_repl(viewer, namespace, frame_callback)
+
+	return _terminal_repl(viewer, namespace, frame_callback)
 
 # --------------------------------------------------------------------------- #
 # Viewer setup (deliberately small; the REPL integration is the actual example)
