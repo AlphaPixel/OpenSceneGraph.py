@@ -50,6 +50,16 @@ void bind_Node(py::module_& m) {
 			&osg::Node::getCullingActive,
 			&osg::Node::setCullingActive
 		)
+		.def_property(
+			"initialBound",
+			py::cpp_function(
+				&osg::Node::getInitialBound,
+				py::return_value_policy::reference_internal
+			),
+			&osg::Node::setInitialBound
+		)
+		.def("dirtyBound", &osg::Node::dirtyBound)
+		.def("computeBound", &osg::Node::computeBound)
 		.def_property_readonly(
 			"bound",
 			&osg::Node::getBound,

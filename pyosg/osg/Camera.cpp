@@ -53,6 +53,23 @@ void bind_Camera(py::module_& m) {
 		.export_values()
 	;
 
+	py::enum_<osg::CullSettings::ComputeNearFarMode>(camera, "ComputeNearFarMode")
+		.value("DO_NOT_COMPUTE_NEAR_FAR", osg::CullSettings::DO_NOT_COMPUTE_NEAR_FAR)
+		.value(
+			"COMPUTE_NEAR_FAR_USING_BOUNDING_VOLUMES",
+			osg::CullSettings::COMPUTE_NEAR_FAR_USING_BOUNDING_VOLUMES
+		)
+		.value(
+			"COMPUTE_NEAR_FAR_USING_PRIMITIVES",
+			osg::CullSettings::COMPUTE_NEAR_FAR_USING_PRIMITIVES
+		)
+		.value(
+			"COMPUTE_NEAR_USING_PRIMITIVES",
+			osg::CullSettings::COMPUTE_NEAR_USING_PRIMITIVES
+		)
+		.export_values()
+	;
+
 	py::class_<
 		osg::Camera::DrawCallback,
 		detail::Camera::DrawCallback,
@@ -63,6 +80,16 @@ void bind_Camera(py::module_& m) {
 	;
 
 	camera
+		.def_property(
+			"computeNearFarMode",
+			&osg::Camera::getComputeNearFarMode,
+			&osg::Camera::setComputeNearFarMode
+		)
+		.def_property(
+			"nearFarRatio",
+			&osg::Camera::getNearFarRatio,
+			&osg::Camera::setNearFarRatio
+		)
 		.def_property(
 			"renderOrder",
 			&osg::Camera::getRenderOrder,

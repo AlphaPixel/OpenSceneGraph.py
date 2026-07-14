@@ -18,7 +18,7 @@ void bind_Bound(py::module_& m) {
 #ifdef OSG_USE_FLOAT_BOUNDINGSPHERE
 	m.add_object("BoundingSphere", bsf);
 #else
-	m.add_object("BoundingSphere", bsf);
+	m.add_object("BoundingSphere", bsd);
 #endif
 }
 

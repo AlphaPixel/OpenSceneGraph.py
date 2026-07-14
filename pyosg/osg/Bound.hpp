@@ -25,7 +25,6 @@ namespace detail {
 				value_type, value_type, value_type
 			>())
 			.def(py::init<const vec_type&, const vec_type&>())
-			.def(py::init<const T&>())
 			.def(py::self == py::self)
 			.def(py::self != py::self)
 			.def("valid", &T::valid)
