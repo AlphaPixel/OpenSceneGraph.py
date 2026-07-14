@@ -43,11 +43,57 @@ import cv2
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
+import osgGLTF
+
 # --------------------------------------------------------------------------- #
 # Configuration
 # --------------------------------------------------------------------------- #
 
 SHADOW_SIZE = 1024
+
+class AnimationHandler(osgGA.GUIEventHandler):
+	def __init__(self, player):
+		super().__init__()
+		self.player = player
+
+	def select(self, index):
+		if self.player.playAnimation(index):
+			print(
+				f"[animation] {index + 1}: {self.player.currentAnimationName}",
+				flush=True
+			)
+
+	def handle(self, ea, aa):
+		if ea.handled or ea.type != osgGA.GUIEventAdapter.KEYUP:
+			return False
+
+		if ord("1") <= ea.key <= ord("9"):
+			index = ea.key - ord("1")
+
+			if index < self.player.numAnimations:
+				self.select(index)
+				return True
+
+		if ea.key in (ord("["), ord("]")):
+			delta = -1 if ea.key == ord("[") else 1
+			index = (self.player.currentAnimationIndex + delta) % self.player.numAnimations
+			self.select(index)
+			return True
+
+		if ea.key == ord(" "):
+			self.player.togglePlaying()
+			print(
+				f"[animation] {'playing' if self.player.playing else 'paused'}",
+				flush=True
+			)
+			return True
+
+		if ea.key in (ord("r"), ord("R")):
+			self.player.restart()
+			print(f"[animation] restarted {self.player.currentAnimationName}", flush=True)
+			return True
+
+		return False
 
 # Light rig, expressed as directions from the model's bounding-sphere center plus a distance/radius
 # tuned for a ~1.7-unit-radius object (Cube/AnimatedCube's actual scale - the objects this rig was
@@ -835,6 +881,20 @@ if __name__ == "__main__":
 	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
 	model = osgDB.readNodeFile(args.path)
+	animation_player = osgGLTF.SimplePlayer(model)
+
+	if animation_player:
+		print("[animation] available clips:", flush=True)
+
+		for i in range(animation_player.numAnimations):
+			print(f"  {i + 1}: {animation_player.getAnimationName(i)}", flush=True)
+
+		print(
+			"[animation] keys: 1-9 select, [/] previous/next, Space pause, R restart",
+			flush=True
+		)
+	else:
+		print("[animation] no osgGLTF SimplePlayer found", flush=True)
 
 	# REFERENCE_RADIUS is the scale the hardcoded rig directions/distances were tuned against -
 	# never shrink below that (so already-good renders like BoomBox/Avocado/Cube are untouched),
@@ -1039,6 +1099,9 @@ if __name__ == "__main__":
 	v = osgViewer.Viewer()
 	v.sceneData = root
 	v.cameraManipulator = osgGA.TrackballManipulator()
+
+	if animation_player:
+		v.addEventHandler(AnimationHandler(animation_player))
 
 	def update_shadow(ri):
 		cam_view = v.camera.viewMatrix
