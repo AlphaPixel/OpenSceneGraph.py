@@ -11,11 +11,23 @@ PYOSG_DISABLE_WARNINGS
 
 PYOSG_ENABLE_WARNINGS
 
+#include "pybind11x.hpp"
+
+namespace pyx = pybind11x;
+
 namespace pyosgGA {
 
 void bind(py::module_& m);
 
 namespace detail {
+	constexpr size_t NodeSlot = 0;
+
+	using CameraManipulatorSlots = pyx::PropertySlots<osgGA::CameraManipulator, 1>;
+	using CameraManipulatorStorage = pyx::ProxyStorageOSG<
+		osgGA::CameraManipulator,
+		CameraManipulatorSlots
+	>;
+
 	class GUIEventHandler: public osgGA::GUIEventHandler {
 	public:
 		using osgGA::GUIEventHandler::GUIEventHandler;
@@ -122,8 +134,23 @@ namespace detail {
 
 		~CameraManipulator() override {}
 
+		osg::Node* getNode() override {
+			PYBIND11_OVERRIDE(osg::Node*, osgGA::CameraManipulator, getNode);
+		}
+
+		void setNode(osg::Node* node) override {
+			PYBIND11_OVERRIDE(void, osgGA::CameraManipulator, setNode, node);
+		}
+
 		void home(const osgGA::GUIEventAdapter& ea, osgGA::GUIActionAdapter& aa) override {
-			PYBIND11_OVERRIDE(void, osgGA::CameraManipulator, home, ea, aa);
+			// PYBIND11_OVERRIDE tries to copy `ea` when marshaling it to a Python override, and
+			// GUIEventAdapter (derived from osg::Referenced) isn't copyable -- crashes the instant
+			// a Python subclass defines home() and View.setCameraManipulator() calls this (it's the
+			// only overload that call site uses). call_override passes by reference instead; see
+			// detail::GUIEventHandler::handle above, which takes this exact same (ea, aa) pair.
+			if(pyosg::detail::call_override<void>("home", this, &ea, &aa)) return;
+
+			osgGA::CameraManipulator::home(ea, aa);
 		}
 
 		void home(double t) override {
@@ -163,7 +190,7 @@ namespace detail {
 		}
 
 		osg::Matrixd getMatrix() const override {
-			std::cerr << "detail::CameraManipulator::getMatrix" << std::endl;
+			// std::cerr << "detail::CameraManipulator::getMatrix" << std::endl;
 
 			PYBIND11_OVERRIDE_PURE(
 				osg::Matrixd,
@@ -173,7 +200,7 @@ namespace detail {
 		}
 
 		osg::Matrixd getInverseMatrix() const override {
-			std::cerr << "detail::CameraManipulator::getInverseMatrix" << std::endl;
+			// std::cerr << "detail::CameraManipulator::getInverseMatrix" << std::endl;
 
 			PYBIND11_OVERRIDE_PURE(
 				osg::Matrixd,
@@ -183,7 +210,7 @@ namespace detail {
 		}
 
 		void setByMatrix(const osg::Matrixd& mat) override {
-			std::cerr << "detail::CameraManipulator::setByMatrix" << std::endl;
+			// std::cerr << "detail::CameraManipulator::setByMatrix" << std::endl;
 
 			PYBIND11_OVERRIDE_PURE(
 				void,
@@ -194,7 +221,7 @@ namespace detail {
 		}
 
 		void setByInverseMatrix(const osg::Matrixd& mat) override {
-			std::cerr << "detail::CameraManipulator::setByInverseMatrix" << std::endl;
+			// std::cerr << "detail::CameraManipulator::setByInverseMatrix" << std::endl;
 
 			PYBIND11_OVERRIDE_PURE(
 				void,
