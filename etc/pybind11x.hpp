@@ -9,6 +9,8 @@
 // MappingProxy -> "Turn arbitrary C++ containers into Python dicts."
 // Traits -> "Define behavior once, reuse everywhere."
 // build_info -> Injects "common" Python compiler information, merged with a user-defined dict
+// StopEvent -> "Cooperative cancellation flag shared between a Python task and a C++ background thread."
+// put_nowait -> "Thread-safe: push a message onto an asyncio.Queue from any thread via call_soon_threadsafe."
 
 #include "pybind11/pybind11.h"
 #include "pybind11/stl.h"
@@ -17,6 +19,7 @@
 #include "pybind11/embed.h"
 
 #include <algorithm>
+#include <atomic>
 
 namespace py = pybind11;
 
@@ -263,17 +266,17 @@ struct ProxyStorageShared: public ProxyStorage<T, Proxies...> {
 		const void* key = obj.get();
 
 		static size_t counter = 0;
-		if (++counter % 64 == 0) {
-			for (auto it = reg.begin(); it != reg.end(); ) {
-				if (it->second.weak.expired()) it = reg.erase(it);
+		i (++counter % 64 == 0) {
+			for(auto it = reg.begin(); it != reg.end(); ) {
+				if(it->second.weak.expired()) it = reg.erase(it);
 				else ++it;
 			}
 		}
 
 		auto it = reg.find(key);
 
-		if (it != reg.end()) {
-			if (it->second.weak.lock()) return it->second.storage.get();
+		if(it != reg.end()) {
+			if(it->second.weak.lock()) return it->second.storage.get();
 			reg.erase(it);
 		}
 
@@ -484,10 +487,15 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 
 		else {
 			auto i = n_index(size(), index);
+			auto old_size = size();
 
 			traits_type::del(obj, i);
 
-			for (auto j = i; j < size(); j++) base_type::erase(j);
+			// old_size, not the now-shrunk size() -- otherwise the slot at the OLD last
+			// index never gets erase()'d, silently leaking a cached py::object reference
+			// (and everything it keeps alive) until some LATER slot operation happens to
+			// reuse that same index and overwrite it.
+			for(auto j = i; j < old_size; j++) base_type::erase(j);
 		}
 	}
 
@@ -1043,6 +1051,34 @@ inline void build_info(py::module_ m, py::dict info) {
 	});
 
 	// return info;
+}
+
+// A cooperative cancellation flag: Python creates one, hands it to a C++ function running on a
+// background thread (see put_nowait below), and can call stop() from the event-loop thread at any
+// time. The C++ side must check stop.load() itself between units of work -- this cannot preemptively
+// interrupt anything already in flight (e.g. a single blocking third-party library call).
+//
+// The py::class_ binding for this type must be registered in exactly ONE module's PYBIND11_MODULE
+// block (currently OpenSceneGraph-python.cpp) -- pybind11 doesn't allow the same C++ type to be
+// registered as a Python class twice across different extension modules loaded into one interpreter.
+// Other modules (e.g. osgGLTF's) can still accept `StopEvent*`/`StopEvent&` as a parameter type in
+// their own bound functions; pybind11 resolves it via that single existing registration at runtime.
+struct StopEvent {
+	std::atomic<bool> stop{false};
+};
+
+// Thread-safe bridge: schedules `queue.put_nowait((args...))` onto `loop` from whatever thread calls
+// this (typically a C++ background thread with the GIL released). Re-acquires the GIL to touch the
+// Python objects at all; `loop`/`queue` are a plain asyncio.AbstractEventLoop/asyncio.Queue handed in
+// from Python -- call_soon_threadsafe is what makes this safe to call from a non-Python thread.
+template<typename... Args>
+inline void put_nowait(const py::object& loop, const py::object& queue, Args&&... args) {
+	py::gil_scoped_acquire gil;
+
+	loop.attr("call_soon_threadsafe")(
+		queue.attr("put_nowait"),
+		py::make_tuple(std::forward<Args>(args)...)
+	);
 }
 
 }

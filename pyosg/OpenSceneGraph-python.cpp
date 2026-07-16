@@ -20,51 +20,14 @@ PYOSG_CONSTRUCTOR(pyosg_preinit) {
 	// OSG_INFO << "PYOSG_CONSTRUCTOR: You can do your static init here..." << std::endl;
 }
 
-#include <atomic>
 #include <thread>
 #include <chrono>
 
 namespace pyx = pybind11x;
 
-struct StopEvent {
-	std::atomic<bool> stop{false};
-};
-
-/* struct LoopQueueScope {
-public:
-	LoopQueueScope(py::object loop, py::object queue): _loop(loop), _queue(queue) {}
-
-	template<typename... Args>
-	void put_nowait(Args&&... args) {
-		py::gil_scoped_acquire gil;
-
-		_loop.attr("call_soon_threadsafe")(
-			_queue.attr("put_nowait"),
-			py::make_tuple(std::forward<Args>(args)...)
-		);
-	}
-
-private:
-	py::object _loop;
-	py::object _queue;
-} */
-
-template<typename... Args>
-void put_nowait(const py::object& loop, const py::object& queue, Args&&... args) {
-	py::gil_scoped_acquire gil;
-
-	// static py::object call_soon = loop.attr("call_soon_threadsafe");
-	// static py::object put = queue.attr("put_nowait");
-
-	loop.attr("call_soon_threadsafe")(
-		queue.attr("put_nowait"),
-		py::make_tuple(std::forward<Args>(args)...)
-	);
-}
-
 std::string pyosg_async_task_example(
 	size_t seconds,
-	StopEvent* stop,
+	pyx::StopEvent* stop,
 	py::object loop,
 	py::object queue,
 	size_t job_id
@@ -77,7 +40,7 @@ std::string pyosg_async_task_example(
 		if(stop && stop->stop.load(std::memory_order_relaxed)) {
 			std::cerr << "C++: detected stop" << std::endl;
 
-			put_nowait(loop, queue, "complete", job_id, "stopped");
+			pyx::put_nowait(loop, queue, "complete", job_id, "stopped");
 
 			return "stopped";
 		}
@@ -86,10 +49,10 @@ std::string pyosg_async_task_example(
 
 		auto progress = static_cast<float>(i + 1) / static_cast<float>(steps);
 
-		put_nowait(loop, queue, "progress", job_id, progress);
+		pyx::put_nowait(loop, queue, "progress", job_id, progress);
 	}
 
-	put_nowait(loop, queue, "complete", job_id, "result-from-cpp");
+	pyx::put_nowait(loop, queue, "complete", job_id, "result-from-cpp");
 
 	return "result-from-cpp";
 }
@@ -172,9 +135,9 @@ PYBIND11_MODULE(OpenSceneGraph, m) {
 
 	atexit.attr("register")( py::cpp_function([]() { })); */
 
-	py::class_<StopEvent>(m, "StopEvent")
+	py::class_<pyx::StopEvent>(m, "StopEvent")
 		.def(py::init<>())
-		.def("stop", [](StopEvent& t) { t.stop.store(true); })
+		.def("stop", [](pyx::StopEvent& t) { t.stop.store(true); })
 	;
 
 	m.def("pyosg_async_task_example",
