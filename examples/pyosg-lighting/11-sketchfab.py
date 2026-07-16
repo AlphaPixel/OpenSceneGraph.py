@@ -368,13 +368,8 @@ void main() {
 }
 """
 
-# Trivial G-buffer writer for the floor -- flat constants instead of a real material
-# lookup (the floor has no glTF material to sample). Routed through the SAME G-buffer as
-# the model (rather than kept as a separate forward pass) so it picks up real PBR direct
-# lighting + IBL from the shared composite shader for free, instead of 09-ibl.py's
-# FLOOR_FRAGMENT hand-duplicated shadowFactor()/getAnimatedLight() and flat hardcoded
-# ambient (no IBL at all).
-FLOOR_GBUFFER_VERTEX = """
+# Shared G-buffer vertex stage for the room frame's simple unlit material.
+UNLIT_GBUFFER_VERTEX = """
 #version 460 core
 
 in vec4 osg_Vertex;
@@ -395,11 +390,89 @@ void main() {
 }
 """
 
-FLOOR_GBUFFER_FRAGMENT = """
+# The grid room is unlit for now, but it still writes a complete G-buffer record so
+# it shares the model's depth buffer. That makes this the correct foundation for the
+# later shadow-receiving material rather than a forward overlay drawn above the model.
+GRID_ROOM_VERTEX = """
+#version 460 core
+
+in vec4 osg_Vertex;
+in vec3 osg_Normal;
+in vec2 osg_MultiTexCoord0;
+
+uniform mat4 osg_ModelViewProjectionMatrix;
+uniform mat4 osg_ModelViewMatrix;
+uniform mat3 osg_NormalMatrix;
+uniform vec2 u_canvasSize;
+
+out vec2 vGridPos;
+out vec3 vNormal;
+out vec3 vPosition;
+
+void main() {
+	vGridPos = osg_MultiTexCoord0 * u_canvasSize;
+	vNormal = normalize(osg_NormalMatrix * osg_Normal);
+	vPosition = (osg_ModelViewMatrix * osg_Vertex).xyz;
+	gl_Position = osg_ModelViewProjectionMatrix * osg_Vertex;
+}
+"""
+
+GRID_ROOM_FRAGMENT = """
+#version 460 core
+
+in vec2 vGridPos;
+in vec3 vNormal;
+in vec3 vPosition;
+
+uniform float u_gridInterval;
+uniform float u_gridIntervalStrong;
+uniform float u_lineWidthPx;
+uniform vec4 u_colorBg;
+uniform vec4 u_colorLine;
+uniform vec4 u_colorLineStrong;
+uniform float roomRoughness;
+uniform float roomMetallic;
+
+layout(location = 0) out vec4 outAlbedo;
+layout(location = 1) out vec4 outNormal;
+layout(location = 2) out vec4 outMaterial;
+layout(location = 3) out vec4 outEmissive;
+layout(location = 4) out vec4 outPosition;
+
+float gridLine(vec2 pos, float interval, float widthPx) {
+	vec2 cells = pos / interval;
+	vec2 pixelDistance = abs(fract(cells - 0.5) - 0.5) / fwidth(cells);
+	float distanceToNearestLine = min(pixelDistance.x, pixelDistance.y);
+	return 1.0 - smoothstep(widthPx - 0.5, widthPx + 0.5, distanceToNearestLine);
+}
+
+void main() {
+	float line = gridLine(vGridPos, u_gridInterval, u_lineWidthPx);
+	float strong = u_gridIntervalStrong > 0.0
+		? gridLine(vGridPos, u_gridIntervalStrong, u_lineWidthPx * 1.5)
+		: 0.0;
+	float coverage = max(line, strong);
+
+	// Unlike the earlier unlit guide, every panel fragment now writes a matte
+	// material. That gives the deferred composite a real receiver surface for the
+	// existing shadow map; the grid is simply a brighter albedo detail on it.
+	vec3 gridColor = mix(u_colorLine.rgb, u_colorLineStrong.rgb, strong);
+	vec3 albedo = mix(u_colorBg.rgb, gridColor, coverage);
+	outAlbedo = vec4(albedo, 1.0);
+	outNormal = vec4(normalize(vNormal), 0.0);
+	outMaterial = vec4(roomRoughness, roomMetallic, 1.0, 1.0);
+	outEmissive = vec4(0.0);
+	outPosition = vec4(vPosition, 1.0);
+}
+"""
+
+FRAME_GBUFFER_FRAGMENT = """
 #version 460 core
 
 in vec3 vNormal;
 in vec3 vPosition;
+
+uniform vec3 frameColor;
 
 layout(location = 0) out vec4 outAlbedo;
 layout(location = 1) out vec4 outNormal;
@@ -408,10 +481,10 @@ layout(location = 3) out vec4 outEmissive;
 layout(location = 4) out vec4 outPosition;
 
 void main() {
-	outAlbedo = vec4(0.82, 0.76, 0.62, 1.0);
+	outAlbedo = vec4(0.0);
 	outNormal = vec4(normalize(vNormal), 0.0);
-	outMaterial = vec4(1.0, 0.0, 1.0, 1.0); // roughness=1 (matte), metallic=0, ao=1
-	outEmissive = vec4(0.0);
+	outMaterial = vec4(1.0, 0.0, 1.0, 1.0);
+	outEmissive = vec4(frameColor, 1.0);
 	outPosition = vec4(vPosition, 1.0);
 }
 """
@@ -1492,6 +1565,118 @@ def create_final_camera(hdr_color_tex, bloom_tex, w=W, h=H):
 
 	return cam
 
+def create_grid_room(bound_center, bound_radius, floor_z, room_size):
+	"""Create the optional Z-up model guide room.
+
+	`room_size` is the full floor width/depth (the existing --floor-size meaning).
+	The room is centered on the asset's horizontal bound center, while its floor is
+	explicitly positioned so callers can place it at the model's conservative base.
+	"""
+	half_width = room_size * 0.5
+	room_height = max(
+		bound_center.z + bound_radius - floor_z + bound_radius * 0.5,
+		room_size * 0.75
+	)
+	center_x, center_y = bound_center.x, bound_center.y
+	frame_width = max(bound_radius * 0.035, room_size * 0.008)
+
+	grid_program = osg.Program(name="grid_room_gbuffer", shaders=(
+		osg.Shader(osg.Shader.VERTEX, GRID_ROOM_VERTEX),
+		osg.Shader(osg.Shader.FRAGMENT, GRID_ROOM_FRAGMENT),
+	))
+	frame_program = osg.Program(name="grid_room_frame_gbuffer", shaders=(
+		osg.Shader(osg.Shader.VERTEX, UNLIT_GBUFFER_VERTEX),
+		osg.Shader(osg.Shader.FRAGMENT, FRAME_GBUFFER_FRAGMENT),
+	))
+
+	def make_grid(corner, width, height):
+		grid = osgDebug.Grid(corner, width, height)
+		grid.canvasSize = osg.Vec2(500.0, 500.0)
+		grid.gridInterval = 50.0
+		grid.gridIntervalStrong = 250.0
+		grid.lineWidthPx = 1.0
+		grid.colorBg = osg.Vec4(0.055, 0.070, 0.110, 1.0)
+		grid.colorLine = osg.Vec4(0.20, 0.30, 0.48, 1.0)
+		grid.colorLineStrong = osg.Vec4(0.52, 0.68, 0.90, 1.0)
+		grid.stateSet.uniforms["roomRoughness"] = 0.85
+		grid.stateSet.uniforms["roomMetallic"] = 0.0
+		grid.stateSet.setAttributeAndModes(
+			grid_program,
+			osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE
+		)
+		# Grid's normal forward-rendered state enables alpha blending so transparent
+		# background pixels reveal the framebuffer behind it. In the G-buffer that
+		# would blend the normal target with its zero alpha and leave it cleared;
+		# composite then mistakes an actual grid line for sky. Discard handles the
+		# transparent parts here, so deferred rendering must write every attachment
+		# without blending.
+		grid.stateSet.setMode(GL_BLEND, osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE)
+
+		return grid
+
+	# The floor is XY at floor_z; rear/right walls make the same open, Z-up room
+	# as osgdebug-grid.cpp. The model stays centered horizontally in the room.
+	floor = make_grid(
+		osg.Vec3(center_x - half_width, center_y - half_width, floor_z),
+		osg.Vec3(room_size, 0.0, 0.0),
+		osg.Vec3(0.0, room_size, 0.0)
+	)
+	back_wall = make_grid(
+		osg.Vec3(center_x - half_width, center_y + half_width, floor_z),
+		osg.Vec3(room_size, 0.0, 0.0),
+		osg.Vec3(0.0, 0.0, room_height)
+	)
+	right_wall = make_grid(
+		osg.Vec3(center_x + half_width, center_y - half_width, floor_z),
+		osg.Vec3(0.0, room_size, 0.0),
+		osg.Vec3(0.0, 0.0, room_height)
+	)
+
+	panels = osg.Geode()
+	panels.drawables.extend((floor, back_wall, right_wall))
+
+	front_left = osg.Vec3(center_x - half_width, center_y - half_width, floor_z)
+	front_right = osg.Vec3(center_x + half_width, center_y - half_width, floor_z)
+	back_left = osg.Vec3(center_x - half_width, center_y + half_width, floor_z)
+	back_right = osg.Vec3(center_x + half_width, center_y + half_width, floor_z)
+	back_left_top = back_left + osg.Vec3(0.0, 0.0, room_height)
+	back_right_top = back_right + osg.Vec3(0.0, 0.0, room_height)
+	front_right_top = front_right + osg.Vec3(0.0, 0.0, room_height)
+
+	frame = osg.Geode()
+
+	def add_frame_rod(start, end):
+		delta = end - start
+		midpoint = (start + end) * 0.5
+		size = osg.Vec3(
+			max(abs(delta.x), frame_width),
+			max(abs(delta.y), frame_width),
+			max(abs(delta.z), frame_width)
+		)
+		frame.drawables.append(osg.ShapeDrawable(osg.Box(midpoint, size.x, size.y, size.z)))
+
+	for start, end in (
+		(front_left, front_right), (front_left, back_left),
+		(back_left, back_right), (front_right, back_right), (back_right, back_right_top),
+		(back_left, back_left_top), (back_left_top, back_right_top),
+		(front_right, front_right_top), (front_right_top, back_right_top),
+	):
+		add_frame_rod(start, end)
+
+	for position in (
+		front_left, front_right, back_left, back_right,
+		back_left_top, back_right_top, front_right_top,
+	):
+		frame.drawables.append(osg.ShapeDrawable(osg.Sphere(position, frame_width * 0.75)))
+
+	frame.stateSet.setAttributeAndModes(frame_program, osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE)
+	frame.stateSet.uniforms["frameColor"] = osg.Vec3(0.55, 0.60, 0.70)
+
+	room = osg.Group()
+	room.children.extend((panels, frame))
+
+	return room, (floor, back_wall, right_wall)
+
 # --------------------------------------------------------------------------- #
 # Light gizmo: a small sphere marking a display position along lightDir, plus a
 # line from the model's bounding center to that sphere -- a debug/teaching
@@ -1554,7 +1739,21 @@ class LightGizmoCallback:
 		rung_anchor = self.bound_center + osg.Vec3(0.0, 0.0, d.z)
 
 		self.sphere_xform.matrix = osg.Matrix.scale(r, r, r) * osg.Matrix.translate(marker_pos)
-		self.line_geom.setVertexArray(osg.Vec3Array([rung_anchor, marker_pos]))
+
+		# Mutate the existing array in place and dirty() it, rather than handing
+		# setVertexArray() a brand-new Vec3Array every frame. A new array is a new
+		# BufferData identity to OSG, so it can never look like "an update to
+		# something I already know" -- only "first-time allocation," forcing an
+		# expensive glBufferData() reallocation every single frame instead of the
+		# cheap glBufferSubData() path OSG already uses for genuine in-place
+		# updates. Was spamming OSG's buffer-object-pool notify output on every
+		# frame ("Allocating new glBufferData(), _allocatedSize=24") and a likely
+		# contributor to an intermittent NVIDIA driver segfault during zoom.
+		line_array = self.line_geom.vertexArray
+
+		line_array[0] = rung_anchor
+		line_array[1] = marker_pos
+		line_array.dirty()
 
 		c = self.light_color_u.value
 		m = max(c.x, c.y, c.z, 1e-4)
@@ -1580,10 +1779,10 @@ def create_light_gizmo(bound_center, bound_radius, light_dir_u, light_color_u):
 	sphere_geode.drawables.append(osg.ShapeDrawable(osg.Sphere(osg.Vec3(0, 0, 0), 1.0)))
 	sphere_xform.children.append(sphere_geode)
 
-	# Direction line -- vertex array replaced wholesale each frame (only 2
-	# points; cheaper to rebuild than to reason about in-place mutation).
+	# Direction line -- vertex array mutated in place each frame (see
+	# LightGizmoCallback.__call__), not replaced wholesale.
 	line_geom = osg.Geometry()
-	line_geom.setVertexArray(osg.Vec3Array([bound_center, bound_center]))
+	line_geom.vertexArray = osg.Vec3Array([bound_center, bound_center])
 	line_geom.addPrimitiveSet(osg.DrawArrays(osg.PrimitiveSet.LINES, 0, 2))
 	line_geom.useVertexBufferObjects = True
 	line_geode = osg.Geode()
@@ -1829,8 +2028,6 @@ if __name__ == "__main__":
 	args = ap.parse_args()
 
 	args.floor = args.floor_z is not None or args.floor_size is not None
-	args.floor_z = -0.07 if args.floor_z is None else args.floor_z
-	args.floor_size = 0.30 if args.floor_size is None else args.floor_size
 
 	args.path = data_dir_file(args.path, "gltf")
 	args.ktx2 = data_dir_file(args.ktx2, "ktx2")
@@ -1838,7 +2035,7 @@ if __name__ == "__main__":
 	if args.hdr:
 		args.hdr = data_dir_file(args.hdr, "hdr")
 
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+	osg.setNotifyLevel(osg.NotifySeverity.INFO)
 
 	model = osgDB.readNodeFile(args.path)
 
@@ -1850,6 +2047,19 @@ if __name__ == "__main__":
 		f"[sketchfab] model bound: center={tuple(bound_center)} radius={bound_radius:.4f}",
 		flush=True
 	)
+
+	# Preserve the existing opt-in floor flags, but turn them into a room guide whose
+	# omitted dimension(s) scale with the actual asset. A bounding sphere gives a
+	# conservative floor height even for models with unusual local origins.
+	if args.floor:
+		args.floor_z = bound_center.z - bound_radius if args.floor_z is None else args.floor_z
+		args.floor_size = bound_radius * 4.0 if args.floor_size is None else args.floor_size
+
+		print(
+			f"[sketchfab] grid room: floor_z={args.floor_z:.4f} "
+			f"size={args.floor_size:.4f}",
+			flush=True
+		)
 
 	# --- Load prefiltered cubemap from KTX2 --------------------------------- #
 	prefilter_tex = osgDB.readObjectFile(args.ktx2)
@@ -1955,7 +2165,13 @@ if __name__ == "__main__":
 	# perspective projection made it behave like a spotlight whose rays diverged
 	# from shadow_light_pos, even though direct lighting used one constant direction
 	# everywhere.  An orthographic box makes the lighting and shadow models agree.
-	shadow_extent = bound_radius * SHADOW_MARGIN
+	# A room receiver needs the directional-light projection to cover more than
+	# the model's own casting bound. The model alone still supplies shadow-map
+	# depth; this only keeps the floor/wall sample coordinates in range.
+	shadow_extent = max(
+		bound_radius * SHADOW_MARGIN,
+		args.floor_size if args.floor else 0.0
+	)
 	shadow_distance = shadow_extent * 2.0
 	shadow_light_pos = bound_center + KEY_LIGHT_DIR * shadow_distance
 
@@ -1996,24 +2212,12 @@ if __name__ == "__main__":
 	# "renders fine for one frame, then gets culled out."
 	shadow_cam.cullingActive = False
 
-	# --- Floor (optional) -- routed through the G-buffer, see FLOOR_GBUFFER_* -- #
+	# --- Grid room (optional) -- replaces the old single floor quad. It is routed
+	# --- through the G-buffer for correct depth against the model. ---------------- #
 	if args.floor:
-		S, Z = args.floor_size, args.floor_z
-		floor_quad = osg.createTexturedQuadGeometry(
-			osg.Vec3(-S/2, -S/2, Z),
-			osg.Vec3(S, 0, 0),
-			osg.Vec3(0, S, 0)
+		grid_room, grid_panels = create_grid_room(
+			bound_center, bound_radius, args.floor_z, args.floor_size
 		)
-
-		floor_geode = osg.Geode()
-		floor_geode.drawables.append(floor_quad)
-
-		floor_p = osg.Program(name="floor_gbuffer", shaders=(
-			osg.Shader(osg.Shader.VERTEX, FLOOR_GBUFFER_VERTEX),
-			osg.Shader(osg.Shader.FRAGMENT, FLOOR_GBUFFER_FRAGMENT),
-		))
-
-		floor_geode.stateSet.setAttributeAndModes(floor_p)
 
 	# --- G-buffer -------------------------------------------------------------- #
 	gbuffer_cam, albedo_tex, normal_tex, material_tex, emissive_tex, position_tex, depth_tex = create_gbuffer_camera(W, H)
@@ -2021,7 +2225,7 @@ if __name__ == "__main__":
 	gbuffer_cam.children.append(model)
 
 	if args.floor:
-		gbuffer_cam.children.append(floor_geode)
+		gbuffer_cam.children.append(grid_room)
 
 	# Same reasoning as shadow_cam.cullingActive above.
 	gbuffer_cam.cullingActive = False
@@ -2218,10 +2422,11 @@ if __name__ == "__main__":
 	# --- "Knobs, not frameworks" section). Keyboard controls keep working too, ---
 	# --- both drive the same uniforms/handler state so they can't drift apart. --
 	if args.gui:
-		# final_cam draws last (POST_RENDER, nested under root -- not a View slave),
-		# so it must be the explicit draw_camera: Widget defaults to v.camera/
+		# gizmo_cam is the final POST_RENDER camera (it follows final_cam), so it
+		# must be the explicit draw_camera: Widget defaults to v.camera/
 		# slave-0, whose PostDrawCallback fires BEFORE final_cam's later fullscreen
-		# composite overwrite -- ImGui would render then be immediately erased,
+		# composite and the subsequent gizmo draw -- ImGui would render then be
+		# overwritten,
 		# while its mouse-capture bookkeeping stayed live (an invisible rectangle
 		# eating mouse input). See osgDebug.hpp's Widget constructor comment.
 		# Pinned to the left edge -- see osgDebug.hpp's Dock enum comment: the
@@ -2234,7 +2439,7 @@ if __name__ == "__main__":
 		gui_opts.dock = osgDebug.imgui.Dock.LEFT
 		gui_opts.dock_width = 320.0
 
-		gui = osgDebug.imgui.Widget(v, final_cam, gui_opts)
+		gui = osgDebug.imgui.Widget(v, gizmo_cam, gui_opts)
 
 		def draw_visualize_mode(ri):
 			mode_labels = [
@@ -2264,6 +2469,28 @@ if __name__ == "__main__":
 			if changed: ibl_specular_intensity_u.value = value
 
 		gui.addSection("IBL", draw_ibl_knobs)
+
+		if args.floor:
+			room_material = {"reflective": False}
+
+			def set_room_material(reflective):
+				roughness = 0.15 if reflective else 0.85
+				metallic = 1.0 if reflective else 0.0
+
+				for grid in grid_panels:
+					grid.stateSet.uniforms["roomRoughness"] = roughness
+					grid.stateSet.uniforms["roomMetallic"] = metallic
+
+			def draw_grid_room_knobs(ri):
+				changed, reflective = osgDebug.imgui.checkbox(
+					"Reflective metal", room_material["reflective"]
+				)
+
+				if changed:
+					room_material["reflective"] = reflective
+					set_room_material(reflective)
+
+			gui.addSection("Grid Room", draw_grid_room_knobs)
 
 		def draw_light_position_knobs(ri):
 			h = light_orbit_handler
