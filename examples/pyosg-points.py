@@ -105,7 +105,7 @@ if __name__ == "__main__":
 	print(f" >> {len(a)}")
 
 	# TODO: Convert to SequenceProxy!
-	g.setVertexArray(a)
+	g.vertexArray = a
 	g.addPrimitiveSet(osg.DrawArrays(osg.PrimitiveSet.POINTS, 0, len(a)))
 	g.useVertexBufferObjects = True
 
