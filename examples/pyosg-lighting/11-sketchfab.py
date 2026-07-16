@@ -611,8 +611,11 @@ uniform int visualizeMode; // 0=composite 1=albedo 2=normal 3=depth 4=material
 // drawing), silently freezing world-space lighting/reflections to whatever direction the
 // viewer faced at startup. Set every frame from v.camera.viewMatrix instead.
 uniform mat4 mainViewMatrix;
+uniform mat4 invViewProj;
 uniform mat4 shadowMatrix;
 uniform float shadowBias;
+uniform float shadowStrength; // 0 = shadows have no effect, 1 = fully black -- see shadowFactor()
+uniform bool shadowDebugTint; // tint shadowed composite pixels red -- see main()'s use below
 
 uniform vec3 lightDir;   // world-space direction FROM the surface TOWARD the light (normalized)
 uniform vec3 lightColor;
@@ -670,7 +673,7 @@ float shadowFactor(vec3 eyePos) {
 	for (int x = -1; x <= 1; x++)
 		for (int y = -1; y <= 1; y++)
 			shadow += (uv.z - shadowBias > texture(shadowMap, uv.xy + vec2(x, y) * sz).r) ? 1.0 : 0.0;
-	return mix(1.0, 0.3, shadow / 9.0);
+	return mix(1.0, 1.0 - shadowStrength, shadow / 9.0);
 }
 
 // ---- IBL ------------------------------------------------------------------ //
@@ -708,7 +711,9 @@ Material unpackMaterial(vec3 albedo, vec3 ormRaw) {
 
 // ---- Direct lighting -------------------------------------------------------- //
 
-vec3 evaluateDirectLighting(Material mat, vec3 N, vec3 V, float NdotV, vec3 eyePos) {
+// shad is shadowFactor(eyePos), computed once by the caller -- shared with the
+// shadowDebugTint overlay in main() rather than each recomputing it separately.
+vec3 evaluateDirectLighting(Material mat, vec3 N, vec3 V, float NdotV, float shad) {
 	// Single directional light -- no position, no distance attenuation. L is the
 	// same direction everywhere in the scene, so unlike the old point-light rig
 	// there's no per-fragment lVec/dist to get wrong.
@@ -723,7 +728,6 @@ vec3 evaluateDirectLighting(Material mat, vec3 N, vec3 V, float NdotV, vec3 eyeP
 	vec3 kD = (vec3(1.0) - F) * (1.0 - mat.metallic);
 	vec3 diffuse = kD * mat.albedo / PI;
 	vec3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 0.001);
-	float shad = shadowFactor(eyePos);
 
 	return (diffuse + specular) * lightColor * NdotL * shad;
 }
@@ -827,8 +831,25 @@ void main() {
 	// A cleared-but-never-written background pixel has a zero-length normal (real
 	// written normals are always unit length) -- same sentinel technique as
 	// pyosg-mrt.py, needed only for the modes below that actually shade something.
+	//
+	// Faux skybox: reconstruct a world-space view ray for this pixel from just vUV
+	// and invViewProj (no geometry, no cubemap sample) and shade it with the same
+	// sky/ground hemisphere gradient evaluateIBL() already uses for ambient fallback
+	// lighting -- keeps the background visually consistent with the model's own
+	// ambient term instead of introducing a second, unrelated look. Standard near/
+	// far-unprojection-difference technique for a ray direction: near/far plane
+	// choice is arbitrary and cancels out of the final normalized direction, so this
+	// is unaffected by gbuffer_cam's own near/far tightening (see the znear/zfar
+	// mismatch comment above, mode 3). A live REPL session first proved this pattern by sampling
+	// envMap directly here instead of a gradient -- see git history/BUG.md if a real
+	// cubemap-background mode is ever wanted again.
 	if (dot(rawNormal, rawNormal) < 0.0001) {
-		fragColor = vec4(0.02, 0.02, 0.03, 1.0);
+		vec2 ndc = vUV * 2.0 - 1.0;
+		vec4 nearP = invViewProj * vec4(ndc, -1.0, 1.0);
+		vec4 farP  = invViewProj * vec4(ndc,  1.0, 1.0);
+		vec3 rayDir = normalize(farP.xyz / farP.w - nearP.xyz / nearP.w);
+
+		fragColor = vec4(mix(groundColor, skyColor, smoothstep(-0.08, 0.08, rayDir.z)), 1.0);
 
 		return;
 	}
@@ -843,9 +864,10 @@ void main() {
 	float NdotV = max(dot(N, V), 0.0);
 	Material mat = unpackMaterial(albedo.rgb, ormRaw);
 	float ssao = texture(aoTex, vUV).r;
+	float shad = shadowFactor(eyePos);
 
 	if (visualizeMode == 5) {
-		fragColor = vec4(pow(evaluateDirectLighting(mat, N, V, NdotV, eyePos), vec3(1.0 / 2.2)), 1.0);
+		fragColor = vec4(pow(evaluateDirectLighting(mat, N, V, NdotV, shad), vec3(1.0 / 2.2)), 1.0);
 
 		return;
 	}
@@ -872,9 +894,15 @@ void main() {
 	// complementary: gMaterial.b is a static, authored/texture-baked value, ssao is a
 	// live screen-space approximation of contact occlusion neither texture nor a flat
 	// light rig can know about.
-	vec3 Lo = evaluateDirectLighting(mat, N, V, NdotV, eyePos);
+	vec3 Lo = evaluateDirectLighting(mat, N, V, NdotV, shad);
 	vec3 ambient = evaluateIBL(mat, N, V, NdotV) * ssao;
 	vec3 color = ambient + Lo + rawEmissive;
+
+	// Debug aid for tuning shadowStrength/bias against the ACTUAL composite result
+	// rather than mode 8 alone (see BUG.md item 2's note) -- tints how much this
+	// pixel's direct term got darkened by the shadow map, independent of whatever
+	// ambient/emissive is riding on top of it.
+	if (shadowDebugTint) color = mix(color, vec3(1.0, 0.0, 0.0), (1.0 - shad) * 0.7);
 
 	// No tonemap/gamma here anymore -- this is now a LINEAR HDR intermediate that
 	// bloom_threshold_cam needs to sample before anything gets compressed to LDR;
@@ -1469,7 +1497,7 @@ def create_final_camera(hdr_color_tex, bloom_tex, w=W, h=H):
 # line from the model's bounding center to that sphere -- a debug/teaching
 # visual, not part of the actual lighting math. Position/color are recomputed
 # every frame from the live lightDir/lightColor uniforms via an updateCallback,
-# so edits made through --repl (see IPython.embed() setup below) are reflected
+# so edits made through --repl (see pyosg_repl.repl() call below) are reflected
 # immediately without rebuilding the scene graph. Rendered as its own
 # POST_RENDER pass after final_cam, RELATIVE_RF (inherits the real viewer
 # camera's view/projection, same as gbuffer_cam) with depth test off -- always
@@ -1786,9 +1814,8 @@ if __name__ == "__main__":
 		"--repl",
 		action="store_true",
 		default=False,
-		help="Run the viewer in a background thread and drop into IPython.embed() "
-			"on the main thread, so uniforms/lights can be tweaked live while "
-			"watching the render window."
+		help="Run the viewer alongside an embedded IPython REPL (see pyosg_repl.py) "
+			"so uniforms/lights can be tweaked live while watching the render window."
 	)
 	ap.add_argument(
 		"--no-gui",
@@ -1885,6 +1912,11 @@ if __name__ == "__main__":
 	# some angles). Exposed as a uniform so it can be tuned live via --repl instead
 	# of guessing at a shader-source constant and restarting every time.
 	shadow_bias_u = osg.Uniform("shadowBias", 0.005)
+	# 0.7 preserves the old hardcoded mix(1.0, 0.3, ...) floor (see BUG.md item 2's
+	# note on shadowFactor() being diluted by the unshadowed ambient term) --
+	# floor = 1 - shadowStrength, so 0 = shadows have zero effect, 1 = fully black.
+	shadow_strength_u = osg.Uniform("shadowStrength", 0.7)
+	shadow_debug_tint_u = osg.Uniform("shadowDebugTint", False)
 
 	# --- Frame-global uniforms (live on root.stateSet -- inherited by every camera
 	# under it regardless of PRE_RENDER/POST_RENDER order; see the update_uniforms
@@ -1892,6 +1924,10 @@ if __name__ == "__main__":
 	# v.camera's) ------------------------------------------------------------- #
 	shadow_matrix_u = osg.Uniform("shadowMatrix", osg.Matrixf.identity())
 	main_view_u = osg.Uniform("mainViewMatrix", osg.Matrixf.identity())
+	# Clip-to-world matrix for the composite pass's background fill (see
+	# COMPOSITE_FRAGMENT_SHADER's background-sentinel branch) -- reconstructs a
+	# world-space view ray per background pixel from just vUV, no geometry needed.
+	inv_view_proj_u = osg.Uniform("invViewProj", osg.Matrixf.identity())
 	znear_u = osg.Uniform("znear", 0.0)
 	zfar_u = osg.Uniform("zfar", 0.0)
 	proj_forward_u = osg.Uniform("projectionMatrix", osg.Matrixf.identity())
@@ -2022,13 +2058,15 @@ if __name__ == "__main__":
 		light_dir_u,
 		light_color_u,
 		shadow_bias_u,
+		shadow_strength_u,
+		shadow_debug_tint_u,
 		ibl_enabled_u,
 		ibl_diffuse_intensity_u,
 		ibl_specular_intensity_u,
 		ibl_sh_u
 	))
-	cc_ss.uniforms["skyColor"] = osg.Vec3(0.15, 0.20, 0.35)
-	cc_ss.uniforms["groundColor"] = osg.Vec3(0.12, 0.08, 0.05)
+	cc_ss.uniforms["skyColor"] = osg.Vec3(0.04, 0.06, 0.12)
+	cc_ss.uniforms["groundColor"] = osg.Vec3(0.015, 0.012, 0.010)
 
 	# --- Bloom -------------------------------------------------------------------- #
 	bloom_threshold_cam, bloom_blur_h_cam, bloom_blur_v_cam, bloom_blur_b_tex = create_bloom_cameras(hdr_color_tex, W, H)
@@ -2070,6 +2108,7 @@ if __name__ == "__main__":
 		zfar_u,
 		proj_forward_u,
 		main_view_u,
+		inv_view_proj_u,
 		shadow_matrix_u,
 		visualize_mode_u,
 		post_enabled_u,
@@ -2077,15 +2116,24 @@ if __name__ == "__main__":
 
 	# --- Viewer ------------------------------------------------------------- #
 	manip = osgGA.TrackballManipulator()
-	manip.node = model
 
-	# View.setCameraManipulator() targets the full scene root by default, which makes
-	# the orbiting gizmo inflate the computed model size and home distance. Retarget
-	# the manipulator after attaching it so only the actual asset defines its bounds.
 	v = osgViewer.Viewer()
 
 	v.sceneData = root
 	v.cameraManipulator = manip
+
+	# View.setCameraManipulator() unconditionally does manip.setNode(getSceneData())
+	# before computing its own initial home position (see osgViewer::View::
+	# setCameraManipulator(), View.cpp) -- so setting manip.node BEFORE this point
+	# (as this code used to) gets silently clobbered back to root right here, and the
+	# orbiting gizmo/RTT cameras inflate the computed home distance. Retarget after
+	# attaching instead, so only the actual asset defines the bounds -- and note that
+	# setting .node alone does NOT reposition the camera, an explicit home() call is
+	# required too (this is literally what pressing Spacebar does at runtime, via
+	# StandardManipulator::handleKeyDown -- confirmed 2026-07-16 by reproducing the
+	# "model invisible until Spacebar" bug live over the aipython REPL bridge).
+	manip.node = model
+	manip.home(0.0)
 
 	# Combined per-frame uniform update: shadow matrix, inverse+forward projection,
 	# znear/zfar, and mainViewMatrix (see COMPOSITE_FRAGMENT_SHADER's comment on why
@@ -2127,6 +2175,7 @@ if __name__ == "__main__":
 		zfar_u.value = bound_radius * 20.0
 		proj_forward_u.value = osg.Matrixf(pm)
 		main_view_u.value = osg.Matrixf(cam_view)
+		inv_view_proj_u.value = osg.Matrixf(osg.Matrix.inverse(cam_view * pm))
 
 		# Shadow camera tracks the LIVE lightDir uniform every frame now, instead of
 		# the KEY_LIGHT_DIR constant frozen at startup -- previously, moving the
@@ -2179,6 +2228,8 @@ if __name__ == "__main__":
 		# system imgui package isn't built from the docking branch, so this is a
 		# fixed sidebar (no drag-to-dock like osgEarth's ImGuiEventHandler), just
 		# enough to keep the panel out of the way of the model.
+		#
+		# TODO: Convert this to kwargs!
 		gui_opts = osgDebug.imgui.Options()
 		gui_opts.dock = osgDebug.imgui.Dock.LEFT
 		gui_opts.dock_width = 320.0
@@ -2194,28 +2245,33 @@ if __name__ == "__main__":
 			changed, value = osgDebug.imgui.radio_group(
 				int(visualize_mode_u.value), mode_labels, False
 			)
+
 			if changed: visualize_mode_u.value = value
 
 		gui.addSection("Visualize Mode", draw_visualize_mode)
 
-		def draw_lighting_knobs(ri):
-			changed, value = osgDebug.imgui.slider_float(
+		def draw_ibl_knobs(ri):
+			changed, value = osgDebug.imgui.slider_float_nudge(
 				"IBL Diffuse", ibl_diffuse_intensity_u.value, 0.0, 2.0
 			)
+
 			if changed: ibl_diffuse_intensity_u.value = value
 
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgDebug.imgui.slider_float_nudge(
 				"IBL Specular", ibl_specular_intensity_u.value, 0.0, 2.0
 			)
+
 			if changed: ibl_specular_intensity_u.value = value
 
-			osgDebug.imgui.separator()
+		gui.addSection("IBL", draw_ibl_knobs)
 
+		def draw_light_position_knobs(ri):
 			h = light_orbit_handler
 
 			changed, value = osgDebug.imgui.slider_float(
 				"Light Azimuth", math.degrees(h.azimuth), -180.0, 180.0, "%.1f deg"
 			)
+
 			if changed:
 				h.azimuth = math.radians(value)
 				h._sync()
@@ -2223,6 +2279,7 @@ if __name__ == "__main__":
 			changed, value = osgDebug.imgui.slider_float(
 				"Light Orbit Radius", h.orbit_radius, h.min_radius, bound_radius * 3.0
 			)
+
 			if changed:
 				h.orbit_radius = value
 				h._sync()
@@ -2230,11 +2287,37 @@ if __name__ == "__main__":
 			changed, value = osgDebug.imgui.slider_float(
 				"Light Height", h.height, -bound_radius * 3.0, bound_radius * 3.0
 			)
+
 			if changed:
 				h.height = value
 				h._sync()
 
-		gui.addSection("Lighting", draw_lighting_knobs)
+		gui.addSection("Light Position", draw_light_position_knobs)
+
+		def draw_shadow_knobs(ri):
+			changed, value = osgDebug.imgui.slider_float(
+				"Shadow Strength", shadow_strength_u.value, 0.0, 1.0
+			)
+
+			if changed: shadow_strength_u.value = value
+
+			changed, value = osgDebug.imgui.slider_float(
+				"Shadow Bias", shadow_bias_u.value, 0.0, 0.02, "%.4f"
+			)
+
+			if changed: shadow_bias_u.value = value
+
+			# Tints how much a pixel's direct term got darkened by the shadow map --
+			# lets shadowStrength/bias be tuned against the ACTUAL composite (mode 0)
+			# rather than mode 8 alone, since ambient/emissive riding on top of Lo
+			# otherwise hides how strong the shadow's contribution really is.
+			changed, value = osgDebug.imgui.checkbox(
+				"Debug Tint (red)", bool(shadow_debug_tint_u.value)
+			)
+
+			if changed: shadow_debug_tint_u.value = value
+
+		gui.addSection("Shadow", draw_shadow_knobs)
 
 	print(
 		"Press 0=composite 1=albedo 2=normal 3=depth 4=material "
@@ -2244,104 +2327,55 @@ if __name__ == "__main__":
 		flush=True
 	)
 
-	# --- --repl: async render loop sharing IPython's OWN event loop, no threading -- #
+	def apply_pending_sh(queue):
+		try:
+			while True:
+				sh = queue.get_nowait()
+
+				for i, rgb in enumerate(sh):
+					ibl_sh_u[i] = osg.Vec3(*rgb)
+
+		except asyncio.QueueEmpty:
+			pass
+
+	# --- --repl: hand the render loop to pyosg_repl.py's IPython/asyncio bridge -- #
 	# Lets uniforms/lights/SSAO params be edited live from a REPL while the window
 	# keeps rendering, instead of 11-bug.py/12-bug.py's pattern of pausing before
-	# any v.frame() call for manual single-step debugging. Previously used a
-	# background threading.Thread -- replaced so this matches 09-ibl.py's async/
-	# await-only style, and so the window opens immediately instead of blocking
-	# on a synchronous compute_sh() call before the first v.frame().
-	#
-	# IPython.embed(using='asyncio') alone is NOT enough to keep render_task
-	# pumped while idling at the prompt: it only sets loop_runner (how a typed
-	# top-level `await ...` expression gets executed via
-	# IPython.core.interactiveshell._asyncio_runner), it does NOT make the
-	# PROMPT READ ITSELF cooperate with the loop. That second, separate piece
-	# is TerminalInteractiveShell._use_asyncio_inputhook, which is ONLY set by
-	# calling shell.enable_gui("asyncio") -- normally triggered interactively
-	# via the `%gui asyncio` magic (see IPython.terminal.pt_inputhooks.asyncio's
-	# own docstring/example, which schedules a task with asyncio.ensure_future()
-	# right after running that magic -- exactly our shape). Without it,
-	# render_task/sh_task below only get pumped when the user explicitly types
-	# something that drives the loop (an `await ...` expression) -- confirmed
-	# directly against the installed IPython 8.20 source, 2026-07-12, after
-	# `using="asyncio"` alone left v.frame() not being called automatically.
-	#
-	# Fix requires NOT calling the top-level IPython.embed() convenience
-	# function at all: its own source (IPython.terminal.embed.embed) does
-	# `if InteractiveShell._instance is not None: clear_instance()` right
-	# before building its OWN fresh InteractiveShellEmbed -- so any
-	# pre-configured instance we hand it (even one with enable_gui("asyncio")
-	# already called) gets thrown away and replaced. Confirmed the hard way:
-	# a pre-built, pre-enable_gui'd instance passed to IPython.embed() still
-	# left render_task un-pumped while idling at the prompt. Replicating
-	# embed()'s own body ourselves (construct the singleton, call
-	# shell.enable_gui("asyncio"), then call shell() directly -- skipping
-	# embed()'s wrapper function entirely) is the only way to keep our
-	# configuration. No manual frame introspection needed on our end for
-	# either call: InteractiveShellEmbed.__init__() already computes its own
-	# _init_location_id via sys._getframe(1) when none is passed, and
-	# shell()'s own default stack_depth=1 already resolves local_ns to
-	# whoever calls shell() directly (which is us, one frame closer than
-	# embed()'s internal stack_depth=2, since we skip its wrapper frame) --
-	# verified against the installed IPython 8.20 source, 2026-07-12.
+	# any v.frame() call for manual single-step debugging. This used to hand-roll
+	# the IPython.embed()+enable_gui("asyncio") dance directly in this file (see
+	# git history if that's ever needed again) -- pyosg_repl.py now owns that
+	# mechanism, proven first here, generalized so 09-ibl-animation.py and
+	# pyosg-taa.py share the identical fix.
 	if args.repl:
+		# pyosg_repl.py is one directory above this example. Keep that proof module
+		# importable when this file is launched directly, where sys.path[0] is the
+		# pyosg-lighting directory rather than examples/.
+		examples_dir = pathlib.Path(__file__).resolve().parent.parent
+
+		if str(examples_dir) not in sys.path:
+			sys.path.insert(0, str(examples_dir))
+
 		from IPython.core.async_helpers import get_asyncio_loop
-		from IPython.terminal.embed import InteractiveShellEmbed
-		from IPython.terminal.ipapp import load_default_config
+		from pyosg_repl import repl
 
 		loop = get_asyncio_loop()
 		queue = asyncio.Queue()
-
-		asyncio.set_event_loop(loop)
-
-		async def render_loop():
-			while not v.done:
-				v.frame()
-
-				try:
-					while True:
-						sh = queue.get_nowait()
-
-						for i, rgb in enumerate(sh):
-							ibl_sh_u[i] = osg.Vec3(*rgb)
-
-				except asyncio.QueueEmpty:
-					pass
-
-				await asyncio.sleep(0)
-
-		tasks = [loop.create_task(render_loop())]
+		tasks = []
 
 		if args.hdr:
 			tasks.append(loop.create_task(task_compute_sh(queue, args.hdr)))
 
-		# See the "apitrace + IPython.embed() SIGINT crash" note in
-		# ai/context-todo-lighting-class.md -- harmless to set unconditionally.
-		import signal
-
-		signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-		ipy_config = load_default_config()
-		ipy_config.InteractiveShellEmbed = ipy_config.TerminalInteractiveShell
-		ipy_config.TerminalInteractiveShell.loop_runner = "asyncio"
-		ipy_config.TerminalInteractiveShell.autoawait = True
-
-		ipy_shell = InteractiveShellEmbed.instance(config=ipy_config)
-
-		ipy_shell.enable_gui("asyncio")
-		ipy_shell()
-
-		InteractiveShellEmbed.clear_instance()
-
-		for task in tasks:
-			task.cancel()
-
 		try:
-			loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
+			# globals() deliberately exposes this example's live viewer, scene graph,
+			# G-buffer/post-processing cameras, uniforms, and helper functions at the
+			# prompt.
+			repl(v, globals(), frame_callback=lambda: apply_pending_sh(queue))
 
-		except asyncio.CancelledError:
-			pass
+		finally:
+			for task in tasks:
+				task.cancel()
+
+			loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
 
 	else:
 		# --- Async viewer loop (verbatim from 09-ibl.py) ------------------------ #
@@ -2359,16 +2393,7 @@ if __name__ == "__main__":
 				v.frame()
 
 				loop.run_until_complete(asyncio.sleep(0))
-
-				try:
-					while True:
-						sh = queue.get_nowait()
-
-						for i, rgb in enumerate(sh):
-							ibl_sh_u[i] = osg.Vec3(*rgb)
-
-				except asyncio.QueueEmpty:
-					pass
+				apply_pending_sh(queue)
 
 		finally:
 			for task in tasks:

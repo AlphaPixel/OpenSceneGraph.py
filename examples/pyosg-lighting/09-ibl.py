@@ -187,6 +187,8 @@ in vec2 vUV;
 uniform sampler2D shadowMap; // unit 4
 uniform samplerCube envMap; // unit 5: prefiltered cubemap
 uniform sampler2D brdfLUT; // unit 6: split-sum BRDF LUT
+uniform float shadowBias;
+uniform float shadowStrength; // 0 = shadows have no effect, 1 = fully black
 
 uniform vec3 emissiveFactor;
 
@@ -276,8 +278,8 @@ float shadowFactor(vec3 eyePos) {
 	float shadow = 0.0;
 	for (int x = -1; x <= 1; x++)
 		for (int y = -1; y <= 1; y++)
-			shadow += (uv.z - 0.005 > texture(shadowMap, uv.xy + vec2(x, y) * sz).r) ? 1.0 : 0.0;
-	return mix(1.0, 0.3, shadow / 9.0);
+			shadow += (uv.z - shadowBias > texture(shadowMap, uv.xy + vec2(x, y) * sz).r) ? 1.0 : 0.0;
+	return mix(1.0, 1.0 - shadowStrength, shadow / 9.0);
 }
 
 // ---- IBL ------------------------------------------------------------------ //
@@ -541,6 +543,8 @@ uniform float lightRadius[NUM_LIGHTS];
 uniform bool animatedLights;
 uniform mat4 shadowMatrix;
 uniform sampler2D shadowMap;
+uniform float shadowBias;
+uniform float shadowStrength;
 uniform mat4 osg_ViewMatrix;
 uniform float osg_SimulationTime;
 
@@ -555,8 +559,8 @@ float shadowFactor(vec3 eyePos) {
 	float shadow = 0.0;
 	for (int x = -1; x <= 1; x++)
 		for (int y = -1; y <= 1; y++)
-			shadow += (uv.z - 0.005 > texture(shadowMap, uv.xy + vec2(x, y) * sz).r) ? 1.0 : 0.0;
-	return mix(1.0, 0.3, shadow / 9.0);
+			shadow += (uv.z - shadowBias > texture(shadowMap, uv.xy + vec2(x, y) * sz).r) ? 1.0 : 0.0;
+	return mix(1.0, 1.0 - shadowStrength, shadow / 9.0);
 }
 
 // Light i orbits the origin; only used when the animatedLights uniform is set (see
@@ -908,6 +912,8 @@ if __name__ == "__main__":
 	lightRadius = osg.Uniform(osg.Uniform.Type.FLOAT, "lightRadius", light_radius_scaled)
 
 	shadow_matrix_u = osg.Uniform("shadowMatrix", osg.Matrixf.identity())
+	shadow_bias_u = osg.Uniform("shadowBias", 0.005)
+	shadow_strength_u = osg.Uniform("shadowStrength", 0.7)
 
 	# --- Shadow map --------------------------------------------------------- #
 	shadow_tex = osg.Texture2D()
@@ -994,6 +1000,8 @@ if __name__ == "__main__":
 		lightColor,
 		lightRadius,
 		shadow_matrix_u,
+		shadow_bias_u,
+		shadow_strength_u,
 		ibl_enabled_u,
 		ibl_intensity_u,
 		ibl_sh_u

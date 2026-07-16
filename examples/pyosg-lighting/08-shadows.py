@@ -120,6 +120,8 @@ uniform float lightRadius[NUM_LIGHTS];
 
 // shadowMatrix: main-camera eye space -> light clip space (bias applied in shader)
 uniform mat4 shadowMatrix;
+uniform float shadowBias;
+uniform float shadowStrength; // 0 = shadows have no effect, 1 = fully black
 
 out vec4 fragColor;
 
@@ -154,8 +156,8 @@ float shadowFactor(vec3 eyePos) {
 	float shadow = 0.0;
 	for(int x = -1; x <= 1; ++x)
 		for(int y = -1; y <= 1; ++y)
-			shadow += (uv.z - 0.005 > texture(shadowMap, uv.xy + vec2(x, y) * sz).r) ? 1.0 : 0.0;
-	return mix(1.0, 0.3, shadow / 9.0);
+			shadow += (uv.z - shadowBias > texture(shadowMap, uv.xy + vec2(x, y) * sz).r) ? 1.0 : 0.0;
+	return mix(1.0, 1.0 - shadowStrength, shadow / 9.0);
 }
 
 void main() {
@@ -247,6 +249,8 @@ uniform vec3 lightColor[NUM_LIGHTS];
 uniform float lightRadius[NUM_LIGHTS];
 uniform mat4 shadowMatrix;
 uniform sampler2D shadowMap;
+uniform float shadowBias;
+uniform float shadowStrength;
 uniform mat4 osg_ViewMatrix;
 
 out vec4 fragColor;
@@ -260,8 +264,8 @@ float shadowFactor(vec3 eyePos) {
 	float shadow = 0.0;
 	for(int x = -1; x <= 1; ++x)
 		for(int y = -1; y <= 1; ++y)
-			shadow += (uv.z - 0.005 > texture(shadowMap, uv.xy + vec2(x, y) * sz).r) ? 1.0 : 0.0;
-	return mix(1.0, 0.3, shadow / 9.0);
+			shadow += (uv.z - shadowBias > texture(shadowMap, uv.xy + vec2(x, y) * sz).r) ? 1.0 : 0.0;
+	return mix(1.0, 1.0 - shadowStrength, shadow / 9.0);
 }
 
 void main() {
@@ -387,6 +391,8 @@ if __name__ == "__main__":
 
 	# shadowMatrix recomputed every frame in the DrawCallback below.
 	shadow_matrix_u = osg.Uniform("shadowMatrix", osg.Matrixf.identity())
+	shadow_bias_u = osg.Uniform("shadowBias", 0.005)
+	shadow_strength_u = osg.Uniform("shadowStrength", 0.7)
 
 	# --- Shadow map depth texture ---
 	shadow_tex = osg.Texture2D()
@@ -461,7 +467,9 @@ if __name__ == "__main__":
 	main_group = osg.Group()
 
 	main_group.stateSet.setTextureAttributeAndModes(4, shadow_tex)
-	main_group.stateSet.uniforms.extend((lightPos, lightColor, lightRadius, shadow_matrix_u))
+	main_group.stateSet.uniforms.extend((
+		lightPos, lightColor, lightRadius, shadow_matrix_u, shadow_bias_u, shadow_strength_u
+	))
 
 	main_group.children.append(model)
 

@@ -801,6 +801,9 @@ def make_brdf_lut(lut_size=512):
 	cam.viewport = osg.Viewport(0, 0, lut_size, lut_size)
 	cam.projectionMatrix = osg.Matrix.identity()
 	cam.viewMatrix = osg.Matrix.identity()
+	# This fullscreen pass has an explicitly-authored identity projection. Do not
+	# let CullSettings replace it with bounds-derived near/far planes.
+	cam.computeNearFarMode = osg.Camera.DO_NOT_COMPUTE_NEAR_FAR
 	cam.attach(osg.Camera.COLOR_BUFFER0, lut_tex, 0, 0, False)
 	cam.stateSet.setAttributeAndModes(bake_p)
 	cam.children.append(quad_geode)
@@ -864,6 +867,11 @@ if __name__ == "__main__":
 	ap.add_argument("--floor-z", type=float, default=None)
 	ap.add_argument("--floor-size", type=float, default=None)
 	ap.add_argument("--no-skinning", dest="skinning", action="store_false", default=True)
+	ap.add_argument(
+		"--repl",
+		action="store_true",
+		help="Run the viewer alongside an embedded IPython REPL"
+	)
 
 	args = ap.parse_args()
 
@@ -1044,6 +1052,10 @@ if __name__ == "__main__":
 	shadow_cam.attach(osg.Camera.COLOR_BUFFER, dummy_color)
 	shadow_cam.viewMatrix = light_view
 	shadow_cam.projectionMatrix = light_proj
+	# shadowMatrix below is built from this exact light_proj. Automatic near/far
+	# tightening would make the projection used by the shadow render disagree
+	# with the matrix used to sample it.
+	shadow_cam.computeNearFarMode = osg.Camera.DO_NOT_COMPUTE_NEAR_FAR
 	shadow_cam.children.append(model)
 
 	# --- Floor (optional) --------------------------------------------------- #
@@ -1100,6 +1112,21 @@ if __name__ == "__main__":
 	v.sceneData = root
 	v.cameraManipulator = osgGA.TrackballManipulator()
 
+	# GPU skinning moves vertices without updating OSG's CPU-side drawable bounds.
+	# Bounds-derived near/far tightening therefore produced an extremely narrow
+	# projection (observed live as near=11.47, far=17.64) which clipped most of an
+	# animated model as the camera orbited. Preserve normal scene-graph culling and
+	# Trackball home framing, but use conservative planes derived from the original
+	# model radius instead of stale undeformed bounds. The example window is fixed
+	# at 800x600 above, hence the 4:3 aspect ratio.
+	camera_near = max(bound_radius * 0.001, 0.001)
+	camera_far = max(bound_radius * 1000.0, 1000.0)
+
+	v.camera.computeNearFarMode = osg.Camera.DO_NOT_COMPUTE_NEAR_FAR
+	v.camera.projectionMatrix = osg.Matrix.perspective(
+		30.0, 800.0 / 600.0, camera_near, camera_far
+	)
+
 	if animation_player:
 		v.addEventHandler(AnimationHandler(animation_player))
 
@@ -1110,43 +1137,76 @@ if __name__ == "__main__":
 
 	v.camera.preDrawCallback = update_shadow
 
-	# --- Async viewer loop -------------------------------------------------- #
-	loop = asyncio.new_event_loop()
-	queue = asyncio.Queue()
-	asyncio.set_event_loop(loop)
-
-	tasks = []
-
-	if args.hdr:
-		tasks.append(loop.create_task(task_compute_sh(queue, args.hdr)))
-
-	try:
-		while not v.done:
-			v.frame()
-
-			loop.run_until_complete(asyncio.sleep(0))
-
-			try:
-				while True:
-					sh = queue.get_nowait()
-
-					for i, rgb in enumerate(sh):
-						ibl_sh_u[i] = osg.Vec3(*rgb)
-
-			except asyncio.QueueEmpty:
-				pass
-
-	finally:
-		for task in tasks:
-			task.cancel()
-
+	def apply_pending_sh(queue):
 		try:
-			for task in tasks:
-				loop.run_until_complete(task)
+			while True:
+				sh = queue.get_nowait()
 
-		except asyncio.CancelledError:
+				for i, rgb in enumerate(sh):
+					ibl_sh_u[i] = osg.Vec3(*rgb)
+
+		except asyncio.QueueEmpty:
 			pass
 
-		loop.run_until_complete(asyncio.sleep(0))
-		loop.stop()
-		loop.close()
+	if args.repl:
+		# pyosg_repl.py is one directory above this example. Keep that proof module
+		# importable when this file is launched directly, where sys.path[0] is the
+		# pyosg-lighting directory rather than examples/.
+		examples_dir = pathlib.Path(__file__).resolve().parent.parent
+
+		if str(examples_dir) not in sys.path:
+			sys.path.insert(0, str(examples_dir))
+
+		from IPython.core.async_helpers import get_asyncio_loop
+		from pyosg_repl import repl
+
+		loop = get_asyncio_loop()
+		queue = asyncio.Queue()
+		tasks = []
+
+		if args.hdr:
+			tasks.append(loop.create_task(task_compute_sh(queue, args.hdr)))
+
+		try:
+			# globals() deliberately exposes this example's live viewer, scene graph,
+			# animation player, textures, uniforms, and helper functions at the prompt.
+			repl(v, globals(), frame_callback=lambda: apply_pending_sh(queue))
+
+		finally:
+			for task in tasks:
+				task.cancel()
+
+			loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
+
+	else:
+		# --- Async viewer loop -------------------------------------------------- #
+		loop = asyncio.new_event_loop()
+		queue = asyncio.Queue()
+		asyncio.set_event_loop(loop)
+
+		tasks = []
+
+		if args.hdr:
+			tasks.append(loop.create_task(task_compute_sh(queue, args.hdr)))
+
+		try:
+			while not v.done:
+				v.frame()
+
+				loop.run_until_complete(asyncio.sleep(0))
+				apply_pending_sh(queue)
+
+		finally:
+			for task in tasks:
+				task.cancel()
+
+			try:
+				for task in tasks:
+					loop.run_until_complete(task)
+
+			except asyncio.CancelledError:
+				pass
+
+			loop.run_until_complete(asyncio.sleep(0))
+			loop.stop()
+			loop.close()
