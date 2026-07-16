@@ -93,26 +93,45 @@ void bind_Geometry(py::module_& m) {
 	// virtual void setUseVertexBufferObjects(bool flag);
 	py::class_<osg::Geometry, osg::Drawable, osg::ref_ptr<osg::Geometry>>(m, "Geometry")
 		.def(py::init<>())
-		// void setVertexArray(Array* array);
-		.def(
-			"setVertexArray",
-			&osg::Geometry::setVertexArray,
-			py::keep_alive<1, 2>()
+
+		// Properties (new) alongside the old set*Array()/get*Array() method calls (kept for
+		// compatibility -- osgGLTF's loader still calls setVertexArray()/setColorArray()
+		// directly). Both forms share the same PropertySlot per array, so whichever one runs
+		// last correctly evicts what the other cached.
+		.def_property(
+			"vertexArray",
+			detail::GeometrySlots::getter<detail::VertexArraySlot>(
+				static_cast<osg::Array*(osg::Geometry::*)()>(&osg::Geometry::getVertexArray)
+			),
+			detail::GeometrySlots::setter<detail::VertexArraySlot, osg::Array*>(
+				&osg::Geometry::setVertexArray
+			)
 		)
-		.def(
-			"setColorArray",
-			py::overload_cast<osg::Array*>(&osg::Geometry::setColorArray),
-			py::keep_alive<1, 2>()
+		.def_property(
+			"colorArray",
+			detail::GeometrySlots::getter<detail::ColorArraySlot>(
+				static_cast<osg::Array*(osg::Geometry::*)()>(&osg::Geometry::getColorArray)
+			),
+			detail::GeometrySlots::setter<detail::ColorArraySlot, osg::Array*>(
+				py::overload_cast<osg::Array*>(&osg::Geometry::setColorArray)
+			)
 		)
-		.def(
-			"setColorArray",
-			py::overload_cast<osg::Array*, osg::Array::Binding>(&osg::Geometry::setColorArray),
-			py::keep_alive<1, 2>()
+		.def_property(
+			"normalArray",
+			detail::GeometrySlots::getter<detail::NormalArraySlot>(
+				static_cast<osg::Array*(osg::Geometry::*)()>(&osg::Geometry::getNormalArray)
+			),
+			detail::GeometrySlots::setter<detail::NormalArraySlot, osg::Array*>(
+				py::overload_cast<osg::Array*>(&osg::Geometry::setNormalArray)
+			)
 		)
+
 		// void setVertexAttribArray(unsigned int index, Array* array) { setVertexAttribArray(index, array, osg::Array::BIND_UNDEFINED); }
 		// void setVertexAttribArray(unsigned int index, Array* array, osg::Array::Binding binding);
 		// void setVertexAttribBinding(unsigned int index,AttributeBinding ab);
 		// void setVertexAttribNormalize(unsigned int index,GLboolean norm);
+		// TODO: TexCoordArray should eventually be a pyx::MappingProxy (unit -> Array), like
+		// StateSet.textureAttributes -- deferred, no rush.
 		// TODO: TEMPORARY! (Until I can introduce my new SequenceProxy!
 		.def(
 			"addPrimitiveSet",
