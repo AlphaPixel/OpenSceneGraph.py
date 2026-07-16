@@ -128,11 +128,68 @@ namespace detail {
 	};
 
 	using EventHandlersProxy = pyx::SequenceProxy<osgViewer::View>;
-	using EventHandlersStorage = pyx::ProxyStorageOSG<osgViewer::View, EventHandlersProxy>;
+
+	constexpr size_t SceneDataSlot = 0;
+	constexpr size_t CameraManipulatorSlot = 1;
+	constexpr size_t EventQueueSlot = 2;
+
+	using ViewSlots = pyx::PropertySlots<osgViewer::View, 3>;
+
+	// One canonical storage alias per owner type -- see ai/context-todo-pybind11x.md's
+	// "Important Storage Rule": splitting this into per-proxy storage aliases would attach
+	// independent sidecars to the same OSG object instead of one shared one.
+	using ViewStorage = pyx::ProxyStorageOSG<osgViewer::View, EventHandlersProxy, ViewSlots>;
+
+	// setCameraManipulator() takes a second `resetPosition` argument that plain attribute
+	// assignment can't supply directly (`obj.attr = value` only ever passes one value) --
+	// matching the (eye, center, up) tuple convention `CameraManipulator.homePosition`
+	// already uses (pyosgGA.cpp), accept either a bare manipulator (resetPosition=True) or a
+	// (manip, resetPosition) pair:
+	//
+	//   view.cameraManipulator = manip
+	//   view.cameraManipulator = (manip, False)
+	auto view_camera_manipulator_setter() {
+		return [](osgViewer::View& self, py::object obj) {
+			py::object manip_obj = obj;
+			bool resetPosition = true;
+
+			if(py::isinstance<py::sequence>(obj)) {
+				auto seq = obj.cast<py::sequence>();
+
+				if(seq.size() != 2) throw py::type_error(
+					"Expected CameraManipulator, None, or (manip, resetPosition) pair"
+				);
+
+				manip_obj = seq[0];
+				resetPosition = seq[1].cast<bool>();
+			}
+
+			auto* manip = manip_obj.is_none() ? nullptr : manip_obj.cast<osgGA::CameraManipulator*>();
+
+			self.setCameraManipulator(manip, resetPosition);
+
+			auto& slots = ViewStorage::get(self)->template proxy<ViewSlots>();
+
+			slots.set(CameraManipulatorSlot, manip_obj, manip);
+		};
+	}
+
+	constexpr size_t RealizeOperationSlot = 0;
+
+	using ViewerBaseSlots = pyx::PropertySlots<osgViewer::ViewerBase, 1>;
+	using ViewerBaseStorage = pyx::ProxyStorageOSG<osgViewer::ViewerBase, ViewerBaseSlots>;
 }
 
 void bind(py::module_& m) {
 	py::class_<osgViewer::Scene, osg::Referenced, osg::ref_ptr<osgViewer::Scene>>(m, "Scene")
+		// NOT a straightforward PropertySlot conversion like the ones just done for
+		// osgViewer::View: pyx::ProxyStorageOSG needs getOrCreateUserDataContainer(), an
+		// osg::Object method, but osgViewer::Scene derives from osg::Referenced only. Needs a
+		// new ref_ptr-backed ProxyStorage variant first (ProxyStorageShared exists but is
+		// shared_ptr-based, doesn't fit). No keep_alive here currently either, so this is an
+		// identity-stability gap, not a lifetime leak: Scene holds its own ref_ptr<Node>
+		// internally, so the C++ side already keeps sceneData alive independent of Python.
+		// See ai/context-todo-keep-alive-audit.md.
 		.def_property(
 			"data",
 			py::cpp_function(
@@ -174,7 +231,7 @@ void bind(py::module_& m) {
 		.def_property_readonly(
 			"eventHandlers",
 			[](osgViewer::View& self) -> detail::EventHandlersProxy& {
-				return detail::EventHandlersStorage::get(self)->template proxy<
+				return detail::ViewStorage::get(self)->template proxy<
 					detail::EventHandlersProxy
 				>();
 			},
@@ -188,14 +245,6 @@ void bind(py::module_& m) {
 			self.addEventHandler(handler);
 		}, py::keep_alive<1, 2>())
 
-		/* .def_property(
-			"sceneData",
-			[](osgViewer::View& self) { return self.getSceneData(); },
-			[](osgViewer::View& self, osg::Node* node) { self.setSceneData(node); },
-			py::return_value_policy::reference_internal,
-			py::keep_alive<1, 2>()
-		) */
-
 		.def_property_readonly(
 			"scene",
 			py::overload_cast<>(&osgViewer::View::getScene),
@@ -204,52 +253,35 @@ void bind(py::module_& m) {
 
 		.def_property(
 			"sceneData",
-			py::cpp_function(
-				[](osgViewer::View& self) { return self.getSceneData(); },
-				py::return_value_policy::reference_internal
+			detail::ViewSlots::getter<detail::SceneDataSlot>(
+				static_cast<osg::Node*(osgViewer::View::*)()>(&osgViewer::View::getSceneData)
 			),
-			py::cpp_function(
-				[](osgViewer::View& self, osg::Node* node) { self.setSceneData(node); },
-				py::keep_alive<1, 2>()
+			detail::ViewSlots::setter<detail::SceneDataSlot, osg::Node*>(
+				static_cast<void(osgViewer::View::*)(osg::Node*)>(&osgViewer::View::setSceneData)
 			)
 		)
 
 		.def_property(
 			"cameraManipulator",
-			py::cpp_function(
-				[](osgViewer::View& self) { return self.getCameraManipulator(); },
-				py::return_value_policy::reference_internal
+			detail::ViewSlots::getter<detail::CameraManipulatorSlot>(
+				static_cast<osgGA::CameraManipulator*(osgViewer::View::*)()>(
+					&osgViewer::View::getCameraManipulator
+				)
 			),
-			py::cpp_function(
-				[](
-					osgViewer::View& self,
-					osgGA::CameraManipulator* manip,
-					bool resetPosition
-				) { self.setCameraManipulator(manip, resetPosition); },
-				py::keep_alive<1, 2>(),
-				"self"_a,
-				"manip"_a,
-				"resetPosition"_a=true
-			)
+			detail::view_camera_manipulator_setter()
 		)
 
 		.def_property(
 			"eventQueue",
-			py::cpp_function(
-				[](osgViewer::View& self) { return self.getEventQueue(); },
-				py::return_value_policy::reference_internal
+			detail::ViewSlots::getter<detail::EventQueueSlot>(
+				static_cast<osgGA::EventQueue*(osgViewer::View::*)()>(&osgViewer::View::getEventQueue)
 			),
-			py::cpp_function(
-				[](osgViewer::View& self, osgGA::EventQueue* eq) { self.setEventQueue(eq); },
-				py::keep_alive<1, 2>()
+			detail::ViewSlots::setter<detail::EventQueueSlot, osgGA::EventQueue*>(
+				static_cast<void(osgViewer::View::*)(osgGA::EventQueue*)>(
+					&osgViewer::View::setEventQueue
+				)
 			)
 		)
-
-		/* .def_property_readonly(
-			"eventQueue",
-			py::overload_cast<>(&osgViewer::View::getEventQueue),
-			py::return_value_policy::reference_internal
-		) */
 	;
 
 	auto vb = py::class_<
@@ -267,8 +299,12 @@ void bind(py::module_& m) {
 
 		.def_property(
 			"realizeOperation",
-			&osgViewer::ViewerBase::getRealizeOperation,
-			&osgViewer::ViewerBase::setRealizeOperation
+			detail::ViewerBaseSlots::getter<detail::RealizeOperationSlot>(
+				&osgViewer::ViewerBase::getRealizeOperation
+			),
+			detail::ViewerBaseSlots::setter<detail::RealizeOperationSlot, osg::Operation*>(
+				&osgViewer::ViewerBase::setRealizeOperation
+			)
 		)
 	;
 
