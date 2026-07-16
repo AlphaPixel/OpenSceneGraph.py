@@ -17,6 +17,16 @@ void bind_Buffer(py::module_& m) {
 		.def_property_readonly("totalDataSize", &osg::BufferData::getTotalDataSize)
 		// .def_property_readonly("dataPointer", &osg::BufferData::getTotalDataSize)
 
+		// Increments the modified count, telling the render backend a buffer object needs
+		// re-uploading. Mutating an osg.Array's elements in place (e.g. via __setitem__) does
+		// NOT call this automatically -- without it, GLBufferObject::compileBuffer() has no way
+		// to know the CPU-side data changed, so the GPU-side buffer silently goes stale. Needed
+		// for any per-frame in-place array mutation to actually show up on screen; reusing the
+		// same Array object (rather than constructing a new one every frame, which forces an
+		// expensive full glBufferData() reallocation instead of a cheap glBufferSubData()
+		// update) plus calling dirty() is the correct, efficient pattern.
+		.def("dirty", &osg::BufferData::dirty)
+
 		// .def_property("bufferIndex"
 		.def_property(
 			"bufferObject",
