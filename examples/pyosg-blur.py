@@ -5,6 +5,7 @@ from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
 import os
+import sys
 
 W, H = 800, 600
 
@@ -285,7 +286,7 @@ def make_composite_hud(scene_tex, blur_tex, w, h):
 
 # Make this do WHATEVER YOU WANT. :) It'll work just fine...
 def create_scene():
-	return osgDB.readNodeFile("cessna.osgt")
+	return osgDB.readNodeFile(len(sys.argv) >= 1 and sys.argv[1] or "glsl_simple.osgt")
 
 if __name__ == "__main__":
 	# Pass outputs:
@@ -359,7 +360,7 @@ if __name__ == "__main__":
 	# Should not be visible if HUD composite is covering the whole screen.
 	viewer.camera.clearColor = osg.Vec4(1.0, 0.0, 1.0, 1.0)
 
-	// viewer.TODO()
+	viewer.TODO()
 
 	while not viewer.done:
 		viewer.frame()
