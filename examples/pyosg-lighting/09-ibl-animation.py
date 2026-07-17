@@ -1128,7 +1128,7 @@ if __name__ == "__main__":
 	)
 
 	if animation_player:
-		v.addEventHandler(AnimationHandler(animation_player))
+		v.eventHandlers.append(AnimationHandler(animation_player))
 
 	def update_shadow(ri):
 		cam_view = v.camera.viewMatrix

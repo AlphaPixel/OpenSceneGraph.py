@@ -4,7 +4,7 @@ from .conftest import f32
 
 import pytest
 
-from OpenSceneGraph.osg import Vec3, Vec3Array
+from OpenSceneGraph.osg import Array, Vec3, Vec3Array
 
 # assert vec3f.x == pytest.approx(1.1)
 # assert vec3f.y == f32(2.2)
@@ -24,6 +24,25 @@ def test_access(vec3a):
 def test_iteration(vec3a):
 	for i in range(8):
 		assert vec3a[i] == Vec3(i, i, i)
+
+def test_binding_default():
+	a = Vec3Array()
+
+	assert a.binding == Array.Binding.BIND_UNDEFINED
+	assert a.normalize == False
+
+def test_binding_roundtrip():
+	a = Vec3Array()
+
+	a.binding = Array.Binding.BIND_OVERALL
+	a.normalize = True
+
+	assert a.binding == Array.Binding.BIND_OVERALL
+	assert a.normalize == True
+
+	a.binding = Array.Binding.BIND_PER_VERTEX
+
+	assert a.binding == Array.Binding.BIND_PER_VERTEX
 
 # def test_math():
 # 	a = Vec3d(1.0, 2.0, 3.0)

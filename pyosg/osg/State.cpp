@@ -205,8 +205,13 @@ void bind_State(py::module_& m) {
 		.export_values()
 	;
 
-	detail::TextureAttributesProxy::bind(ss, "_TextureAttributes");
+	pyx::bind_proxy_property<detail::TextureAttributesProxy, osg::StateSet, detail::StateSetStorage>(
+		ss, "_TextureAttributes", "textureAttributes"
+	);
 
+	// Not using pyx::bind_proxy_property here (unlike textureAttributes above) -- uniforms needs
+	// its own append()/extend() beyond what MappingProxy provides generically, so it keeps direct
+	// access to the bound proxy class (`up`) to chain those onto.
 	auto up = detail::UniformsProxy::bind(ss, "_Uniforms");
 
 	up
@@ -346,15 +351,6 @@ void bind_State(py::module_& m) {
 			"uniforms",
 			[](osg::StateSet& self) -> detail::UniformsProxy& {
 				return detail::StateSetStorage::get(self)->template proxy<detail::UniformsProxy>();
-			},
-			py::return_value_policy::reference_internal
-		)
-		.def_property_readonly(
-			"textureAttributes",
-			[](osg::StateSet& self) -> detail::TextureAttributesProxy& {
-				return detail::StateSetStorage::get(self)->template proxy<
-					detail::TextureAttributesProxy
-				>();
 			},
 			py::return_value_policy::reference_internal
 		)

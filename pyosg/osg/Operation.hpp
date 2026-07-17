@@ -15,7 +15,7 @@ namespace detail {
 	public:
 		// using osg::Operation::Operation;
 
-		virtual void release() {
+		void release() override {
 			PYBIND11_OVERRIDE(void, osg::Operation, release);
 		}
 

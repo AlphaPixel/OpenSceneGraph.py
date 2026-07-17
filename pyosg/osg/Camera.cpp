@@ -98,15 +98,10 @@ void bind_Camera(py::module_& m) {
 					self.setRenderOrder(obj.cast<osg::Camera::RenderOrder>());
 				}
 
-				else if(py::isinstance<py::sequence>(obj)) {
-					auto seq = obj.cast<py::sequence>();
+				else if(auto vals = pyx::try_unpack_sequence<osg::Camera::RenderOrder, int>(obj)) {
+					auto& [order, num] = *vals;
 
-					if(seq.size() != 2) throw py::value_error("Expected (RenderOrder, int)");
-
-					self.setRenderOrder(
-						seq[0].cast<osg::Camera::RenderOrder>(),
-						seq[1].cast<int>()
-					);
+					self.setRenderOrder(order, num);
 				}
 
 				else throw py::value_error("Expected RenderOrder or (RenderOrder, int)");
@@ -143,17 +138,10 @@ void bind_Camera(py::module_& m) {
 					}
 
 					// camera.viewport = (x, y, w, h)
-					if(py::isinstance<py::sequence>(args[0])) {
-						auto seq = args[0].cast<py::sequence>();
+					if(auto vals = pyx::try_unpack_sequence<int, int, int, int>(args[0])) {
+						auto& [x, y, w, h] = *vals;
 
-						if(seq.size() != 4) throw py::value_error("viewport must have 4 elements");
-
-						self.setViewport(
-							seq[0].cast<int>(),
-							seq[1].cast<int>(),
-							seq[2].cast<int>(),
-							seq[3].cast<int>()
-						);
+						self.setViewport(x, y, w, h);
 
 						return;
 					}
@@ -300,15 +288,12 @@ void bind_Camera(py::module_& m) {
 					self.setRenderTargetImplementation(obj.cast<osg::Camera::RenderTargetImplementation>());
 				}
 
-				else if(py::isinstance<py::sequence>(obj)) {
-					auto seq = obj.cast<py::sequence>();
+				else if(auto vals = pyx::try_unpack_sequence<
+					osg::Camera::RenderTargetImplementation, osg::Camera::RenderTargetImplementation
+				>(obj)) {
+					auto& [impl, fallback] = *vals;
 
-					if(seq.size() != 2) throw py::value_error("Expected (impl, fallback)");
-
-					self.setRenderTargetImplementation(
-						seq[0].cast<osg::Camera::RenderTargetImplementation>(),
-						seq[1].cast<osg::Camera::RenderTargetImplementation>()
-					);
+					self.setRenderTargetImplementation(impl, fallback);
 				}
 
 				else throw py::value_error("Expected RenderTargetImplementation or (impl, fallback)");

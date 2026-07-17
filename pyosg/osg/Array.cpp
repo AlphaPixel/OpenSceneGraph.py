@@ -11,6 +11,8 @@ void bind_Array(py::module_& m) {
 		.def_property_readonly("type", &osg::Array::getType)
 		.def_property_readonly("dataSize", &osg::Array::getDataSize)
 		.def_property_readonly("dataType", &osg::Array::getDataType)
+		.def_property("binding", &osg::Array::getBinding, &osg::Array::setBinding)
+		.def_property("normalize", &osg::Array::getNormalize, &osg::Array::setNormalize)
 	;
 
 	py::enum_<osg::Array::Type>(arr, "Type")
@@ -20,6 +22,15 @@ void bind_Array(py::module_& m) {
 		.value("Vec2ArrayType", osg::Array::Vec2ArrayType)
 		.value("Vec3ArrayType", osg::Array::Vec3ArrayType)
 		.value("Vec4ArrayType", osg::Array::Vec4ArrayType)
+	;
+
+	py::enum_<osg::Array::Binding>(arr, "Binding")
+		.value("BIND_UNDEFINED", osg::Array::BIND_UNDEFINED)
+		.value("BIND_OFF", osg::Array::BIND_OFF)
+		.value("BIND_OVERALL", osg::Array::BIND_OVERALL)
+		.value("BIND_PER_PRIMITIVE_SET", osg::Array::BIND_PER_PRIMITIVE_SET)
+		.value("BIND_PER_VERTEX", osg::Array::BIND_PER_VERTEX)
+		.export_values()
 	;
 
 	detail::bind_Array<osg::ByteArray>(m, "ByteArray");

@@ -153,16 +153,14 @@ namespace detail {
 			py::object manip_obj = obj;
 			bool resetPosition = true;
 
-			if(py::isinstance<py::sequence>(obj)) {
-				auto seq = obj.cast<py::sequence>();
-
-				if(seq.size() != 2) throw py::type_error(
-					"Expected CameraManipulator, None, or (manip, resetPosition) pair"
-				);
-
-				manip_obj = seq[0];
-				resetPosition = seq[1].cast<bool>();
+			if(auto vals = pyx::try_unpack_sequence<py::object, bool>(obj)) {
+				manip_obj = std::get<0>(*vals);
+				resetPosition = std::get<1>(*vals);
 			}
+
+			else if(!obj.is_none() && !py::isinstance<osgGA::CameraManipulator>(obj)) throw py::type_error(
+				"Expected CameraManipulator, None, or (manip, resetPosition) pair"
+			);
 
 			auto* manip = manip_obj.is_none() ? nullptr : manip_obj.cast<osgGA::CameraManipulator*>();
 
@@ -223,28 +221,18 @@ void bind(py::module_& m) {
 	// We LEAVE OUT osgGA::GUIActionAdapter here as a base class...
 	auto view = py::class_<osgViewer::View, osg::View, osg::ref_ptr<osgViewer::View>>(m, "View");
 
-	detail::EventHandlersProxy::bind(view, "_EventHandlers");
+	pyx::bind_proxy_property<detail::EventHandlersProxy, osgViewer::View, detail::ViewStorage>(
+		view, "_EventHandlers", "eventHandlers"
+	);
 
 	view
 		.def(py::init<>())
 
-		.def_property_readonly(
-			"eventHandlers",
-			[](osgViewer::View& self) -> detail::EventHandlersProxy& {
-				return detail::ViewStorage::get(self)->template proxy<
-					detail::EventHandlersProxy
-				>();
-			},
-			py::return_value_policy::reference_internal
-		)
-
-		// TODO: Convert to SequenceProxy!
-		.def("addEventHandler", [](osgViewer::View& self, py::object obj) {
-			auto* handler = obj.cast<osgGA::GUIEventHandler*>();
-
-			self.addEventHandler(handler);
-		}, py::keep_alive<1, 2>())
-
+		// No addEventHandler() method binding -- use `.eventHandlers.append(handler)` above
+		// instead (same removal as Geometry.addPrimitiveSet -> `.primitiveSets.append(...)`).
+		// Also a strict capability upgrade, not just a rename: EventHandlersProxy's from_python
+		// already accepts a plain Python callable (wrapping it in CallableGUIEventHandler), which
+		// this method's raw `.cast<GUIEventHandler*>()` never did.
 		.def_property_readonly(
 			"scene",
 			py::overload_cast<>(&osgViewer::View::getScene),

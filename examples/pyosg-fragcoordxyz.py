@@ -456,7 +456,7 @@ if __name__ == "__main__":
 
 	g = osg.Geometry()
 
-	g.addPrimitiveSet(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4))
+	g.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4))
 	g.initialBound = osg.BoundingBox(-1, -1, -1, 1, 1, 1)
 
 	p = osg.Program(name="FragCoord.xyz")

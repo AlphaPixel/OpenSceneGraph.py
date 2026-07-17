@@ -89,9 +89,8 @@ void bind_Geometry(py::module_& m) {
 		.def_property("count", &osg::DrawArrays::getCount, &osg::DrawArrays::setCount)
 	;
 
-	// bool addPrimitiveSet(PrimitiveSet* primitiveset);
 	// virtual void setUseVertexBufferObjects(bool flag);
-	py::class_<osg::Geometry, osg::Drawable, osg::ref_ptr<osg::Geometry>>(m, "Geometry")
+	auto geom = py::class_<osg::Geometry, osg::Drawable, osg::ref_ptr<osg::Geometry>>(m, "Geometry")
 		.def(py::init<>())
 
 		// Properties (new) alongside the old set*Array()/get*Array() method calls (kept for
@@ -126,19 +125,23 @@ void bind_Geometry(py::module_& m) {
 			)
 		)
 
-		// void setVertexAttribArray(unsigned int index, Array* array) { setVertexAttribArray(index, array, osg::Array::BIND_UNDEFINED); }
-		// void setVertexAttribArray(unsigned int index, Array* array, osg::Array::Binding binding);
-		// void setVertexAttribBinding(unsigned int index,AttributeBinding ab);
-		// void setVertexAttribNormalize(unsigned int index,GLboolean norm);
 		// TODO: TexCoordArray should eventually be a pyx::MappingProxy (unit -> Array), like
 		// StateSet.textureAttributes -- deferred, no rush.
-		// TODO: TEMPORARY! (Until I can introduce my new SequenceProxy!
-		.def(
-			"addPrimitiveSet",
-			&osg::Geometry::addPrimitiveSet,
-			py::keep_alive<1, 2>()
-		)
+
+		// No addPrimitiveSet() method binding -- use `.primitiveSets.append(...)` below (the old
+		// method form was removed once the SequenceProxy existed, forcing every call site to
+		// port forward rather than accumulating a second permanent form; unlike vertexArray/
+		// colorArray/normalArray's dual forms above, nothing outside this repo's own Python
+		// examples called it -- osgGLTF's C++ loader calls osg::Geometry::addPrimitiveSet()
+		// directly, not through this binding).
 	;
+
+	pyx::bind_proxy_property<detail::VertexAttribProxy, osg::Geometry, detail::GeometryStorage>(
+		geom, "_VertexAttrib", "vertexAttrib"
+	);
+	pyx::bind_proxy_property<detail::PrimitiveSetsProxy, osg::Geometry, detail::GeometryStorage>(
+		geom, "_PrimitiveSets", "primitiveSets"
+	);
 
 	m
 		.def(

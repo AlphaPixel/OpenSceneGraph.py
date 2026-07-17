@@ -18,7 +18,9 @@ namespace detail {
 void bind_Geode(py::module_& m) {
 	auto geode = py::class_<osg::Geode, osg::Group, osg::ref_ptr<osg::Geode>>(m, "Geode");
 
-	detail::DrawablesProxy::bind(geode, "_Drawables");
+	pyx::bind_proxy_property<detail::DrawablesProxy, osg::Geode, detail::DrawablesStorage>(
+		geode, "_Drawables", "drawables"
+	);
 
 	geode
 		.def(py::init<>())
@@ -29,10 +31,6 @@ void bind_Geode(py::module_& m) {
 
 			return g;
 		}))
-
-		.def_property_readonly("drawables", [](osg::Geode& self) -> detail::DrawablesProxy& {
-			return detail::DrawablesStorage::get(self)->template proxy<detail::DrawablesProxy>();
-		}, py::return_value_policy::reference_internal)
 	;
 }
 

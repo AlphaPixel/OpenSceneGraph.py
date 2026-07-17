@@ -53,7 +53,14 @@ void main(void) {
 
 	// This explicitly recreates legacy FFP point behavior...
 	// float alpha = exp(-r2 * 0.75);
-	float alpha = exp(-r2 * 2.5);
+	float dotGlow = exp(-r2 * 2.5);
+
+	// A thin 360-degree ring around the glow -- pure "bling," proves the point-sprite
+	// footprint can carry more than just the dot without any extra geometry/draw calls.
+	float r = sqrt(r2);
+	float ring = smoothstep(0.12, 0.0, abs(r - 0.85));
+
+	float alpha = max(dotGlow, ring * 0.6);
 
 	color = vec4(vColor.rgb, vColor.a * alpha);
 	// color = vec4(gl_PointCoord, 0.0, 1.0);
@@ -106,7 +113,7 @@ if __name__ == "__main__":
 
 	# TODO: Convert to SequenceProxy!
 	g.vertexArray = a
-	g.addPrimitiveSet(osg.DrawArrays(osg.PrimitiveSet.POINTS, 0, len(a)))
+	g.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.POINTS, 0, len(a)))
 	g.useVertexBufferObjects = True
 
 	r = osg.Geode()

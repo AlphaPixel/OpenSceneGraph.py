@@ -1201,7 +1201,7 @@ if __name__ == "__main__":
 	pending_rebake = [True] # trigger the very first bake once the GL context exists
 	bake_state = {"scene": None, "options": None}
 
-	v.addEventHandler(RebakeKeyHandler(pending_rebake))
+	v.eventHandlers.append(RebakeKeyHandler(pending_rebake))
 
 	print(f"[dynamicprobes] mode={args.mode!r} -- press 'r' to repaint the 6 cube faces", flush=True)
 

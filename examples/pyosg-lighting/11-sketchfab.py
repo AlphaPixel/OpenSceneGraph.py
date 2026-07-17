@@ -1783,7 +1783,7 @@ def create_light_gizmo(bound_center, bound_radius, light_dir_u, light_color_u):
 	# LightGizmoCallback.__call__), not replaced wholesale.
 	line_geom = osg.Geometry()
 	line_geom.vertexArray = osg.Vec3Array([bound_center, bound_center])
-	line_geom.addPrimitiveSet(osg.DrawArrays(osg.PrimitiveSet.LINES, 0, 2))
+	line_geom.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.LINES, 0, 2))
 	line_geom.useVertexBufferObjects = True
 	line_geode = osg.Geode()
 	line_geode.drawables.append(line_geom)
@@ -2410,12 +2410,12 @@ if __name__ == "__main__":
 		shadow_matrix_u.value = osg.Matrixf(shadow_mat)
 
 	shadow_cam.preDrawCallback = update_uniforms
-	v.addEventHandler(VisualizeModeHandler(visualize_mode_u))
-	v.addEventHandler(PostEnabledHandler(post_enabled_u))
+	v.eventHandlers.append(VisualizeModeHandler(visualize_mode_u))
+	v.eventHandlers.append(PostEnabledHandler(post_enabled_u))
 	light_orbit_handler = LightOrbitHandler(light_dir_u, bound_radius)
 	ibl_intensity_handler = IBLIntensityHandler(ibl_diffuse_intensity_u, ibl_specular_intensity_u)
-	v.addEventHandler(light_orbit_handler)
-	v.addEventHandler(ibl_intensity_handler)
+	v.eventHandlers.append(light_orbit_handler)
+	v.eventHandlers.append(ibl_intensity_handler)
 
 	# --- ImGui panel: the same IBL/light knobs as the i/I s/S d/D r/R z/Z keys, ---
 	# --- exposed as sliders (osgDebug.imgui.Widget -- see osgdebug's TODO.md's ---

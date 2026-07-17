@@ -94,25 +94,37 @@ void bind_Texture(py::module_& m) {
 					self.setWrap(osg::Texture::WrapParameter::WRAP_R, v);
 				}
 
-				else {
-					auto seq = obj.cast<py::sequence>();
-					auto n = seq.size();
+				// Variable arity (1-3 elements, S/T/R in order): tried largest-first via exact-arity
+				// unpacks rather than a single cascading `if(n >= k)` -- each branch below is now
+				// also immune to the "string happens to satisfy isinstance<sequence>" trap (see
+				// `pyx::try_unpack_sequence`), which the old cascade (an unconditional
+				// `obj.cast<py::sequence>()` with no isinstance guard at all) was not.
+				else if(auto vals3 = pyx::try_unpack_sequence<
+					osg::Texture::WrapMode, osg::Texture::WrapMode, osg::Texture::WrapMode
+				>(obj)) {
+					auto& [s, t, r] = *vals3;
 
-					if(n >= 1) self.setWrap(
-						osg::Texture::WrapParameter::WRAP_S,
-						seq[0].cast<osg::Texture::WrapMode>()
-					);
-
-					if(n >= 2) self.setWrap(
-						osg::Texture::WrapParameter::WRAP_T,
-						seq[1].cast<osg::Texture::WrapMode>()
-					);
-
-					if(n >= 3) self.setWrap(
-						osg::Texture::WrapParameter::WRAP_R,
-						seq[2].cast<osg::Texture::WrapMode>()
-					);
+					self.setWrap(osg::Texture::WrapParameter::WRAP_S, s);
+					self.setWrap(osg::Texture::WrapParameter::WRAP_T, t);
+					self.setWrap(osg::Texture::WrapParameter::WRAP_R, r);
 				}
+
+				else if(auto vals2 = pyx::try_unpack_sequence<
+					osg::Texture::WrapMode, osg::Texture::WrapMode
+				>(obj)) {
+					auto& [s, t] = *vals2;
+
+					self.setWrap(osg::Texture::WrapParameter::WRAP_S, s);
+					self.setWrap(osg::Texture::WrapParameter::WRAP_T, t);
+				}
+
+				else if(auto vals1 = pyx::try_unpack_sequence<osg::Texture::WrapMode>(obj)) {
+					self.setWrap(osg::Texture::WrapParameter::WRAP_S, std::get<0>(*vals1));
+				}
+
+				else throw py::type_error(
+					"Expected WrapMode or sequence of 1-3 WrapMode values (S, T, R)"
+				);
 			}
 		)
 		.def_property(
@@ -140,20 +152,24 @@ void bind_Texture(py::module_& m) {
 					self.setFilter(osg::Texture::FilterParameter::MAG_FILTER, mag);
 				}
 
-				else {
-					auto seq = obj.cast<py::sequence>();
-					auto n = seq.size();
+				// Variable arity (1-2 elements, MIN/MAG in order) -- same chained exact-arity
+				// approach as `wrap` above.
+				else if(auto vals2 = pyx::try_unpack_sequence<
+					osg::Texture::FilterMode, osg::Texture::FilterMode
+				>(obj)) {
+					auto& [min, mag] = *vals2;
 
-					if(n >= 1) self.setFilter(
-						osg::Texture::FilterParameter::MIN_FILTER,
-						seq[0].cast<osg::Texture::FilterMode>()
-					);
-
-					if(n >= 2) self.setFilter(
-						osg::Texture::FilterParameter::MAG_FILTER,
-						seq[1].cast<osg::Texture::FilterMode>()
-					);
+					self.setFilter(osg::Texture::FilterParameter::MIN_FILTER, min);
+					self.setFilter(osg::Texture::FilterParameter::MAG_FILTER, mag);
 				}
+
+				else if(auto vals1 = pyx::try_unpack_sequence<osg::Texture::FilterMode>(obj)) {
+					self.setFilter(osg::Texture::FilterParameter::MIN_FILTER, std::get<0>(*vals1));
+				}
+
+				else throw py::type_error(
+					"Expected FilterMode or sequence of 1-2 FilterMode values (MIN, MAG)"
+				);
 			}
 		)
 		.def_property(
@@ -196,17 +212,17 @@ void bind_Texture(py::module_& m) {
 					self.setImage(face, data);
 				}, py::keep_alive<1, 2>() */
 				[](osg::Texture& self, py::object obj) {
-					auto seq = obj.cast<py::sequence>();
-					auto n = seq.size();
+					if(auto vals = pyx::try_unpack_sequence<unsigned int, osg::Image*>(obj)) {
+						auto& [face, img] = *vals;
 
-					if(n == 1) self.setImage(0, seq[0].cast<osg::Image*>());
+						self.setImage(face, img);
+					}
 
-					else if(n == 2) self.setImage(
-						seq[0].cast<unsigned int>(),
-						seq[1].cast<osg::Image*>()
-					);
+					else if(auto val = pyx::try_unpack_sequence<osg::Image*>(obj)) {
+						self.setImage(0, std::get<0>(*val));
+					}
 
-					else throw py::value_error("Image or face/Image required");
+					else throw py::value_error("Image or (face, Image) required");
 				}
 			)
 		)
@@ -274,11 +290,13 @@ void bind_Texture(py::module_& m) {
 				return py::make_tuple(self.getTextureWidth(), self.getTextureHeight());
 			},
 			[](osg::Texture2D& self, py::object obj) {
-				auto seq = obj.cast<py::sequence>();
+				auto vals = pyx::try_unpack_sequence<int, int>(obj);
 
-				if(seq.size() != 2) throw py::value_error("size requires width/height");
+				if(!vals) throw py::value_error("size requires (width, height)");
 
-				self.setTextureSize(seq[0].cast<int>(), seq[1].cast<int>());
+				auto& [width, height] = *vals;
+
+				self.setTextureSize(width, height);
 			}
 		)
 		.def("apply", &osg::Texture2D::apply)

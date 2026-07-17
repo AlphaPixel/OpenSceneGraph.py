@@ -2,12 +2,14 @@
 
 // One-line summaries of what you'll find in this file:
 //
+// try_unpack_sequence -> "Try to unpack a py::object as an exact-length tuple of specific types."
 // SlotCache -> "Don't recreate Python objects unless the underlying pointer changed."
 // ProxyStorage -> "Attach all Python views to the lifetime of the C++ object."
 // PropertySlots -> "Make fields behave like stable Python attributes."
 // SequenceProxy -> "Turn arbitrary C++ containers into Python lists."
 // MappingProxy -> "Turn arbitrary C++ containers into Python dicts."
 // Traits -> "Define behavior once, reuse everywhere."
+// bind_proxy_property -> "Wire a Sequence/Mapping/ValueMapping proxy onto its owner in one call."
 // build_info -> Injects "common" Python compiler information, merged with a user-defined dict
 // StopEvent -> "Cooperative cancellation flag shared between a Python task and a C++ background thread."
 // put_nowait -> "Thread-safe: push a message onto an asyncio.Queue from any thread via call_soon_threadsafe."
@@ -20,6 +22,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <optional>
+#include <tuple>
+#include <utility>
 
 namespace py = pybind11;
 
@@ -47,6 +52,49 @@ auto n_index(size_t size, py::ssize_t index) {
 	);
 
 	return static_cast<R>(index);
+}
+
+namespace detail {
+	// The actual cast attempt, split out so the index pack (`Is...`) can be built from `Ts...`
+	// via `index_sequence_for` -- expanding `seq[Is].cast<Ts>()` directly keeps each index tied
+	// to its own compile-time constant, unlike a runtime counter (e.g. `seq[i++]`), which would
+	// have unspecified evaluation order across pack elements.
+	template<typename... Ts, size_t... Is>
+	std::optional<std::tuple<Ts...>> try_unpack_sequence_impl(
+		const py::sequence& seq,
+		std::index_sequence<Is...>
+	) {
+		try {
+			return std::make_tuple(seq[Is].template cast<Ts>()...);
+		}
+
+		catch(const py::cast_error&) {
+			return std::nullopt;
+		}
+	}
+}
+
+// Attempts to unpack `obj` as an exact-length sequence of `sizeof...(Ts)` elements, casting
+// element `i` to `Ts...[i]`. Returns `std::nullopt` -- never throws -- if `obj` isn't
+// sequence-like, is a `str`/`bytes` (both satisfy `py::isinstance<py::sequence>`, but are never
+// what's meant by "a tuple of values" at any of this helper's call sites), doesn't have exactly
+// `sizeof...(Ts)` elements, or any element fails to cast to its corresponding type. Folding EVERY
+// failure mode into one `nullopt` (rather than letting a mismatched element type raise its own
+// raw pybind cast error) means the caller's single fallback `throw` after trying this is reliably
+// the error the user sees.
+//
+// For a setter that accepts a variable number of elements (e.g. 1-3), call this once per exact
+// arity, largest first -- there is deliberately no separate variadic/min-max variant.
+template<typename... Ts>
+std::optional<std::tuple<Ts...>> try_unpack_sequence(const py::object& obj) {
+	if(py::isinstance<py::str>(obj) || py::isinstance<py::bytes>(obj)) return std::nullopt;
+	if(!py::isinstance<py::sequence>(obj)) return std::nullopt;
+
+	auto seq = obj.cast<py::sequence>();
+
+	if(seq.size() != sizeof...(Ts)) return std::nullopt;
+
+	return detail::try_unpack_sequence_impl<Ts...>(seq, std::index_sequence_for<Ts...>{});
 }
 
 // A single cache entry that ties a C++ pointer identity to a stable Python object wrapper. If the
@@ -1024,6 +1072,26 @@ struct PYOBJECT_INTERNAL ValueMappingProxy {
 		return mp;
 	}
 };
+
+// Wires a Sequence/Mapping/ValueMapping-style proxy onto its owning class in one call: binds the
+// proxy's own (internal, `_`-prefixed by convention) Python type via `Proxy::bind()`, then exposes
+// it as a read-only property that returns the per-object proxy instance out of `Storage`. This is
+// the exact `Proxy::bind(cls, "_Name"); cls.def_property_readonly("name", [](Owner& self) -> Proxy&
+// { return Storage::get(self)->template proxy<Proxy>(); }, py::return_value_policy::reference_
+// internal);` pair that was previously hand-written at every proxy call site (Program.shaders/
+// .bindAttribLocation/.bindFragDataLocation/.bindUniformBlock, StateSet.uniforms/.textureAttributes)
+// -- `Proxy` can be any of `SequenceProxy`/`MappingProxy`/`ValueMappingProxy`, they all expose the
+// same `::bind(py::handle, const char*)` static method this relies on.
+template<typename Proxy, typename Owner, typename Storage, typename PyClass>
+PyClass& bind_proxy_property(PyClass& cls, const char* internal_name, const char* property_name) {
+	Proxy::bind(cls, internal_name);
+
+	cls.def_property_readonly(property_name, [](Owner& self) -> Proxy& {
+		return Storage::get(self)->template proxy<Proxy>();
+	}, py::return_value_policy::reference_internal);
+
+	return cls;
+}
 
 inline void build_info(py::module_ m, py::dict info) {
 	m.def("build_info", [info]() {

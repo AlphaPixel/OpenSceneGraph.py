@@ -51,7 +51,7 @@ void main() {
 	// A smidge of padding...
 	pos *= 1.2;
 
-	gl_Position = gl_ModelViewProjectionMatrix * vec4(pos + v, 0.0, 1.0);
+	gl_Position = gl_ModelViewProjectionMatrix * vec4(pos.x + v.x, 0.0, pos.y + v.y, 1.0);
 }
 """
 
@@ -70,10 +70,10 @@ if __name__ == "__main__":
 	g = osg.Geometry()
 
 	# TODO: Convert to SequenceProxy!
-	# g.addPrimitiveSet(osg.DrawArrays(GL_TRIANGLE_FAN, 0, 4, 16 * 16))
-	g.addPrimitiveSet(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4, 16 * 16))
+	# g.primitiveSets.append(osg.DrawArrays(GL_TRIANGLE_FAN, 0, 4, 16 * 16))
+	g.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4, 16 * 16))
 
-	g.initialBound = osg.BoundingBox(-10, -10, -1, 10, 10, 1)
+	g.initialBound = osg.BoundingBox(-10, -1, -10, 10, 1, 10)
 	# g.useVertexBufferObjects = True
 
 	p = osg.Program(name="gl_InstanceID_DEMO", shaders=(

@@ -414,7 +414,7 @@ if __name__ == "__main__":
 	v.sceneData = r
 	v.cameraManipulator = osgGA.TrackballManipulator()
 	v.camera.preDrawCallback = update_uniforms
-	v.addEventHandler(VisualizeModeHandler(visualize_mode_u))
+	v.eventHandlers.append(VisualizeModeHandler(visualize_mode_u))
 
 	print("Press 1=color 2=depth 3=normal 0=lit composite (default)", flush=True)
 

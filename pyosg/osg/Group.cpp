@@ -18,7 +18,9 @@ namespace detail {
 void bind_Group(py::module_& m) {
 	auto group = py::class_<osg::Group, osg::Node, osg::ref_ptr<osg::Group>>(m, "Group");
 
-	detail::ChildrenProxy::bind(group, "_Children");
+	pyx::bind_proxy_property<detail::ChildrenProxy, osg::Group, detail::ChildrenStorage>(
+		group, "_Children", "children"
+	);
 
 	group
 		.def(py::init<>())
@@ -29,9 +31,6 @@ void bind_Group(py::module_& m) {
 
 			return g;
 		}))
-		.def_property_readonly("children", [](osg::Group& self) -> detail::ChildrenProxy& {
-			return detail::ChildrenStorage::get(self)->template proxy<detail::ChildrenProxy>();
-		}, py::return_value_policy::reference_internal)
 
 		.def_static("test_cpp", []() {
 			auto* g = new osg::Group();

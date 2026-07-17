@@ -32,51 +32,20 @@ void bind_Program(py::module_& m) {
 		}))
 	;
 
-	detail::ShadersProxy::bind(program, "_Shaders");
-	detail::BindAttribLocationProxy::bind(program, "_BindAttribLocation");
-	detail::BindFragDataLocationProxy::bind(program, "_BindFragDataLocation");
-	detail::BindUniformBlockProxy::bind(program, "_BindUniformBlock");
-
-	program
-		/* .def("addShader", [](osg::Program& self, osg::Shader* shader) {
-			return self.addShader(shader);
-		}, "shader"_a, py::keep_alive<1, 2>())
-		.def_property_readonly("shaders", [](osg::Program& self) {
-			return detail::ShadersProxy(&self);
-		}) */
-
-		.def_property_readonly("shaders", [](osg::Program& self) -> detail::ShadersProxy& {
-			return detail::ProgramStorage::get(self)->template proxy<detail::ShadersProxy>();
-		}, py::return_value_policy::reference_internal)
-
-		.def_property_readonly(
-			"bindAttribLocation",
-			[](osg::Program& self) -> detail::BindAttribLocationProxy& {
-				return detail::ProgramStorage::get(self)->template proxy<
-					detail::BindAttribLocationProxy
-				>();
-			},
-			py::return_value_policy::reference_internal
-		)
-		.def_property_readonly(
-			"bindFragDataLocation",
-			[](osg::Program& self) -> detail::BindFragDataLocationProxy& {
-				return detail::ProgramStorage::get(self)->template proxy<
-					detail::BindFragDataLocationProxy
-				>();
-			},
-			py::return_value_policy::reference_internal
-		)
-		.def_property_readonly(
-			"bindUniformBlock",
-			[](osg::Program& self) -> detail::BindUniformBlockProxy& {
-				return detail::ProgramStorage::get(self)->template proxy<
-					detail::BindUniformBlockProxy
-				>();
-			},
-			py::return_value_policy::reference_internal
-		)
-	;
+	// Shaders can be added via `.shaders.append(shader)` (SequenceProxy, below) -- no need for a
+	// dedicated addShader() method.
+	pyx::bind_proxy_property<detail::ShadersProxy, osg::Program, detail::ProgramStorage>(
+		program, "_Shaders", "shaders"
+	);
+	pyx::bind_proxy_property<
+		detail::BindAttribLocationProxy, osg::Program, detail::ProgramStorage
+	>(program, "_BindAttribLocation", "bindAttribLocation");
+	pyx::bind_proxy_property<
+		detail::BindFragDataLocationProxy, osg::Program, detail::ProgramStorage
+	>(program, "_BindFragDataLocation", "bindFragDataLocation");
+	pyx::bind_proxy_property<
+		detail::BindUniformBlockProxy, osg::Program, detail::ProgramStorage
+	>(program, "_BindUniformBlock", "bindUniformBlock");
 }
 
 }

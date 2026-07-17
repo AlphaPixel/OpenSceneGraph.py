@@ -27,6 +27,7 @@
 # Type `exit` or Ctrl-D to leave the REPL and close the viewer.
 
 import os
+import sys
 
 os.environ.update({
 	"OSG_WINDOW": "50 50 800 600",
@@ -34,6 +35,8 @@ os.environ.update({
 })
 
 import asyncio
+import math
+import time
 import traceback
 
 from aipython.integration import MainLoopController, drive
@@ -66,6 +69,151 @@ class REPLCameraManipulator(osgGA.CameraManipulator):
 
 	def setByInverseMatrix(self, m):
 		self._matrix = osg.Matrix.inverse(m)
+
+class CinematicOrbitManipulator(osgGA.CameraManipulator):
+	"""Algorithmically-driven "camera drone" orbit around the loaded model.
+
+	Unlike REPLCameraManipulator above (a passive matrix box you pose by hand),
+	this one poses itself: getMatrix()/getInverseMatrix() are computed on every
+	call from wall-clock time, so there's nothing to step or drive from the REPL
+	loop -- just assign it and watch.
+
+	Two out-of-phase sinusoids drive azimuth (constant spin) and elevation (bob
+	above/below a base pitch); a third drives a zoom "breathe" whose far point is
+	clamped, every frame, to whatever distance keeps the model's bounding sphere
+	at *least* `min_screen_fraction` of the smaller screen dimension -- so it can
+	never drift out to a speck regardless of model size or window shape. The
+	look-at point is always the model's own bounding-sphere center: it never
+	drifts, so the model stays framed dead-center throughout. Assumes a Z-up
+	scene, matching OSG's default and the up-axis correction OSG's own loaders
+	(glTF, etc.) already apply.
+
+	Needs the live camera (not just its projection matrix at construction time)
+	because the projection changes on window resize and the framing constraint
+	has to track that.
+
+	Overrides setNode()/getNode() to store the scene node into self._node, and
+	home() to (re)compute the bounding sphere from it -- both of these used to
+	be broken in the pybind11 bindings (CameraManipulator's trampoline didn't
+	intercept setNode()/getNode() at all, so a Python override of either was
+	silently never called; and home()'s two-argument overload crashed trying
+	to copy a non-copyable GUIEventAdapter when forwarding to a Python
+	override). Both are fixed now, so this no longer needs the
+	node-as-constructor-argument workaround an earlier version of this class
+	used. Note the trampoline fix only makes overriding setNode()/getNode()
+	*possible* -- it doesn't give a subclass free storage for free; a
+	subclass that doesn't override them still gets the C++ base class's
+	no-op defaults, same as any plain C++ CameraManipulator subclass would.
+
+	Try it live from the aipython REPL:
+
+		viewer.cameraManipulator = CinematicOrbitManipulator(viewer.camera)
+	"""
+
+	def __init__(
+		self,
+		camera,
+		azimuth_speed=0.3,
+		elevation_speed=0.45,
+		elevation_center=0.3,
+		elevation_amplitude=0.6,
+		distance_speed=0.35,
+		distance_min_fraction=0.6,
+		min_screen_fraction=0.5,
+	):
+		super().__init__()
+
+		self.camera = camera
+		self.azimuth_speed = azimuth_speed
+		self.elevation_speed = elevation_speed
+		self.elevation_center = elevation_center
+		self.elevation_amplitude = elevation_amplitude
+		self.distance_speed = distance_speed
+		self.distance_min_fraction = distance_min_fraction
+		self.min_screen_fraction = min_screen_fraction
+
+		self._node = None
+		self._start = time.monotonic()
+		self._center = osg.Vec3d(0, 0, 0)
+		self._radius = 1.0
+
+	def setNode(self, node):
+		self._node = node
+
+	def getNode(self):
+		return self._node
+
+	def home(self, *args):
+		# Called by View.setCameraManipulator(..., resetPosition=True) -- i.e. as
+		# soon as `viewer.cameraManipulator = self` runs -- with self._node
+		# already populated (setNode() always runs first), so the model's real
+		# size/position is available here rather than needing to be guessed at
+		# construction time.
+		bound = self._node.bound if self._node is not None else None
+
+		if bound is not None and bound.valid():
+			self._center = osg.Vec3d(bound.center)
+			self._radius = max(bound.radius, 1e-3)
+		else:
+			self._center = osg.Vec3d(0, 0, 0)
+			self._radius = 1.0
+
+		self._start = time.monotonic()
+
+	def _max_distance(self):
+		# The bounding sphere's angular radius as seen from distance d is
+		# asin(radius / d); solving for the distance at which its angular
+		# *diameter* equals min_screen_fraction of a given axis' FOV gives the
+		# farthest the camera can sit and still satisfy that axis. The axis
+		# with the larger FOV is the binding (smaller-max-distance) one, so
+		# using max(fovy, fovx) here guarantees the floor holds on both axes.
+		fovy_deg, aspect, _near, _far = self.camera.projectionMatrix.getPerspective()
+
+		fovy_rad = math.radians(fovy_deg)
+		fovx_rad = 2.0 * math.atan(aspect * math.tan(fovy_rad * 0.5))
+		limiting_fov = max(fovy_rad, fovx_rad)
+
+		return self._radius / math.sin(0.5 * self.min_screen_fraction * limiting_fov)
+
+	def _pose(self):
+		t = time.monotonic() - self._start
+
+		azimuth = t * self.azimuth_speed
+		elevation = self.elevation_center + self.elevation_amplitude * math.sin(
+			t * self.elevation_speed
+		)
+
+		max_distance = self._max_distance()
+		zoom_t = 0.5 + 0.5 * math.sin(t * self.distance_speed)
+		distance = max_distance * (1.0 - (1.0 - self.distance_min_fraction) * zoom_t)
+
+		cos_el = math.cos(elevation)
+
+		offset = osg.Vec3d(
+			math.cos(azimuth) * cos_el,
+			math.sin(azimuth) * cos_el,
+			math.sin(elevation),
+		) * distance
+
+		eye = self._center + offset
+
+		return eye, self._center, osg.Vec3d(0, 0, 1)
+
+	def getMatrix(self):
+		eye, center, up = self._pose()
+
+		return osg.Matrix.inverse(osg.Matrix.lookAt(eye, center, up))
+
+	def setByMatrix(self, m):
+		pass
+
+	def getInverseMatrix(self):
+		eye, center, up = self._pose()
+
+		return osg.Matrix.lookAt(eye, center, up)
+
+	def setByInverseMatrix(self, m):
+		pass
 
 # --------------------------------------------------------------------------- #
 # Gathered reusable implementation
@@ -134,17 +282,22 @@ class CaptureQueueCallback(osg.Camera.DrawCallback):
 			raise RuntimeError("capture camera has no valid viewport")
 
 		image = osg.Image()
+
 		image.readPixels(
 			int(vp.x), int(vp.y), int(vp.width), int(vp.height),
 			GL_RGB, GL_UNSIGNED_BYTE,
 		)
+
 		return image
 
 	@staticmethod
 	def _read_texture(ri, texture, data_type):
 		texture.apply(ri.state)
+
 		image = osg.Image()
+
 		image.readImageFromCurrentTexture(ri.contextID, False, data_type)
+
 		return image
 
 
@@ -231,9 +384,11 @@ def repl(viewer, namespace=None, frame_callback=None):
 
 	if namespace is None:
 		namespace = {}
+
 	controller = ViewerREPLController(viewer, frame_callback)
 	namespace["_osg_repl_controller"] = controller
 	namespace["_osg_repl_state"] = controller.state
+
 	return drive(controller=controller, namespace=namespace)
 
 # --------------------------------------------------------------------------- #
@@ -242,15 +397,20 @@ def repl(viewer, namespace=None, frame_callback=None):
 if __name__ == "__main__":
 	viewer = osgViewer.Viewer()
 
-	scene = osg.Geode()
-	sphere = osg.ShapeDrawable(osg.Sphere(osg.Vec3(), 1.0))
+	if len(sys.argv) <= 1:
+		scene = osg.Geode()
+		sphere = osg.ShapeDrawable(osg.Sphere(osg.Vec3(), 1.0))
 
-	scene.drawables.append(sphere)
+		scene.drawables.append(sphere)
+
+	else:
+		scene = osgDB.readNodeFile(sys.argv[1])
 
 	viewer.sceneData = scene
 	viewer.cameraManipulator = osgGA.TrackballManipulator()
 	# viewer.cameraManipulator = REPLCameraManipulator()
-	viewer.addEventHandler(DebugHandler())
+	# viewer.cameraManipulator = CinematicOrbitManipulator(viewer.camera)
+	viewer.eventHandlers.append(DebugHandler())
 
 	# globals() is intentional for this proof: it makes `viewer`, `scene`, `sphere`,
 	# osg/osgGA/osgViewer, asyncio, and the helper itself available at the prompt.

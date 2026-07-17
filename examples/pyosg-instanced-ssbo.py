@@ -46,7 +46,7 @@ VERTEX_SHADER = """
 
 		instanceID = gl_InstanceID;
 
-		gl_Position = gl_ModelViewProjectionMatrix * vec4(pos + v, 0.0, 1.0);
+		gl_Position = gl_ModelViewProjectionMatrix * vec4(pos.x + v.x, 0.0, pos.y + v.y, 1.0);
 	}
 """ % GRID_SIZE
 
@@ -86,9 +86,9 @@ if __name__ == "__main__":
 	g = osg.Geometry()
 
 	# TODO: Convert to SequenceProxy!
-	g.addPrimitiveSet(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4, NUM_INSTANCES))
+	g.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4, NUM_INSTANCES))
 
-	g.initialBound = osg.BoundingBox(-10, -10, -1, 10, 10, 1)
+	g.initialBound = osg.BoundingBox(-10, -1, -10, 10, 1, 10)
 	# g.useVertexBufferObjects = True
 
 	p = osg.Program(name="gl_InstanceID_SSBO_DEMO", shaders=(

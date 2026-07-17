@@ -172,21 +172,15 @@ void bind(py::module_& m) {
 				return py::make_tuple(eye, center, up);
 			}),
 			py::cpp_function([](osgGA::CameraManipulator& self, py::object obj) {
-				if(!py::isinstance<py::sequence>(obj)) throw py::type_error(
-					"Expected (eye, center, up) Vec3d sequence"
-				);
+				auto vals = pyx::try_unpack_sequence<osg::Vec3d, osg::Vec3d, osg::Vec3d>(obj);
 
-				auto seq = obj.cast<py::sequence>();
-
-				if(seq.size() != 3) throw py::type_error(
+				if(!vals) throw py::type_error(
 					"Expected Vec3d sequence of length 3 (eye, center, up)"
 				);
 
-				self.setHomePosition(
-					seq[0].cast<osg::Vec3d>(),
-					seq[1].cast<osg::Vec3d>(),
-					seq[2].cast<osg::Vec3d>()
-				);
+				auto& [eye, center, up] = *vals;
+
+				self.setHomePosition(eye, center, up);
 			})
 		)
 		.def_property(
