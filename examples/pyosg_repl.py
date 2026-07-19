@@ -29,10 +29,16 @@
 import os
 import sys
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-})
+# setdefault(), not update() -- this module is imported by other examples
+# (11-sketchfab.py, 99-repl.py, etc.) that configure their own OSG_WINDOW/
+# OSG_THREADING before importing pyosg_repl for its repl() helper. update()
+# here would silently clobber whatever the caller already set, since this
+# import (inside the caller's `if args.repl:` branch) runs well before
+# viewer.realize() actually reads the env var on the first frame(). Only
+# fill these in for pyosg_repl.py's own standalone `__main__` use below,
+# where nothing else has set them yet.
+os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
+os.environ.setdefault("OSG_THREADING", "SingleThreaded")
 
 import asyncio
 import math

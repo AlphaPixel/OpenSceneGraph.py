@@ -30,7 +30,7 @@
 #                                      9 gPosition
 # bloom_threshold_cam:                 0 hdrColorTex
 # bloom_blur_h_cam / bloom_blur_v_cam: 0 inputTex
-# final_cam:                           0 hdrColorTex 1 bloomTex
+# final_cam:                           0 hdrColorTex 1 bloomTex 2 aoTex
 
 import sys
 import os
@@ -39,8 +39,10 @@ import argparse
 import asyncio
 import pathlib
 
+W, H = 1024, 768
+
 os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
+	"OSG_WINDOW": f"50 50 {W} {H}",
 	"OSG_THREADING": "SingleThreaded",
 	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
 	"OSG_GL_VERSION": "4.6",
@@ -54,8 +56,6 @@ from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
 import osgDebug
-
-W, H = 800, 600
 
 # --------------------------------------------------------------------------- #
 # Configuration
@@ -286,6 +286,17 @@ layout(location = 4) out vec4 outPosition; // gPosition (actual view-space posit
 // -- see 09-ibl.py for why (glTF's TANGENT accessor is frequently absent).
 vec3 getShadingNormal() {
 	vec3 Nb = normalize(vNGeom);
+
+	// glTF doubleSided materials (thin single-sided sheets like capes/cloth with
+	// no back geometry) rely on the renderer negating the normal on back-facing
+	// fragments -- osgGLTF's loader disables backface culling per-material for
+	// these (see GLTFReader.hpp's applyMaterial()), so those fragments DO reach
+	// here now; without this flip they'd light as if facing away from the
+	// camera/light on every back-facing triangle. No-op for ordinary single-sided
+	// materials: culling stays enabled for those, so gl_FrontFacing is always
+	// true and this branch never fires.
+	if (!gl_FrontFacing) Nb = -Nb;
+
 	if (!bool(osgGLTF_material.hasNormalMap)) return Nb;
 
 	vec3 tangentNormal = texture(osgGLTF_textures.normal, vUV).rgb * 2.0 - 1.0;
@@ -1053,15 +1064,21 @@ FINAL_FRAGMENT_SHADER = """
 
 uniform sampler2D hdrColorTex; // unit 0
 uniform sampler2D bloomTex;    // unit 1
+uniform sampler2D aoTex;       // unit 2: same blurred SSAO composite_cam already reads
 
 uniform int visualizeMode;
 uniform bool postEnabled;
 
+uniform int tonemapMode; // 0=PBR Neutral 1=ACES(Narkowicz) 2=Reinhard 3=None(clamped linear)
+uniform float exposure; // stops (EV); multiplies linear HDR as exp2(exposure) before tonemap
 uniform float bloomStrength;
 uniform float caStrength;
 uniform float sharpenStrength;
 uniform float vignetteStrength;
 uniform float grainStrength;
+uniform float grainSize;      // pixels per grain cell; 1.0 = original per-pixel noise
+uniform bool grainAnimated;   // false = same noise pattern every frame (no osg_SimulationTime)
+uniform float grainAOBoost;   // 0 = grain everywhere equally; 1 = grain only where aoTex is dark
 uniform float colorLift;
 uniform float colorGamma;
 uniform float colorGain;
@@ -1089,6 +1106,28 @@ vec3 tonemapPBRNeutral(vec3 color) {
 		color = mix(color, vec3(newPeak), g);
 	}
 	return clamp(color, 0.0, 1.0);
+}
+
+// Narkowicz 2015 fit to the ACES reference rendering transform -- the common
+// "ACES-style" filmic curve most game engines actually ship (the real ACES
+// RRT+ODT is a 3D LUT, not a closed-form curve). More contrast/saturation
+// falloff in the highlights than PBR Neutral, which is the point of comparing
+// them side by side.
+vec3 tonemapACES(vec3 x) {
+	const float a = 2.51;
+	const float b = 0.03;
+	const float c = 2.43;
+	const float d = 0.59;
+	const float e = 0.14;
+
+	return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+// Simple Reinhard (x / (1+x)) -- the baseline every other curve gets judged
+// against: cheapest possible highlight rolloff, no contrast shaping, desaturates
+// less gracefully than either of the above at high intensities.
+vec3 tonemapReinhard(vec3 x) {
+	return x / (1.0 + x);
 }
 
 void main() {
@@ -1130,7 +1169,17 @@ void main() {
 		hdr = texture(hdrColorTex, vUV).rgb;
 	}
 
-	vec3 color = tonemapPBRNeutral(hdr);
+	// Exposure applies regardless of postEnabled -- it's a core linear-HDR-to-
+	// tonemap step, not a stylistic extra like CA/sharpen/vignette/grain below.
+	hdr *= exp2(exposure);
+
+	vec3 color;
+
+	if (tonemapMode == 1) color = tonemapACES(hdr);
+	else if (tonemapMode == 2) color = tonemapReinhard(hdr);
+	else if (tonemapMode == 3) color = clamp(hdr, 0.0, 1.0);
+	else color = tonemapPBRNeutral(hdr);
+
 	color = pow(color, vec3(1.0 / 2.2));
 
 	if (postEnabled) {
@@ -1143,8 +1192,22 @@ void main() {
 		float vig = smoothstep(0.8, 0.2, d);
 		color *= mix(1.0 - vignetteStrength, 1.0, vig);
 
-		float g = fract(sin(dot(gl_FragCoord.xy + osg_SimulationTime, vec2(12.9898, 78.233))) * 43758.5453);
-		color += (g - 0.5) * grainStrength;
+		// floor()'d to a coarser cell before hashing, so grainSize > 1 gives chunkier
+		// "kernels" instead of scaling the noise's own frequency content -- same trick
+		// as the sharpen/blur taps above, just quantizing position instead of blurring.
+		vec2 grainCell = floor(gl_FragCoord.xy / max(grainSize, 1.0));
+
+		if (grainAnimated) grainCell += osg_SimulationTime;
+
+		float g = fract(sin(dot(grainCell, vec2(12.9898, 78.233))) * 43758.5453);
+
+		// aoTex is 1.0 = unoccluded, lower = darker/more-occluded (see the SSAO pass's
+		// own `1.0 - occlusion` output) -- mix() from "everywhere" to "only where dark"
+		// lets grainAOBoost=0 reproduce the original uniform grain exactly, and ramps
+		// toward concentrating it in AO crevices as it increases.
+		float aoMask = mix(1.0, 1.0 - texture(aoTex, vUV).r, grainAOBoost);
+
+		color += (g - 0.5) * grainStrength * aoMask;
 	}
 
 	fragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
@@ -1227,7 +1290,7 @@ def make_brdf_lut(lut_size=512):
 # view/projection every frame during its PRE_RENDER traversal, same as pyosg-mrt.py's
 # gbuffer camera -- that's what keeps eye-space consistent between here and the composite
 # pass's depth-reconstructed eyePos.
-def create_gbuffer_camera(w=W, h=H):
+def create_gbuffer_camera(w=W, h=H, msaa_samples=0):
 	albedo_tex = osg.Texture2D()
 	albedo_tex.size = (w, h)
 	albedo_tex.internalFormat = GL_RGBA
@@ -1276,12 +1339,18 @@ def create_gbuffer_camera(w=W, h=H):
 	cam.viewport = osg.Viewport(0, 0, w, h)
 	cam.name = "G-Buffer Camera"
 
-	cam.attach(osg.Camera.COLOR_BUFFER0, albedo_tex)
-	cam.attach(osg.Camera.COLOR_BUFFER1, normal_tex)
-	cam.attach(osg.Camera.COLOR_BUFFER2, material_tex)
-	cam.attach(osg.Camera.COLOR_BUFFER3, emissive_tex)
-	cam.attach(osg.Camera.COLOR_BUFFER4, position_tex)
-	cam.attach(osg.Camera.DEPTH_BUFFER, depth_tex)
+	# A non-zero count makes OSG render the whole MRT G-buffer into multisample
+	# renderbuffers, then resolve each attachment into these ordinary Texture2Ds.
+	# The downstream SSAO/composite passes can therefore keep sampling sampler2D.
+	for buffer, tex in (
+		(osg.Camera.COLOR_BUFFER0, albedo_tex),
+		(osg.Camera.COLOR_BUFFER1, normal_tex),
+		(osg.Camera.COLOR_BUFFER2, material_tex),
+		(osg.Camera.COLOR_BUFFER3, emissive_tex),
+		(osg.Camera.COLOR_BUFFER4, position_tex),
+		(osg.Camera.DEPTH_BUFFER, depth_tex),
+	):
+		cam.attach(buffer, tex, multisampleSamples=msaa_samples)
 
 	return cam, albedo_tex, normal_tex, material_tex, emissive_tex, position_tex, depth_tex
 
@@ -1525,7 +1594,7 @@ def create_bloom_cameras(hdr_color_tex, w=W, h=H):
 # Final LDR pass -- new last camera in the chain, takes over composite_cam's old role of
 # drawing straight to the window (no renderTargetImplementation set, same as pyosg-mrt.py's
 # HUD camera / composite_cam's own pre-increment-2 shape).
-def create_final_camera(hdr_color_tex, bloom_tex, w=W, h=H):
+def create_final_camera(hdr_color_tex, bloom_tex, ao_tex, w=W, h=H):
 	cam = osg.Camera()
 	cam.referenceFrame = osg.Transform.ABSOLUTE_RF
 	cam.renderOrder = osg.Camera.POST_RENDER
@@ -1553,8 +1622,10 @@ def create_final_camera(hdr_color_tex, bloom_tex, w=W, h=H):
 	)
 	ss.textureAttributes[0] = hdr_color_tex
 	ss.textureAttributes[1] = bloom_tex
+	ss.textureAttributes[2] = ao_tex
 	ss.uniforms["hdrColorTex"] = 0
 	ss.uniforms["bloomTex"] = 1
+	ss.uniforms["aoTex"] = 2
 
 	p = osg.Program(name="final_post", shaders=(
 		osg.Shader(osg.Shader.VERTEX, FULLSCREEN_VERTEX),
@@ -1678,15 +1749,19 @@ def create_grid_room(bound_center, bound_radius, floor_z, room_size):
 	return room, (floor, back_wall, right_wall)
 
 # --------------------------------------------------------------------------- #
-# Light gizmo: a small sphere marking a display position along lightDir, plus a
-# line from the model's bounding center to that sphere -- a debug/teaching
-# visual, not part of the actual lighting math. Position/color are recomputed
-# every frame from the live lightDir/lightColor uniforms via an updateCallback,
-# so edits made through --repl (see pyosg_repl.repl() call below) are reflected
-# immediately without rebuilding the scene graph. Rendered as its own
-# POST_RENDER pass after final_cam, RELATIVE_RF (inherits the real viewer
-# camera's view/projection, same as gbuffer_cam) with depth test off -- always
-# visible, simplest possible overlay. Not depth-tested against the real scene:
+# Light gizmo: a directional light has no position or reach, only an angle --
+# a sphere-at-a-point implies a location/falloff that isn't physically real.
+# Instead this draws a wireframe quad ("plane") perpendicular to lightDir,
+# representing the infinite plane of parallel rays, plus a single normal-style
+# line emitting from its center toward the scene to show ray direction. Both
+# are one GL_LINES Geometry: a LINE_LOOP for the quad outline and a LINES pair
+# for the direction stub. Position/orientation are recomputed every frame from
+# the live lightDir/lightColor uniforms via an updateCallback, so edits made
+# through --repl (see pyosg_repl.repl() call below) are reflected immediately
+# without rebuilding the scene graph. Rendered as its own POST_RENDER pass
+# after final_cam, RELATIVE_RF (inherits the real viewer camera's view/
+# projection, same as gbuffer_cam) with depth test off -- always visible,
+# simplest possible overlay. Not depth-tested against the real scene:
 # final_cam already wrote straight to the backbuffer, so there's no usable
 # depth buffer left to test against at this point in the pipeline.
 # --------------------------------------------------------------------------- #
@@ -1716,29 +1791,34 @@ void main() {
 """
 
 class LightGizmoCallback:
-	def __init__(self, bound_center, sphere_xform, line_geom, color_u, light_dir_u, light_color_u, radius):
+	def __init__(self, bound_center, plane_geom, color_u, light_dir_u, light_color_u, plane_half_size, normal_length):
 		self.bound_center = bound_center
-		self.sphere_xform = sphere_xform
-		self.line_geom = line_geom
+		self.plane_geom = plane_geom
 		self.color_u = color_u
 		self.light_dir_u = light_dir_u
 		self.light_color_u = light_color_u
-		self.radius = radius
+		self.plane_half_size = plane_half_size
+		self.normal_length = normal_length
+		# Arrowhead proportions, relative to the direction stub's own length rather
+		# than plane_half_size -- keeps the head's size tied to the line it's
+		# marking, not the (much larger, independently tunable) outer quad.
+		self.arrow_back = normal_length * 0.2
+		self.arrow_width = normal_length * 0.15
 
 	def __call__(self, node, nv):
 		d = self.light_dir_u.value
-		marker_pos = self.bound_center + d
-		r = self.radius
+		length = d.length()
+		n = d / length if length > 1e-6 else osg.Vec3(0.0, 0.0, 1.0)
+		center = self.bound_center + d
+		half = self.plane_half_size
 
-		# Anchor the line to the model's central vertical (Z-up) axis, AT the light's
-		# current rung height -- not the raw bound_center, which stays fixed no matter
-		# what z/Z sets. A fixed anchor made the line's tilt conflate "which rung" with
-		# "how far out," so pressing z/Z alone (radius/azimuth unchanged) didn't visibly
-		# read as "the whole ring moved up/down." With this anchor the line is always
-		# horizontal, lying in the same rung plane as the sphere.
-		rung_anchor = self.bound_center + osg.Vec3(0.0, 0.0, d.z)
-
-		self.sphere_xform.matrix = osg.Matrix.scale(r, r, r) * osg.Matrix.translate(marker_pos)
+		# Build an orthonormal in-plane basis perpendicular to n. Z-up reference
+		# vector, except when n is nearly parallel to it (near the poles of the
+		# orbit), where X is used instead to avoid a degenerate/zero-length cross.
+		up_ref = osg.Vec3(1.0, 0.0, 0.0) if abs(n.z) > 0.99 else osg.Vec3(0.0, 0.0, 1.0)
+		u = up_ref.cross(n)
+		u = u / u.length()
+		v = n.cross(u)
 
 		# Mutate the existing array in place and dirty() it, rather than handing
 		# setVertexArray() a brand-new Vec3Array every frame. A new array is a new
@@ -1749,11 +1829,42 @@ class LightGizmoCallback:
 		# updates. Was spamming OSG's buffer-object-pool notify output on every
 		# frame ("Allocating new glBufferData(), _allocatedSize=24") and a likely
 		# contributor to an intermittent NVIDIA driver segfault during zoom.
-		line_array = self.line_geom.vertexArray
+		plane_array = self.plane_geom.vertexArray
 
-		line_array[0] = rung_anchor
-		line_array[1] = marker_pos
-		line_array.dirty()
+		plane_array[0] = center + u * half + v * half
+		plane_array[1] = center - u * half + v * half
+		plane_array[2] = center - u * half - v * half
+		plane_array[3] = center + u * half - v * half
+		plane_array[4] = center
+		# Points back toward the model -- the rays' direction of travel, not the
+		# outward-facing normal toward the light source.
+		tip = center - n * self.normal_length
+		plane_array[5] = tip
+
+		# Arrowhead: two short segments from the tip, angled back toward the plane
+		# and splayed out along the in-plane `u` axis, so the stub reads as a
+		# direction (like a normal-with-arrowhead) instead of a symmetric line
+		# whose depth/heading is ambiguous at a glance. Each segment needs its own
+		# copy of the tip vertex -- GL_LINES draws consecutive vertex pairs, so a
+		# single shared tip can't anchor two separate segments in one DrawArrays.
+		wing_base = tip + n * self.arrow_back
+
+		plane_array[6] = tip
+		plane_array[7] = wing_base + u * self.arrow_width
+		plane_array[8] = tip
+		plane_array[9] = wing_base - u * self.arrow_width
+		plane_array.dirty()
+
+		# array.dirty() only marks the GPU buffer for re-upload -- it does NOT touch
+		# the Geometry's cached bounding volume, which was computed once (early on,
+		# from whatever position the plane happened to be in at the time) and never
+		# again. Left alone, culling keeps testing every subsequent frame against
+		# that stale bound, so once the light moves far enough that the ORIGINAL
+		# position falls outside the frustum, the plane vanishes forever even though
+		# its current, real position is clearly onscreen -- group/cam.cullingActive
+		# don't help here, they only affect ancestor-level traversal shortcuts, not
+		# this drawable's own per-frame cull test.
+		self.plane_geom.dirtyBound()
 
 		c = self.light_color_u.value
 		m = max(c.x, c.y, c.z, 1e-4)
@@ -1763,33 +1874,38 @@ class LightGizmoCallback:
 		return True
 
 def create_light_gizmo(bound_center, bound_radius, light_dir_u, light_color_u):
-	# Stay proportional across differently-scaled assets. An absolute world-unit
-	# minimum made the marker dwarf legitimately small models.
-	radius = bound_radius * 0.10
+	# Stay proportional across differently-scaled assets, and large enough to
+	# read as "an infinite plane of parallel rays" rather than a small marker.
+	plane_half_size = bound_radius * 2.5
+	normal_length = bound_radius * 0.8
 
 	p = osg.Program(name="light_gizmo", shaders=(
 		osg.Shader(osg.Shader.VERTEX, GIZMO_VERTEX_SHADER),
 		osg.Shader(osg.Shader.FRAGMENT, GIZMO_FRAGMENT_SHADER),
 	))
+	# Match the geometry binding below explicitly instead of relying on OSG's
+	# compatibility/core-profile vertex-attribute aliasing policy.
+	p.bindAttribLocation["osg_Vertex"] = 0
 
-	# Sphere marker -- a fixed unit sphere, repositioned/rescaled every frame via
-	# its MatrixTransform rather than mutating ShapeDrawable geometry directly.
-	sphere_xform = osg.MatrixTransform()
-	sphere_geode = osg.Geode()
-	sphere_geode.drawables.append(osg.ShapeDrawable(osg.Sphere(osg.Vec3(0, 0, 0), 1.0)))
-	sphere_xform.children.append(sphere_geode)
-
-	# Direction line -- vertex array mutated in place each frame (see
-	# LightGizmoCallback.__call__), not replaced wholesale.
-	line_geom = osg.Geometry()
-	line_geom.vertexArray = osg.Vec3Array([bound_center, bound_center])
-	line_geom.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.LINES, 0, 2))
-	line_geom.useVertexBufferObjects = True
-	line_geode = osg.Geode()
-	line_geode.drawables.append(line_geom)
+	# Plane outline (LINE_LOOP, vertices 0-3) + direction stub (LINES, vertices
+	# 4-5) + arrowhead (LINES, vertices 6-9) in a single Geometry -- vertex array
+	# mutated in place each frame (see LightGizmoCallback.__call__), not replaced
+	# wholesale.
+	plane_geom = osg.Geometry()
+	plane_array = osg.Vec3Array([bound_center] * 10)
+	plane_array.dataVariance = osg.Object.DYNAMIC
+	plane_geom.vertexArray = plane_array
+	plane_geom.vertexAttrib[0] = plane_array
+	plane_geom.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.LINE_LOOP, 0, 4))
+	plane_geom.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.LINES, 4, 2))
+	plane_geom.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.LINES, 6, 4))
+	plane_geom.dataVariance = osg.Object.DYNAMIC
+	plane_geom.useVertexBufferObjects = True
+	plane_geode = osg.Geode()
+	plane_geode.drawables.append(plane_geom)
 
 	group = osg.Group()
-	group.children.extend((sphere_xform, line_geode))
+	group.children.append(plane_geode)
 	group.cullingActive = False
 
 	color_u = osg.Uniform("gizmoColor", osg.Vec3(1.0, 1.0, 1.0))
@@ -1798,7 +1914,7 @@ def create_light_gizmo(bound_center, bound_radius, light_dir_u, light_color_u):
 	ss.uniforms.extend((color_u,))
 
 	group.updateCallback = LightGizmoCallback(
-		bound_center, sphere_xform, line_geom, color_u, light_dir_u, light_color_u, radius
+		bound_center, plane_geom, color_u, light_dir_u, light_color_u, plane_half_size, normal_length
 	)
 
 	cam = osg.Camera()
@@ -1815,91 +1931,15 @@ def create_light_gizmo(bound_center, bound_radius, light_dir_u, light_color_u):
 # --------------------------------------------------------------------------- #
 # Input
 # --------------------------------------------------------------------------- #
+#
+# All interactive controls now live in the ImGui panel (see the `if args.gui:`
+# block below) -- no keyboard shortcuts. LightOrbit is the one state-holding
+# class left here: it's not an event handler, just the orbit math (azimuth/
+# radius/height -> light_dir_u) that the GUI's Light Position sliders drive
+# directly via ._sync(), same object either way.
 
-class VisualizeModeHandler(osgGA.GUIEventHandler):
-	"""Press 0-9 to switch the composite pass's render level (Sketchfab-style layer toggle)."""
-
-	def __init__(self, mode_uniform):
-		super().__init__()
-		self.mode_uniform = mode_uniform
-
-	def handle(self, ea, aa):
-		if ea.handled or ea.type != osgGA.GUIEventAdapter.KEYUP:
-			return False
-
-		key = ea.key
-
-		if ord("0") <= key <= ord("9"):
-			self.mode_uniform.value = key - ord("0")
-
-			return True
-
-		return False
-
-class PostEnabledHandler(osgGA.GUIEventHandler):
-	"""Press 'p' to toggle the whole post-processing chain (Sketchfab's own "No
-	Post-Processing" button)."""
-
-	def __init__(self, enabled_uniform):
-		super().__init__()
-		self.enabled_uniform = enabled_uniform
-		self.enabled = True
-
-	def handle(self, ea, aa):
-		if ea.handled or ea.type != osgGA.GUIEventAdapter.KEYUP:
-			return False
-
-		if ea.key == ord("p"):
-			self.enabled = not self.enabled
-			self.enabled_uniform.value = self.enabled
-
-			return True
-
-		return False
-
-class IBLIntensityHandler(osgGA.GUIEventHandler):
-	"""i/I = diffuse (SH ambient fill) intensity down/up, s/S = specular (prefiltered
-	reflection) intensity down/up. Multiplicative steps, not additive -- intensity/
-	exposure values read naturally in stops (e.g. "half as bright"/"twice as bright"),
-	and a fixed additive step would feel enormous near zero and imperceptible once the
-	value has grown. Pure post-bake shading multipliers (see evaluateIBL()) -- neither
-	compute_sh() nor the prefiltered-cubemap bake reads these, so there's no rebake
-	lag, unlike lightDir's one-frame shadow-camera delay."""
-
-	STEP = 1.1
-
-	def __init__(self, diffuse_uniform, specular_uniform):
-		super().__init__()
-		self.diffuse_uniform = diffuse_uniform
-		self.specular_uniform = specular_uniform
-
-	def handle(self, ea, aa):
-		if ea.handled or ea.type != osgGA.GUIEventAdapter.KEYUP:
-			return False
-
-		key = ea.key
-
-		if key == ord("i"):
-			self.diffuse_uniform.value /= self.STEP
-		elif key == ord("I"):
-			self.diffuse_uniform.value *= self.STEP
-		elif key == ord("s"):
-			self.specular_uniform.value /= self.STEP
-		elif key == ord("S"):
-			self.specular_uniform.value *= self.STEP
-		else:
-			return False
-
-		print(
-			f"[ibl] diffuse={self.diffuse_uniform.value:.4f} "
-			f"specular={self.specular_uniform.value:.4f}",
-			flush=True
-		)
-
-		return True
-
-class LightOrbitHandler(osgGA.GUIEventHandler):
-	"""Predictable cylindrical orbit controls around the model's Z-up axis.
+class LightOrbit:
+	"""Predictable cylindrical orbit state around the model's Z-up axis.
 
 	The uniform stores the moon's world-space offset from the model center. Lighting
 	and the shadow camera normalize that offset to obtain the inward/outward ray
@@ -1907,12 +1947,8 @@ class LightOrbitHandler(osgGA.GUIEventHandler):
 	"""
 
 	def __init__(self, light_dir_u, bound_radius):
-		super().__init__()
 		self.light_dir_u = light_dir_u
-		self.rung_step = bound_radius * 0.2 # 10% of the full spherical bound
-		self.radius_step = bound_radius * 0.1
 		self.min_radius = bound_radius * 0.1
-		self.angle_step = math.radians(10.0)
 
 		initial_distance = bound_radius * 1.5
 		d = KEY_LIGHT_DIR.normalized() * initial_distance
@@ -1927,31 +1963,6 @@ class LightOrbitHandler(osgGA.GUIEventHandler):
 			math.sin(self.azimuth) * self.orbit_radius,
 			self.height
 		)
-
-	def handle(self, ea, aa):
-		if ea.handled or ea.type != osgGA.GUIEventAdapter.KEYUP:
-			return False
-
-		key = ea.key
-
-		if key == ord("z"):
-			self.height += self.rung_step
-		elif key == ord("Z"):
-			self.height -= self.rung_step
-		elif key == ord("r"): # clockwise when viewed from +Z
-			self.azimuth -= self.angle_step
-		elif key == ord("R"):
-			self.azimuth += self.angle_step
-		elif key == ord("d"):
-			self.orbit_radius += self.radius_step
-		elif key == ord("D"):
-			self.orbit_radius = max(self.min_radius, self.orbit_radius - self.radius_step)
-		else:
-			return False
-
-		self._sync()
-
-		return True
 
 # If the passed-in file exists, simply return it; if not, try and find it inside example data dir.
 def data_dir_file(f, suffix=None):
@@ -2010,6 +2021,13 @@ if __name__ == "__main__":
 	ap.add_argument("--floor-z", type=float, default=None)
 	ap.add_argument("--floor-size", type=float, default=None)
 	ap.add_argument(
+		"--msaa",
+		type=int,
+		choices=(0, 2, 4, 8),
+		default=0,
+		help="MSAA samples for the G-buffer geometry pass (default: 0)",
+	)
+	ap.add_argument(
 		"--repl",
 		action="store_true",
 		default=False,
@@ -2021,8 +2039,9 @@ if __name__ == "__main__":
 		dest="gui",
 		action="store_false",
 		default=True,
-		help="Disable the osgDebug ImGui panel exposing the IBL/light knobs as sliders "
-			"(the i/I s/S d/D r/R z/Z keyboard controls still work either way)."
+		help="Disable the osgDebug ImGui panel. All interactive controls (IBL, "
+			"exposure, tonemap, light position, shadow, post FX) live only in this "
+			"panel now, so disabling it leaves no way to adjust them at runtime."
 	)
 
 	args = ap.parse_args()
@@ -2035,7 +2054,7 @@ if __name__ == "__main__":
 	if args.hdr:
 		args.hdr = data_dir_file(args.hdr, "hdr")
 
-	osg.setNotifyLevel(osg.NotifySeverity.INFO)
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
 	model = osgDB.readNodeFile(args.path)
 
@@ -2220,7 +2239,9 @@ if __name__ == "__main__":
 		)
 
 	# --- G-buffer -------------------------------------------------------------- #
-	gbuffer_cam, albedo_tex, normal_tex, material_tex, emissive_tex, position_tex, depth_tex = create_gbuffer_camera(W, H)
+	gbuffer_cam, albedo_tex, normal_tex, material_tex, emissive_tex, position_tex, depth_tex = create_gbuffer_camera(
+		W, H, msaa_samples=args.msaa
+	)
 
 	gbuffer_cam.children.append(model)
 
@@ -2276,19 +2297,41 @@ if __name__ == "__main__":
 	bloom_threshold_cam, bloom_blur_h_cam, bloom_blur_v_cam, bloom_blur_b_tex = create_bloom_cameras(hdr_color_tex, W, H)
 
 	# --- Final LDR pass ------------------------------------------------------------ #
-	final_cam = create_final_camera(hdr_color_tex, bloom_blur_b_tex, W, H)
+	final_cam = create_final_camera(hdr_color_tex, bloom_blur_b_tex, ao_tex, W, H)
 
 	fc_ss = final_cam.stateSet
+	fc_ss.uniforms["tonemapMode"] = 1 # ACES (Narkowicz) -- preferred over PBR Neutral by eye
+	fc_ss.uniforms["exposure"] = 0.0
 	fc_ss.uniforms["bloomStrength"] = 0.5
 	fc_ss.uniforms["caStrength"] = 0.003
 	fc_ss.uniforms["sharpenStrength"] = 0.25
 	fc_ss.uniforms["vignetteStrength"] = 0.35
 	fc_ss.uniforms["grainStrength"] = 0.02
+	fc_ss.uniforms["grainSize"] = 1.0
+	fc_ss.uniforms["grainAnimated"] = True
+	fc_ss.uniforms["grainAOBoost"] = 0.0
 	fc_ss.uniforms["colorLift"] = 0.0
 	fc_ss.uniforms["colorGamma"] = 1.0
 	fc_ss.uniforms["colorGain"] = 1.0
 
-	# --- Light gizmo (sphere marker + direction line) ------------------------ #
+	# Kept as direct references (rather than re-fetched via fc_ss.uniforms[...]
+	# each frame) so the ImGui "Post FX" section below can read/write .value
+	# directly, same pattern as shadow_strength_u/shadow_bias_u above.
+	tonemap_mode_u = fc_ss.uniforms["tonemapMode"]
+	exposure_u = fc_ss.uniforms["exposure"]
+	bloom_strength_u = fc_ss.uniforms["bloomStrength"]
+	ca_strength_u = fc_ss.uniforms["caStrength"]
+	sharpen_strength_u = fc_ss.uniforms["sharpenStrength"]
+	vignette_strength_u = fc_ss.uniforms["vignetteStrength"]
+	grain_strength_u = fc_ss.uniforms["grainStrength"]
+	grain_size_u = fc_ss.uniforms["grainSize"]
+	grain_animated_u = fc_ss.uniforms["grainAnimated"]
+	grain_ao_boost_u = fc_ss.uniforms["grainAOBoost"]
+	color_lift_u = fc_ss.uniforms["colorLift"]
+	color_gamma_u = fc_ss.uniforms["colorGamma"]
+	color_gain_u = fc_ss.uniforms["colorGain"]
+
+	# --- Light gizmo (wireframe plane + direction arrow) ---------------------- #
 	gizmo_cam = create_light_gizmo(bound_center, bound_radius, light_dir_u, light_color_u)
 
 	root = osg.Group()
@@ -2321,7 +2364,7 @@ if __name__ == "__main__":
 	# --- Viewer ------------------------------------------------------------- #
 	manip = osgGA.TrackballManipulator()
 
-	v = osgViewer.Viewer()
+	v = osgViewer.Viewer(osg.ArgumentParser("11-sketchfab", ("11-sketchfab.py", "--samples", "8")))
 
 	v.sceneData = root
 	v.cameraManipulator = manip
@@ -2410,17 +2453,11 @@ if __name__ == "__main__":
 		shadow_matrix_u.value = osg.Matrixf(shadow_mat)
 
 	shadow_cam.preDrawCallback = update_uniforms
-	v.eventHandlers.append(VisualizeModeHandler(visualize_mode_u))
-	v.eventHandlers.append(PostEnabledHandler(post_enabled_u))
-	light_orbit_handler = LightOrbitHandler(light_dir_u, bound_radius)
-	ibl_intensity_handler = IBLIntensityHandler(ibl_diffuse_intensity_u, ibl_specular_intensity_u)
-	v.eventHandlers.append(light_orbit_handler)
-	v.eventHandlers.append(ibl_intensity_handler)
+	light_orbit_handler = LightOrbit(light_dir_u, bound_radius)
 
-	# --- ImGui panel: the same IBL/light knobs as the i/I s/S d/D r/R z/Z keys, ---
-	# --- exposed as sliders (osgDebug.imgui.Widget -- see osgdebug's TODO.md's ---
-	# --- "Knobs, not frameworks" section). Keyboard controls keep working too, ---
-	# --- both drive the same uniforms/handler state so they can't drift apart. --
+	# --- ImGui panel: all interactive controls live here now -- no keyboard ---
+	# --- shortcuts (osgDebug.imgui.Widget -- see osgdebug's TODO.md's "Knobs, ---
+	# --- not frameworks" section). ------------------------------------------ #
 	if args.gui:
 		# gizmo_cam is the final POST_RENDER camera (it follows final_cam), so it
 		# must be the explicit draw_camera: Widget defaults to v.camera/
@@ -2440,6 +2477,7 @@ if __name__ == "__main__":
 		gui_opts.dock_width = 320.0
 
 		gui = osgDebug.imgui.Widget(v, gizmo_cam, gui_opts)
+		closed_section = osgDebug.imgui.SectionOptions(default_open=False)
 
 		def draw_visualize_mode(ri):
 			mode_labels = [
@@ -2468,7 +2506,35 @@ if __name__ == "__main__":
 
 			if changed: ibl_specular_intensity_u.value = value
 
-		gui.addSection("IBL", draw_ibl_knobs)
+		gui.addSection("IBL", draw_ibl_knobs, closed_section)
+
+		def draw_exposure_knobs(ri):
+			# "##slider" keeps the visible label as "Exposure" but gives the widget an
+			# ImGui ID distinct from the "Exposure" CollapsingHeader above it -- a plain
+			# (non-expand) section's header isn't wrapped in its own PushID, so a control
+			# reusing the section's exact name collides with the header's own ID and the
+			# two widgets end up fighting over the same click/drag state. Every other
+			# section avoids this by naming its controls differently from the header
+			# (e.g. "Shadow" header / "Shadow Strength" slider); this is the only one
+			# where they matched.
+			changed, value = osgDebug.imgui.slider_float(
+				"Exposure##slider", exposure_u.value, -8.0, 8.0, "%.2f EV"
+			)
+
+			if changed: exposure_u.value = value
+
+		gui.addSection("Exposure", draw_exposure_knobs, closed_section)
+
+		def draw_tonemap_knobs(ri):
+			mode_labels = ["0: PBR Neutral", "1: ACES", "2: Reinhard", "3: None (clamped)"]
+
+			changed, value = osgDebug.imgui.radio_group(
+				int(tonemap_mode_u.value), mode_labels, False
+			)
+
+			if changed: tonemap_mode_u.value = value
+
+		gui.addSection("Tonemap", draw_tonemap_knobs, closed_section)
 
 		if args.floor:
 			room_material = {"reflective": False}
@@ -2490,7 +2556,7 @@ if __name__ == "__main__":
 					room_material["reflective"] = reflective
 					set_room_material(reflective)
 
-			gui.addSection("Grid Room", draw_grid_room_knobs)
+			gui.addSection("Grid Room", draw_grid_room_knobs, closed_section)
 
 		def draw_light_position_knobs(ri):
 			h = light_orbit_handler
@@ -2519,7 +2585,7 @@ if __name__ == "__main__":
 				h.height = value
 				h._sync()
 
-		gui.addSection("Light Position", draw_light_position_knobs)
+		gui.addSection("Light Position", draw_light_position_knobs, closed_section)
 
 		def draw_shadow_knobs(ri):
 			changed, value = osgDebug.imgui.slider_float(
@@ -2544,15 +2610,90 @@ if __name__ == "__main__":
 
 			if changed: shadow_debug_tint_u.value = value
 
-		gui.addSection("Shadow", draw_shadow_knobs)
+		gui.addSection("Shadow", draw_shadow_knobs, closed_section)
 
-	print(
-		"Press 0=composite 1=albedo 2=normal 3=depth 4=material "
-		"5=direct 6=IBL 7=emissive 8=shadow 9=AO -- p=toggle post-processing -- "
-		"z/Z=vertical rung +/-  r/R=clockwise/counterclockwise  d/D=orbit radius +/- "
-		"i/I=ibl diffuse -/+  s/S=ibl specular -/+",
-		flush=True
-	)
+		def draw_post_fx_knobs(ri):
+			# Sketchfab's own "No Post-Processing" toggle -- gates CA/sharpen/vignette/
+			# grain/color-balance in FINAL_FRAGMENT_SHADER (exposure and tonemap stay
+			# on regardless; see FINAL_FRAGMENT_SHADER's postEnabled comment).
+			changed, value = osgDebug.imgui.checkbox(
+				"Post Processing", bool(post_enabled_u.value)
+			)
+
+			if changed: post_enabled_u.value = value
+
+			changed, value = osgDebug.imgui.slider_float(
+				"Bloom Strength", bloom_strength_u.value, 0.0, 2.0
+			)
+
+			if changed: bloom_strength_u.value = value
+
+			changed, value = osgDebug.imgui.slider_float(
+				"Chromatic Aberration", ca_strength_u.value, 0.0, 0.02, "%.4f"
+			)
+
+			if changed: ca_strength_u.value = value
+
+			changed, value = osgDebug.imgui.slider_float(
+				"Sharpen", sharpen_strength_u.value, -0.5, 1.5
+			)
+
+			if changed: sharpen_strength_u.value = value
+
+			changed, value = osgDebug.imgui.slider_float(
+				"Vignette", vignette_strength_u.value, 0.0, 1.0
+			)
+
+			if changed: vignette_strength_u.value = value
+
+			changed, value = osgDebug.imgui.slider_float(
+				"Grain", grain_strength_u.value, 0.0, 0.2, "%.4f"
+			)
+
+			if changed: grain_strength_u.value = value
+
+			changed, value = osgDebug.imgui.slider_float(
+				"Grain Size", grain_size_u.value, 1.0, 8.0, "%.1f px"
+			)
+
+			if changed: grain_size_u.value = value
+
+			changed, value = osgDebug.imgui.checkbox(
+				"Grain Animated", bool(grain_animated_u.value)
+			)
+
+			if changed: grain_animated_u.value = value
+
+			changed, value = osgDebug.imgui.slider_float(
+				"Grain AO Boost", grain_ao_boost_u.value, 0.0, 1.0
+			)
+
+			if changed: grain_ao_boost_u.value = value
+
+			changed, value = osgDebug.imgui.slider_float(
+				"Color Lift", color_lift_u.value, -0.5, 0.5, "%.3f"
+			)
+
+			if changed: color_lift_u.value = value
+
+			changed, value = osgDebug.imgui.slider_float(
+				"Color Gamma", color_gamma_u.value, 0.1, 3.0
+			)
+
+			if changed: color_gamma_u.value = value
+
+			changed, value = osgDebug.imgui.slider_float(
+				"Color Gain", color_gain_u.value, 0.0, 3.0
+			)
+
+			if changed: color_gain_u.value = value
+
+		gui.addSection("Post FX", draw_post_fx_knobs, closed_section)
+
+		# Per-drawable GPU timestamp timings.  Keep this expandable section last so
+		# the scene controls above retain their natural height in the docked panel.
+		gui.addStatsSection(v)
+		gui.addProfilerSection(v, root, default_open=False)
 
 	def apply_pending_sh(queue):
 		try:

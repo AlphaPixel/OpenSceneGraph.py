@@ -309,6 +309,16 @@ public:
 	void closeImplementation() override {
 		restoreCrtc();
 
+		// Must release any outstanding GBM buffer BEFORE eglTerminate(): at least the Nvidia
+		// EGL/GBM platform driver (libnvidia-egl-gbm.so) ties buffer-object release back to the
+		// still-alive EGL/GBM association, so releasing it after EGL is torn down dereferences
+		// already-freed driver state and segfaults.
+		if(_currentBo && _gbmSurface) {
+			gbm_surface_release_buffer(_gbmSurface, _currentBo);
+
+			_currentBo = nullptr;
+		}
+
 		if(_eglDisplay != EGL_NO_DISPLAY) {
 			eglMakeCurrent(_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
 
@@ -316,12 +326,6 @@ public:
 			if(_eglSurface != EGL_NO_SURFACE) eglDestroySurface(_eglDisplay, _eglSurface);
 
 			eglTerminate(_eglDisplay);
-		}
-
-		if(_currentBo && _gbmSurface) {
-			gbm_surface_release_buffer(_gbmSurface, _currentBo);
-
-			_currentBo = nullptr;
 		}
 
 		if(_gbmSurface) gbm_surface_destroy(_gbmSurface);
