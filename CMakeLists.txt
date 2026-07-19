@@ -83,6 +83,26 @@ find_package(OpenSceneGraph REQUIRED
 	# osgText
 )
 
+set(PYOSG_LINUX OFF)
+
+# `pyosg/linux/` wraps X11/EGL/GBM/DRM APIs that only exist on Linux; skip it entirely elsewhere
+# (Windows, macOS) rather than trying to find libraries that aren't there.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+	set(PYOSG_LINUX ON)
+
+	find_package(X11 REQUIRED)
+
+	if(NOT X11_Xrandr_FOUND)
+		message(FATAL_ERROR "X11 Xrandr extension (libxrandr-dev) not found")
+	endif()
+
+	find_package(PkgConfig REQUIRED)
+
+	pkg_check_modules(EGL REQUIRED egl)
+	pkg_check_modules(GBM REQUIRED gbm)
+	pkg_check_modules(DRM REQUIRED libdrm)
+endif()
+
 option(PYOSG_EMBEDDED "Build OpenSceneGraph bindings for embedding" OFF)
 
 set(PYOSG_SOURCES
@@ -122,6 +142,14 @@ set(PYOSG_SOURCES
 	"pyosg/pyosgViewer.cpp"
 )
 
+if(PYOSG_LINUX)
+	list(APPEND PYOSG_SOURCES
+		"pyosg/linux/linux.cpp"
+		"pyosg/linux/GraphicsWindowEGL.cpp"
+		"pyosg/linux/GraphicsWindowGBM.cpp"
+	)
+endif()
+
 add_library(OpenSceneGraph_python STATIC ${PYOSG_SOURCES})
 
 target_link_libraries(OpenSceneGraph_python PRIVATE
@@ -129,6 +157,24 @@ target_link_libraries(OpenSceneGraph_python PRIVATE
 	pybind11::module
 	${OPENSCENEGRAPH_LIBRARIES}
 )
+
+if(PYOSG_LINUX)
+	target_compile_definitions(OpenSceneGraph_python PUBLIC PYOSG_LINUX=1)
+
+	target_link_libraries(OpenSceneGraph_python PRIVATE
+		X11::X11
+		X11::Xrandr
+		${EGL_LIBRARIES}
+		${GBM_LIBRARIES}
+		${DRM_LIBRARIES}
+	)
+	target_include_directories(OpenSceneGraph_python PRIVATE
+		${EGL_INCLUDE_DIRS}
+		${GBM_INCLUDE_DIRS}
+		${DRM_INCLUDE_DIRS}
+	)
+endif()
+
 target_compile_features(OpenSceneGraph_python PUBLIC cxx_std_20)
 target_compile_options(OpenSceneGraph_python PRIVATE ${PYOSG_COMPILE_OPTIONS})
 target_include_directories(OpenSceneGraph_python PUBLIC

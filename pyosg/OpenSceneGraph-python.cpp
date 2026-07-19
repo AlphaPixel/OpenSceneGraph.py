@@ -4,6 +4,10 @@
 #include "pyosgGA.hpp"
 #include "pyosgViewer.hpp"
 
+#ifdef PYOSG_LINUX
+#include "linux/linux.hpp"
+#endif
+
 #include "pybind11x.hpp"
 
 #include <osg/Version>
@@ -38,7 +42,7 @@ std::string pyosg_async_task_example(
 
 	for(size_t i = 0; i < steps; i++) {
 		if(stop && stop->stop.load(std::memory_order_relaxed)) {
-			std::cerr << "C++: detected stop" << std::endl;
+			// std::cerr << "C++: detected stop" << std::endl;
 
 			pyx::put_nowait(loop, queue, "complete", job_id, "stopped");
 
@@ -115,8 +119,15 @@ PYBIND11_MODULE(OpenSceneGraph, m) {
 	gl.attr("GL_SRC_ALPHA") = GL_SRC_ALPHA;
 	gl.attr("GL_ONE_MINUS_SRC_ALPHA") = GL_ONE_MINUS_SRC_ALPHA;
 	gl.attr("GL_ONE") = GL_ONE;
-	// ============================================================================================
 
+	// ============================================================================================
+#ifdef PYOSG_LINUX
+	auto l = m.def_submodule("linux");
+
+	pyosg_linux::bind(l);
+#endif
+
+	// ============================================================================================
 	py::dict info;
 
 	info["osg"] = osgGetVersion();
