@@ -121,6 +121,12 @@ void bind_Camera(py::module_& m) {
 			py::return_value_policy::reference_internal
 		)
 		.def_property(
+			"graphicsContext",
+			py::overload_cast<>(&osg::Camera::getGraphicsContext),
+			&osg::Camera::setGraphicsContext,
+			py::return_value_policy::reference_internal
+		)
+		.def_property(
 			"viewport",
 			py::overload_cast<>(&osg::Camera::getViewport, py::const_),
 			// TODO: This should really just accept `osg.Viewpoint` (ONLY), but it's nice to know

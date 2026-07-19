@@ -28,6 +28,7 @@ void bind_GraphicsContext(py::module_& m) {
 	>(m, "GraphicsContext")
 		.def("resized", &osg::GraphicsContext::resized)
 		.def("runOperations", &osg::GraphicsContext::runOperations)
+		.def("valid", &osg::GraphicsContext::valid)
 	;
 
 	py::class_<osg::GraphicsContext::ScreenIdentifier>(gc, "ScreenIdentifier")
@@ -38,7 +39,15 @@ void bind_GraphicsContext(py::module_& m) {
 	;
 
 	// struct OSG_EXPORT Traits : public osg::Referenced, public ScreenIdentifier
-	py::class_<osg::GraphicsContext::Traits>(gc, "Traits")
+	//
+	// Traits IS-A osg::Referenced, and GraphicsContext keeps its own ref_ptr<Traits> internally
+	// (_traits), so this MUST use the ref_ptr holder -- otherwise pybind11 defaults to
+	// unique_ptr<Traits>, giving the object two independent owners (Python's unique_ptr and OSG's
+	// internal ref_ptr) that both unconditionally delete it, causing a double-free.
+	py::class_<
+		osg::GraphicsContext::Traits,
+		osg::ref_ptr<osg::GraphicsContext::Traits>
+	>(gc, "Traits")
 		.def(py::init<>())
 		.def(py::init<osg::DisplaySettings*>(), "ds"_a=nullptr)
 		.def_readwrite("x", &osg::GraphicsContext::Traits::x)
