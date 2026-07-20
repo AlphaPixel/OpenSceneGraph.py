@@ -29,6 +29,14 @@ void bind_GraphicsContext(py::module_& m) {
 		.def("resized", &osg::GraphicsContext::resized)
 		.def("runOperations", &osg::GraphicsContext::runOperations)
 		.def("valid", &osg::GraphicsContext::valid)
+		// State (and thus .state.contextID) is only valid once the context has been realized --
+		// this is how a BufferObject/Texture's compiled GL object id can be reached from plain
+		// script code, outside of a draw callback's RenderInfo.
+		.def_property_readonly(
+			"state",
+			static_cast<osg::State*(osg::GraphicsContext::*)()>(&osg::GraphicsContext::getState),
+			py::return_value_policy::reference
+		)
 	;
 
 	py::class_<osg::GraphicsContext::ScreenIdentifier>(gc, "ScreenIdentifier")

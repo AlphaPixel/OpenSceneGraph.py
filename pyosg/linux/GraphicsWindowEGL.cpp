@@ -72,6 +72,12 @@ public:
 
 		if(!display) return;
 
+		_display = display;
+		_window = win;
+		_wmDeleteWindow = XInternAtom(display, "WM_DELETE_WINDOW", False);
+
+		XSetWMProtocols(display, win, &_wmDeleteWindow, 1);
+
 		_eglDisplay = eglGetDisplay(reinterpret_cast<EGLNativeDisplayType>(display));
 
 		if(_eglDisplay == EGL_NO_DISPLAY) {
@@ -166,6 +172,25 @@ public:
 
 	bool isRealizedImplementation() const override { return _realized; }
 
+	// Watches for the WM_DELETE_WINDOW ClientMessage the window manager sends when the user
+	// clicks the close button (registered via XSetWMProtocols() in init()). Without this, closing
+	// the window kills it out from under EGL, and every subsequent makeCurrentImplementation()
+	// fails forever since nothing ever tells the viewer the window (and thus the GraphicsContext)
+	// is gone.
+	bool checkEvents() override {
+		while(_display && XPending(_display)) {
+			XEvent event;
+
+			XNextEvent(_display, &event);
+
+			if(event.type == ClientMessage && static_cast<Atom>(event.xclient.data.l[0]) == _wmDeleteWindow) {
+				getEventQueue()->closeWindow();
+			}
+		}
+
+		return osgViewer::GraphicsWindow::checkEvents();
+	}
+
 	bool makeCurrentImplementation() override {
 		bool ok = eglMakeCurrent(_eglDisplay, _eglSurface, _eglSurface, _eglContext) == EGL_TRUE;
 
@@ -190,10 +215,19 @@ public:
 			eglTerminate(_eglDisplay);
 		}
 
+		if(_display) {
+			if(_window) XDestroyWindow(_display, _window);
+
+			XCloseDisplay(_display);
+		}
+
 		_eglDisplay = EGL_NO_DISPLAY;
 		_eglContext = EGL_NO_CONTEXT;
 		_eglSurface = EGL_NO_SURFACE;
 		_eglConfig = nullptr;
+
+		_display = nullptr;
+		_window = 0;
 
 		_initialized = false;
 		_realized = false;
@@ -204,6 +238,10 @@ private:
 	bool _valid = false;
 	bool _initialized = false;
 	bool _realized = false;
+
+	Display* _display = nullptr;
+	Window _window = 0;
+	Atom _wmDeleteWindow = None;
 
 	EGLDisplay _eglDisplay = EGL_NO_DISPLAY;
 	EGLContext _eglContext = EGL_NO_CONTEXT;

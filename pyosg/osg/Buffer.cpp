@@ -43,12 +43,37 @@ void bind_Buffer(py::module_& m) {
 		)
 	;
 
+	// The live, per-context GL object (glGenBuffers() name) backing a compiled BufferObject.
+	// Needed to hand a raw GL buffer id to anything outside OSG that wants to touch the same
+	// GPU memory directly -- e.g. CUDA/GL interop (cudaGraphicsGLRegisterBuffer()) for zero-copy
+	// access to tensors already living on the GPU. glObjectID reads 0 until the buffer has
+	// actually been compiled (uploaded) at least once by the render backend.
+	py::class_<
+		osg::GLBufferObject,
+		osg::Referenced,
+		osg::ref_ptr<osg::GLBufferObject>
+	>(m, "GLBufferObject")
+		.def_property_readonly("contextID", &osg::GLBufferObject::getContextID)
+		.def_property_readonly(
+			"glObjectID",
+			static_cast<GLuint(osg::GLBufferObject::*)() const>(&osg::GLBufferObject::getGLObjectID)
+		)
+		.def_property_readonly("dirty", &osg::GLBufferObject::isDirty)
+		.def("compileBuffer", &osg::GLBufferObject::compileBuffer)
+	;
+
 	py::class_<
 		osg::BufferObject,
 		osg::Object,
 		osg::ref_ptr<osg::BufferObject>
 	>(m, "BufferObject")
 		// .def(py::init<>())
+		.def(
+			"glBufferObject",
+			&osg::BufferObject::getOrCreateGLBufferObject,
+			"contextID"_a,
+			py::return_value_policy::reference
+		)
 	;
 
 	py::class_<
