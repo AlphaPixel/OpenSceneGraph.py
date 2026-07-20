@@ -2,7 +2,7 @@
   <img src="logo.png" alt="OpenSceneGraph.py logo" width="220">
 </p>
 
-# Key Features (June, 2026)
+# Key Features (July, 2026)
 
 - Covers most of the core `osg` namespace, as well as significant portions of
   `osgViewer`, `osgUtil`, `osgGA`, and `osgDB`. Any missing or unwrapped
@@ -63,7 +63,7 @@
   ))
   ```
 
-  [!NOTE]
+  > [!NOTE]
   > Wherever it is practical to improve the ergonomics of the aging OSG API in
   > Python, we do. Most attributes can be set both at construction time and
   > through traditional setter-based APIs. Likewise, anything that functions as
@@ -199,7 +199,8 @@ pipeline with a Sketchfab-parity post-processing chain. Each step is a
 complete, runnable example in [`examples/pyosg-lighting`](examples/pyosg-lighting)
 that builds directly on the one before it.
 
-> NOTE: You will need our [osgGLTF](https://github.com/XenonOfArcticus/osgGLTF)
+> [!NOTE]
+> You will need our [osgGLTF](https://github.com/XenonOfArcticus/osgGLTF)
 > to load GLTF 2.0 models. It is included as a submodule (see
 > [Building](#Building) for more information).
 
@@ -417,7 +418,8 @@ tonemapping, vignette, grain, chromatic aberration, sharpening, and color
 balance (though we defer TAA until sometime later). Unlike the previous
 examples, we transition to a single directional light to keep things simple.
 
-> NOTE: The [Sketchfab](https://sketchfab.com) viewer is *amazing*, and we make
+> [!NOTE]
+> The [Sketchfab](https://sketchfab.com) viewer is *amazing*, and we make
 > no assertions that we actually **match** their post-processing quality (YET).
 > The goal is *eventual parity*, and we'll add more features primarily guided by
 > community interest.
@@ -489,9 +491,8 @@ library, cover more specialized functionality:
 
 - **[osgGLTF](https://github.com/XenonOfArcticus/osgGLTF)** - glTF 2.0
   mesh/texture loading with full PBR/IBL support: base color, normal, ORM,
-  and emissive textures, plus specular/diffuse IBL prefiltering and live GPU
-  cubemap baking. Every model in the [Lighting Series](#lighting-series)
-  loads through this plugin.
+  and emissive textures, plus specular/diffuse IBL prefiltering, live GPU
+  cubemap baking and (**very**) rudimentary GPU-based skeletal animation.
 - **[osgDebug](https://github.com/cubicool/osgdebug)** - GL debug-extension
   integration (driver message callbacks, KHR debug groups, GPU timestamp
   profiling for tools like Nsight/APITrace), plus the ImGui-based live-tuning
