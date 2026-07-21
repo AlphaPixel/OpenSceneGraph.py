@@ -122,11 +122,6 @@ namespace detail {
 		PrimitiveSetsProxy
 	>;
 
-	/* template<>
-	void kwargs_init(osg::Object& self, const py::kwargs& kwargs) {
-		if(kwargs.contains("name")) self.setName(kwargs["name"].cast<std::string>());
-	} */
-
 	class PrimitiveSet: public osg::PrimitiveSet {
 	public:
 		using osg::PrimitiveSet::PrimitiveSet;

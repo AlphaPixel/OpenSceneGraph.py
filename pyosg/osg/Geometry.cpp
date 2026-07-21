@@ -1,5 +1,34 @@
 #include "Geometry.hpp"
 
+namespace pybind11x {
+	template<>
+	void kwargs_init_own(osg::Geometry& self, const py::kwargs& kwargs) {
+		if(kwargs.contains("vertexArray")) {
+			pyosg::detail::GeometrySlots::setter<pyosg::detail::VertexArraySlot, osg::Array*>(
+				&osg::Geometry::setVertexArray
+			)(self, kwargs["vertexArray"]);
+		}
+
+		if(kwargs.contains("colorArray")) {
+			pyosg::detail::GeometrySlots::setter<pyosg::detail::ColorArraySlot, osg::Array*>(
+				py::overload_cast<osg::Array*>(&osg::Geometry::setColorArray)
+			)(self, kwargs["colorArray"]);
+		}
+
+		if(kwargs.contains("normalArray")) {
+			pyosg::detail::GeometrySlots::setter<pyosg::detail::NormalArraySlot, osg::Array*>(
+				py::overload_cast<osg::Array*>(&osg::Geometry::setNormalArray)
+			)(self, kwargs["normalArray"]);
+		}
+
+		if(kwargs.contains("primitiveSets")) {
+			for(py::handle ps : kwargs["primitiveSets"]) {
+				self.addPrimitiveSet(ps.cast<osg::PrimitiveSet*>());
+			}
+		}
+	}
+}
+
 namespace pyosg {
 
 void bind_Geometry(py::module_& m) {
@@ -92,6 +121,7 @@ void bind_Geometry(py::module_& m) {
 	// virtual void setUseVertexBufferObjects(bool flag);
 	auto geom = py::class_<osg::Geometry, osg::Drawable, osg::ref_ptr<osg::Geometry>>(m, "Geometry")
 		.def(py::init<>())
+		.def(py::init(pyx::kwargs_ctor<osg::Geometry>()))
 
 		// Properties (new) alongside the old set*Array()/get*Array() method calls (kept for
 		// compatibility -- osgGLTF's loader still calls setVertexArray()/setColorArray()

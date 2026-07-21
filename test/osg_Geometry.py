@@ -2,8 +2,25 @@
 
 import pytest
 
-from OpenSceneGraph.osg import Array, Geometry, Vec2Array, Vec3Array, DrawArrays, PrimitiveSet
+from OpenSceneGraph.osg import Array, Geometry, Vec2Array, Vec3Array, DrawArrays, PrimitiveSet, Vec3
 
+
+def test_construction_kwargs():
+	# `vertexArray`/`colorArray`/`normalArray` share the same `GeometrySlots::setter` functor as
+	# the identically-named properties below -- exercising them via the constructor here, not
+	# just `g.vertexArray = ...` afterward.
+	va = Vec3Array([Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0)])
+	ca = Vec3Array([Vec3(1, 1, 1)])
+	na = Vec3Array([Vec3(0, 0, 1)])
+	ps0 = DrawArrays(PrimitiveSet.TRIANGLES, 0, 3)
+
+	g = Geometry(vertexArray=va, colorArray=ca, normalArray=na, primitiveSets=(ps0,))
+
+	assert g.vertexArray is va
+	assert g.colorArray is ca
+	assert g.normalArray is na
+	assert len(g.primitiveSets) == 1
+	assert g.primitiveSets[0] is ps0
 
 def test_vertex_attrib_set_get_identity():
 	g = Geometry()
