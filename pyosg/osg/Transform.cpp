@@ -4,6 +4,31 @@
 // at some time in the future.
 #include "NodeVisitor.hpp"
 
+namespace pybind11x {
+	template<>
+	void kwargs_init_own(osg::Transform& self, const py::kwargs& kwargs) {
+		if(kwargs.contains("referenceFrame")) self.setReferenceFrame(
+			kwargs["referenceFrame"].cast<osg::Transform::ReferenceFrame>()
+		);
+	}
+
+	template<>
+	void kwargs_init_own(osg::MatrixTransform& self, const py::kwargs& kwargs) {
+		if(kwargs.contains("matrix")) self.setMatrix(kwargs["matrix"].cast<osg::Matrix>());
+	}
+
+	template<>
+	void kwargs_init_own(osg::PositionAttitudeTransform& self, const py::kwargs& kwargs) {
+		// `setPosition`/`setScale`/`setPivotPoint` all take `const osg::Vec3d&` explicitly (not
+		// the generic `osg::Vec3` = `Vec3f` alias) -- matching that here, not just what happens
+		// to compile, since `.position`/`.scale`/`.pivotPoint` getters return `Vec3d` too and a
+		// `Vec3f` cast silently truncates precision instead of matching them.
+		if(kwargs.contains("position")) self.setPosition(kwargs["position"].cast<osg::Vec3d>());
+		if(kwargs.contains("scale")) self.setScale(kwargs["scale"].cast<osg::Vec3d>());
+		if(kwargs.contains("pivotPoint")) self.setPivotPoint(kwargs["pivotPoint"].cast<osg::Vec3d>());
+	}
+}
+
 namespace pyosg {
 
 void bind_Transform(py::module_& m) {
@@ -13,6 +38,7 @@ void bind_Transform(py::module_& m) {
 		osg::ref_ptr<osg::Transform>
 	>(m, "Transform")
 		.def(py::init<>())
+		.def(py::init(pyx::kwargs_ctor<osg::Transform>()))
 	;
 
 	py::enum_<osg::Transform::ReferenceFrame>(transform, "ReferenceFrame")
@@ -30,6 +56,8 @@ void bind_Transform(py::module_& m) {
 		.def(py::init<>())
 		.def(py::init<const osg::Matrix&>())
 		.def(py::init<const osg::MatrixTransform&>())
+		.def(py::init(pyx::kwargs_ctor<osg::MatrixTransform>()))
+		.def(py::init(pyx::kwargs_ctor<osg::MatrixTransform, const osg::Matrix&>()))
 		.def_property(
 			"matrix",
 			&osg::MatrixTransform::getMatrix,
@@ -44,6 +72,7 @@ void bind_Transform(py::module_& m) {
 	>(m, "PositionAttitudeTransform")
 		.def(py::init<>())
 		.def(py::init<const osg::PositionAttitudeTransform&>())
+		.def(py::init(pyx::kwargs_ctor<osg::PositionAttitudeTransform>()))
 		.def_property(
 			"position",
 			&osg::PositionAttitudeTransform::getPosition,

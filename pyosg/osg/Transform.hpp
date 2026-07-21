@@ -1,3 +1,5 @@
+#pragma once
+
 #include "../pyosg.hpp"
 
 PYOSG_DISABLE_WARNINGS
@@ -6,6 +8,10 @@ PYOSG_DISABLE_WARNINGS
 #include <osg/PositionAttitudeTransform>
 
 PYOSG_ENABLE_WARNINGS
+
+#include "pybind11x.hpp"
+
+namespace pyx = pybind11x;
 
 namespace pyosg {
 
