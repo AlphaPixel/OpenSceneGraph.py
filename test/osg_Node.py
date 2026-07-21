@@ -17,6 +17,10 @@ def test_construction():
 
 	assert refcmp(n, 1, 3)
 
+def test_construction_kwargs_cullingactive():
+	assert Node().cullingActive == True
+	assert Node(cullingActive=False).cullingActive == False
+
 def test_destruction():
 	deleted = []
 
