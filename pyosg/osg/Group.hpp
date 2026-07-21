@@ -45,17 +45,6 @@ struct pyx::SequenceTraits<osg::Group> {
 namespace pyosg {
 
 namespace detail {
-	/* template<>
-	void kwargs_init(osg::Group& self, const py::kwargs& kwargs) {
-		kwargs_init(static_cast<osg::Node&>(self), kwargs);
-
-		if(kwargs.contains("children")) {
-			for(py::handle child : kwargs["children"]) {
-				self.addChild(child.cast<osg::Node*>());
-			}
-		}
-	} */
-
 	using ChildrenProxy = pyx::SequenceProxy<osg::Group>;
 	using ChildrenStorage = pyx::ProxyStorageOSG<osg::Group, ChildrenProxy>;
 }

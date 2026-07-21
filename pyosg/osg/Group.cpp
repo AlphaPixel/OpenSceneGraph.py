@@ -1,12 +1,8 @@
 #include "Group.hpp"
 
-namespace pyosg {
-
-namespace detail {
+namespace pybind11x {
 	template<>
-	void kwargs_init(osg::Group& self, const py::kwargs& kwargs) {
-		kwargs_init(static_cast<osg::Node&>(self), kwargs);
-
+	void kwargs_init_own(osg::Group& self, const py::kwargs& kwargs) {
 		if(kwargs.contains("children")) {
 			for(py::handle child : kwargs["children"]) {
 				self.addChild(child.cast<osg::Node*>());
@@ -14,6 +10,8 @@ namespace detail {
 		}
 	}
 }
+
+namespace pyosg {
 
 void bind_Group(py::module_& m) {
 	auto group = py::class_<osg::Group, osg::Node, osg::ref_ptr<osg::Group>>(m, "Group");
@@ -24,13 +22,7 @@ void bind_Group(py::module_& m) {
 
 	group
 		.def(py::init<>())
-		.def(py::init([](py::args args, py::kwargs kwargs) {
-			osg::ref_ptr<osg::Group> g = new osg::Group();
-
-			detail::kwargs_init(*g, kwargs);
-
-			return g;
-		}))
+		.def(py::init(pyx::kwargs_ctor<osg::Group>()))
 
 		.def_static("test_cpp", []() {
 			auto* g = new osg::Group();
