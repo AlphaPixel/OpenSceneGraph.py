@@ -1,5 +1,58 @@
 #include "Texture.hpp"
 
+namespace pybind11x {
+	template<>
+	void kwargs_init_own(osg::Texture& self, const py::kwargs& kwargs) {
+		if(kwargs.contains("wrap")) pyosg::detail::texture_wrap_property_setter()(
+			self,
+			kwargs["wrap"]
+		);
+
+		if(kwargs.contains("filter")) pyosg::detail::texture_filter_property_setter()(
+			self,
+			kwargs["filter"]
+		);
+
+		if(kwargs.contains("internalFormat")) self.setInternalFormat(
+			kwargs["internalFormat"].cast<GLint>()
+		);
+
+		if(kwargs.contains("sourceFormat")) self.setSourceFormat(
+			kwargs["sourceFormat"].cast<GLenum>()
+		);
+
+		if(kwargs.contains("sourceType")) self.setSourceType(
+			kwargs["sourceType"].cast<GLenum>()
+		);
+
+		if(kwargs.contains("image")) pyosg::detail::texture_image_property_setter()(
+			self,
+			kwargs["image"]
+		);
+
+		if(kwargs.contains("useHardwareMipMapGeneration")) self.setUseHardwareMipMapGeneration(
+			kwargs["useHardwareMipMapGeneration"].cast<bool>()
+		);
+	}
+
+	template<>
+	void kwargs_init_own(osg::Texture2D& self, const py::kwargs& kwargs) {
+		if(kwargs.contains("size")) {
+			auto vals = try_unpack_sequence<int, int>(kwargs["size"]);
+
+			if(!vals) throw py::value_error("size requires (width, height)");
+
+			auto& [width, height] = *vals;
+
+			self.setTextureSize(width, height);
+		}
+
+		if(kwargs.contains("numMipmapLevels")) self.setNumMipmapLevels(
+			kwargs["numMipmapLevels"].cast<unsigned int>()
+		);
+	}
+}
+
 namespace pyosg {
 
 void bind_Texture(py::module_& m) {
@@ -85,47 +138,7 @@ void bind_Texture(py::module_& m) {
 					self.getWrap(osg::Texture::WRAP_R)
 				);
 			},
-			[](osg::Texture& self, py::object obj) {
-				if(py::isinstance<osg::Texture::WrapMode>(obj)) {
-					auto v = obj.cast<osg::Texture::WrapMode>();
-
-					self.setWrap(osg::Texture::WrapParameter::WRAP_S, v);
-					self.setWrap(osg::Texture::WrapParameter::WRAP_T, v);
-					self.setWrap(osg::Texture::WrapParameter::WRAP_R, v);
-				}
-
-				// Variable arity (1-3 elements, S/T/R in order): tried largest-first via exact-arity
-				// unpacks rather than a single cascading `if(n >= k)` -- each branch below is now
-				// also immune to the "string happens to satisfy isinstance<sequence>" trap (see
-				// `pyx::try_unpack_sequence`), which the old cascade (an unconditional
-				// `obj.cast<py::sequence>()` with no isinstance guard at all) was not.
-				else if(auto vals3 = pyx::try_unpack_sequence<
-					osg::Texture::WrapMode, osg::Texture::WrapMode, osg::Texture::WrapMode
-				>(obj)) {
-					auto& [s, t, r] = *vals3;
-
-					self.setWrap(osg::Texture::WrapParameter::WRAP_S, s);
-					self.setWrap(osg::Texture::WrapParameter::WRAP_T, t);
-					self.setWrap(osg::Texture::WrapParameter::WRAP_R, r);
-				}
-
-				else if(auto vals2 = pyx::try_unpack_sequence<
-					osg::Texture::WrapMode, osg::Texture::WrapMode
-				>(obj)) {
-					auto& [s, t] = *vals2;
-
-					self.setWrap(osg::Texture::WrapParameter::WRAP_S, s);
-					self.setWrap(osg::Texture::WrapParameter::WRAP_T, t);
-				}
-
-				else if(auto vals1 = pyx::try_unpack_sequence<osg::Texture::WrapMode>(obj)) {
-					self.setWrap(osg::Texture::WrapParameter::WRAP_S, std::get<0>(*vals1));
-				}
-
-				else throw py::type_error(
-					"Expected WrapMode or sequence of 1-3 WrapMode values (S, T, R)"
-				);
-			}
+			detail::texture_wrap_property_setter()
 		)
 		.def_property(
 			"filter",
@@ -135,42 +148,7 @@ void bind_Texture(py::module_& m) {
 					self.getFilter(osg::Texture::MAG_FILTER)
 				);
 			},
-			[](osg::Texture& self, py::object obj) {
-				if(py::isinstance<osg::Texture::FilterMode>(obj)) {
-					auto v = obj.cast<osg::Texture::FilterMode>();
-
-					// MAG filter only accepts LINEAR or NEAREST - strip mipmap component
-					osg::Texture::FilterMode mag =
-						(v == osg::Texture::NEAREST ||
-						 v == osg::Texture::NEAREST_MIPMAP_LINEAR ||
-						 v == osg::Texture::NEAREST_MIPMAP_NEAREST)
-						? osg::Texture::NEAREST
-						: osg::Texture::LINEAR
-					;
-
-					self.setFilter(osg::Texture::FilterParameter::MIN_FILTER, v);
-					self.setFilter(osg::Texture::FilterParameter::MAG_FILTER, mag);
-				}
-
-				// Variable arity (1-2 elements, MIN/MAG in order) -- same chained exact-arity
-				// approach as `wrap` above.
-				else if(auto vals2 = pyx::try_unpack_sequence<
-					osg::Texture::FilterMode, osg::Texture::FilterMode
-				>(obj)) {
-					auto& [min, mag] = *vals2;
-
-					self.setFilter(osg::Texture::FilterParameter::MIN_FILTER, min);
-					self.setFilter(osg::Texture::FilterParameter::MAG_FILTER, mag);
-				}
-
-				else if(auto vals1 = pyx::try_unpack_sequence<osg::Texture::FilterMode>(obj)) {
-					self.setFilter(osg::Texture::FilterParameter::MIN_FILTER, std::get<0>(*vals1));
-				}
-
-				else throw py::type_error(
-					"Expected FilterMode or sequence of 1-2 FilterMode values (MIN, MAG)"
-				);
-			}
+			detail::texture_filter_property_setter()
 		)
 		.def_property(
 			"internalFormat",
@@ -207,24 +185,7 @@ void bind_Texture(py::module_& m) {
 				[](osg::Texture& self) { return self.getImage(0); },
 				py::return_value_policy::reference_internal
 			),
-			py::cpp_function(
-				/* [](osg::Texture& self, unsigned int face, osg::Image* data) {
-					self.setImage(face, data);
-				}, py::keep_alive<1, 2>() */
-				[](osg::Texture& self, py::object obj) {
-					if(auto vals = pyx::try_unpack_sequence<unsigned int, osg::Image*>(obj)) {
-						auto& [face, img] = *vals;
-
-						self.setImage(face, img);
-					}
-
-					else if(auto val = pyx::try_unpack_sequence<osg::Image*>(obj)) {
-						self.setImage(0, std::get<0>(*val));
-					}
-
-					else throw py::value_error("Image or (face, Image) required");
-				}
-			)
+			detail::texture_image_property_setter()
 		)
 
 		// setBorderColor
@@ -284,6 +245,7 @@ void bind_Texture(py::module_& m) {
 
 			return t;
 		}))
+		.def(py::init(pyx::kwargs_ctor<osg::Texture2D>()))
 		.def_property(
 			"size",
 			[](osg::Texture2D& self) {
@@ -298,6 +260,11 @@ void bind_Texture(py::module_& m) {
 
 				self.setTextureSize(width, height);
 			}
+		)
+		.def_property(
+			"numMipmapLevels",
+			&osg::Texture2D::getNumMipmapLevels,
+			&osg::Texture2D::setNumMipmapLevels
 		)
 		.def("apply", &osg::Texture2D::apply)
 	;
