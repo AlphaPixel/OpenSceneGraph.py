@@ -1,12 +1,8 @@
 #include "Program.hpp"
 
-namespace pyosg {
-
-namespace detail {
+namespace pybind11x {
 	template<>
-	void kwargs_init(osg::Program& self, const py::kwargs& kwargs) {
-		kwargs_init(static_cast<osg::Object&>(self), kwargs);
-
+	void kwargs_init_own(osg::Program& self, const py::kwargs& kwargs) {
 		if(kwargs.contains("shaders")) {
 			for(py::handle shader : kwargs["shaders"]) {
 				self.addShader(shader.cast<osg::Shader*>());
@@ -14,6 +10,8 @@ namespace detail {
 		}
 	}
 }
+
+namespace pyosg {
 
 void bind_Program(py::module_& m) {
 	auto program = py::class_<
@@ -23,13 +21,7 @@ void bind_Program(py::module_& m) {
 	>>(m, "Program")
 		.def(py::init<>())
 		// .def(py::init<const osg::Program&>())
-		.def(py::init([](py::args args, py::kwargs kwargs) {
-			osg::ref_ptr<osg::Program> p = new osg::Program();
-
-			detail::kwargs_init(*p, kwargs);
-
-			return p;
-		}))
+		.def(py::init(pyx::kwargs_ctor<osg::Program>()))
 	;
 
 	// Shaders can be added via `.shaders.append(shader)` (SequenceProxy, below) -- no need for a

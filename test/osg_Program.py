@@ -29,6 +29,14 @@ def assert_binding_mapping(mapping, first, second):
 		mapping[first]
 
 
+def test_construction_kwargs():
+	shader = Shader(Shader.VERTEX)
+
+	program = Program(shaders=(shader,))
+
+	assert len(program.shaders) == 1
+	assert program.shaders[0] is shader
+
 def test_program_binding_location_mappings():
 	program = Program()
 
