@@ -1,5 +1,87 @@
 #include "Camera.hpp"
 
+namespace pybind11x {
+	template<>
+	void kwargs_init_own(osg::Camera& self, const py::kwargs& kwargs) {
+		if(kwargs.contains("viewport")) pyosg::detail::camera_viewport_property_setter()(
+			self,
+			kwargs["viewport"]
+		);
+
+		if(kwargs.contains("clearColor")) self.setClearColor(
+			kwargs["clearColor"].cast<osg::Vec4>()
+		);
+
+		if(kwargs.contains("clearMask")) self.setClearMask(
+			kwargs["clearMask"].cast<GLbitfield>()
+		);
+
+		if(kwargs.contains("projectionMatrix")) {
+			pyosg::detail::camera_projection_matrix_property_setter()(
+				self,
+				kwargs["projectionMatrix"]
+			);
+		}
+
+		if(kwargs.contains("viewMatrix")) pyosg::detail::camera_view_matrix_property_setter()(
+			self,
+			kwargs["viewMatrix"]
+		);
+
+		if(kwargs.contains("renderOrder")) pyosg::detail::camera_render_order_property_setter()(
+			self,
+			kwargs["renderOrder"]
+		);
+
+		if(kwargs.contains("graphicsContext")) self.setGraphicsContext(
+			kwargs["graphicsContext"].cast<osg::GraphicsContext*>()
+		);
+
+		if(kwargs.contains("renderTargetImplementation")) {
+			pyosg::detail::camera_render_target_implementation_property_setter()(
+				self,
+				kwargs["renderTargetImplementation"]
+			);
+		}
+
+		if(kwargs.contains("allowEventFocus")) self.setAllowEventFocus(
+			kwargs["allowEventFocus"].cast<bool>()
+		);
+
+		if(kwargs.contains("computeNearFarMode")) self.setComputeNearFarMode(
+			kwargs["computeNearFarMode"].cast<osg::CullSettings::ComputeNearFarMode>()
+		);
+
+		if(kwargs.contains("nearFarRatio")) self.setNearFarRatio(
+			kwargs["nearFarRatio"].cast<double>()
+		);
+
+		if(kwargs.contains("initialDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
+			pyosg::detail::InitialDrawCallbackSlot,
+			pyosg::detail::InitialDrawCallbackSetter,
+			pyosg::detail::InitialDrawCallbackGetter
+		>()(self, kwargs["initialDrawCallback"]);
+
+		if(kwargs.contains("preDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
+			pyosg::detail::PreDrawCallbackSlot,
+			pyosg::detail::PreDrawCallbackSetter,
+			pyosg::detail::PreDrawCallbackGetter
+		>()(self, kwargs["preDrawCallback"]);
+
+		if(kwargs.contains("postDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
+			pyosg::detail::PostDrawCallbackSlot,
+			pyosg::detail::PostDrawCallbackSetter,
+			pyosg::detail::PostDrawCallbackGetter
+		>()(self, kwargs["postDrawCallback"]);
+
+		if(kwargs.contains("finalDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
+			pyosg::detail::FinalDrawCallbackSlot,
+			pyosg::detail::FinalDrawCallbackSetter,
+			pyosg::detail::FinalDrawCallbackGetter
+		>()(self, kwargs["finalDrawCallback"]);
+	}
+}
+
 namespace pyosg {
 
 void bind_Camera(py::module_& m) {
@@ -11,6 +93,7 @@ void bind_Camera(py::module_& m) {
 		osg::ref_ptr<osg::Camera>
 	>(m, "Camera")
 		.def(py::init<>())
+		.def(py::init(pyx::kwargs_ctor<osg::Camera>()))
 	;
 
 	py::enum_<osg::Camera::RenderOrder>(camera, "RenderOrder")
@@ -93,19 +176,7 @@ void bind_Camera(py::module_& m) {
 		.def_property(
 			"renderOrder",
 			&osg::Camera::getRenderOrder,
-			[](osg::Camera& self, py::object obj) {
-				if(py::isinstance<osg::Camera::RenderOrder>(obj)) {
-					self.setRenderOrder(obj.cast<osg::Camera::RenderOrder>());
-				}
-
-				else if(auto vals = pyx::try_unpack_sequence<osg::Camera::RenderOrder, int>(obj)) {
-					auto& [order, num] = *vals;
-
-					self.setRenderOrder(order, num);
-				}
-
-				else throw py::value_error("Expected RenderOrder or (RenderOrder, int)");
-			}
+			detail::camera_render_order_property_setter()
 		)
 		.def_property("clearMask", &osg::Camera::getClearMask, &osg::Camera::setClearMask)
 		.def_property("clearColor", &osg::Camera::getClearColor, &osg::Camera::setClearColor)
@@ -129,32 +200,7 @@ void bind_Camera(py::module_& m) {
 		.def_property(
 			"viewport",
 			py::overload_cast<>(&osg::Camera::getViewport, py::const_),
-			// TODO: This should really just accept `osg.Viewpoint` (ONLY), but it's nice to know
-			// HOW to parse different types of args, so we'll leave it as an example...
-			// TODO: We should either settle on ONLY using `py::args` or `py::object`!
-			[](osg::Camera& self, const py::args& args) {
-				if(args.size() == 1) {
-					// camera.viewport = viewport
-					if(py::isinstance<osg::Viewport>(args[0])) {
-						auto* vp = args[0].cast<osg::Viewport*>();
-
-						self.setViewport(vp);
-
-						return;
-					}
-
-					// camera.viewport = (x, y, w, h)
-					if(auto vals = pyx::try_unpack_sequence<int, int, int, int>(args[0])) {
-						auto& [x, y, w, h] = *vals;
-
-						self.setViewport(x, y, w, h);
-
-						return;
-					}
-				}
-
-				throw py::type_error("viewport must be set to osg.Viewport or sequence");
-			},
+			detail::camera_viewport_property_setter(),
 			py::return_value_policy::reference_internal,
 			py::doc(
 				"Get or set the camera viewport.\n\n"
@@ -167,34 +213,14 @@ void bind_Camera(py::module_& m) {
 		.def_property(
 			"projectionMatrix",
 			py::overload_cast<>(&osg::Camera::getProjectionMatrix, py::const_),
-			[](osg::Camera& self, py::handle matrix) {
-				if(py::isinstance<osg::Matrixd>(matrix)) self.setProjectionMatrix(
-					matrix.cast<osg::Matrixd>()
-				);
-
-				else if(py::isinstance<osg::Matrixf>(matrix)) self.setProjectionMatrix(
-					matrix.cast<osg::Matrixf>()
-				);
-
-				else throw py::type_error("projectionMatrix must be osg.Matrixd or osg.Matrixf");
-			},
+			detail::camera_projection_matrix_property_setter(),
 			py::return_value_policy::reference_internal
 		)
 
 		.def_property(
 			"viewMatrix",
 			py::overload_cast<>(&osg::Camera::getViewMatrix, py::const_),
-			[](osg::Camera& self, py::handle matrix) {
-				if(py::isinstance<osg::Matrixd>(matrix)) self.setViewMatrix(
-					matrix.cast<osg::Matrixd>()
-				);
-
-				else if(py::isinstance<osg::Matrixf>(matrix)) self.setViewMatrix(
-					matrix.cast<osg::Matrixf>()
-				);
-
-				else throw py::type_error("viewMatrix must be osg.Matrixd or osg.Matrixf");
-			},
+			detail::camera_view_matrix_property_setter(),
 			py::return_value_policy::reference_internal
 		)
 
@@ -289,21 +315,7 @@ void bind_Camera(py::module_& m) {
 					self.getRenderTargetFallback()
 				);
 			},
-			[](osg::Camera& self, py::object obj) {
-				if(py::isinstance<osg::Camera::RenderTargetImplementation>(obj)) {
-					self.setRenderTargetImplementation(obj.cast<osg::Camera::RenderTargetImplementation>());
-				}
-
-				else if(auto vals = pyx::try_unpack_sequence<
-					osg::Camera::RenderTargetImplementation, osg::Camera::RenderTargetImplementation
-				>(obj)) {
-					auto& [impl, fallback] = *vals;
-
-					self.setRenderTargetImplementation(impl, fallback);
-				}
-
-				else throw py::value_error("Expected RenderTargetImplementation or (impl, fallback)");
-			}
+			detail::camera_render_target_implementation_property_setter()
 		)
 	;
 }

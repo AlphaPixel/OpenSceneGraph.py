@@ -104,6 +104,88 @@ namespace detail {
 		>();
 	}
 
+	// Shared setters used by both `bind_Camera()`'s `.def_property()` calls and
+	// `kwargs_init_own()` -- keeps the parsing/validation logic for each property in one place.
+	inline auto camera_viewport_property_setter() {
+		return [](osg::Camera& self, py::object obj) {
+			if(py::isinstance<osg::Viewport>(obj)) {
+				self.setViewport(obj.cast<osg::Viewport*>());
+			}
+
+			else if(auto vals = pyx::try_unpack_sequence<int, int, int, int>(obj)) {
+				auto& [x, y, w, h] = *vals;
+
+				self.setViewport(x, y, w, h);
+			}
+
+			else throw py::type_error("viewport must be osg.Viewport or (x, y, width, height)");
+		};
+	}
+
+	inline auto camera_projection_matrix_property_setter() {
+		return [](osg::Camera& self, py::handle matrix) {
+			if(py::isinstance<osg::Matrixd>(matrix)) self.setProjectionMatrix(
+				matrix.cast<osg::Matrixd>()
+			);
+
+			else if(py::isinstance<osg::Matrixf>(matrix)) self.setProjectionMatrix(
+				matrix.cast<osg::Matrixf>()
+			);
+
+			else throw py::type_error("projectionMatrix must be osg.Matrixd or osg.Matrixf");
+		};
+	}
+
+	inline auto camera_view_matrix_property_setter() {
+		return [](osg::Camera& self, py::handle matrix) {
+			if(py::isinstance<osg::Matrixd>(matrix)) self.setViewMatrix(matrix.cast<osg::Matrixd>());
+
+			else if(py::isinstance<osg::Matrixf>(matrix)) self.setViewMatrix(
+				matrix.cast<osg::Matrixf>()
+			);
+
+			else throw py::type_error("viewMatrix must be osg.Matrixd or osg.Matrixf");
+		};
+	}
+
+	inline auto camera_render_order_property_setter() {
+		return [](osg::Camera& self, py::object obj) {
+			if(py::isinstance<osg::Camera::RenderOrder>(obj)) {
+				self.setRenderOrder(obj.cast<osg::Camera::RenderOrder>());
+			}
+
+			else if(auto vals = pyx::try_unpack_sequence<osg::Camera::RenderOrder, int>(obj)) {
+				auto& [order, num] = *vals;
+
+				self.setRenderOrder(order, num);
+			}
+
+			else throw py::value_error("renderOrder must be RenderOrder or (RenderOrder, int)");
+		};
+	}
+
+	inline auto camera_render_target_implementation_property_setter() {
+		return [](osg::Camera& self, py::object obj) {
+			if(py::isinstance<osg::Camera::RenderTargetImplementation>(obj)) {
+				self.setRenderTargetImplementation(
+					obj.cast<osg::Camera::RenderTargetImplementation>()
+				);
+			}
+
+			else if(auto vals = pyx::try_unpack_sequence<
+				osg::Camera::RenderTargetImplementation, osg::Camera::RenderTargetImplementation
+			>(obj)) {
+				auto& [impl, fallback] = *vals;
+
+				self.setRenderTargetImplementation(impl, fallback);
+			}
+
+			else throw py::value_error(
+				"renderTargetImplementation must be RenderTargetImplementation or (impl, fallback)"
+			);
+		};
+	}
+
 	class Camera: public osg::Camera {
 	public:
 		struct DrawCallback: osg::Camera::DrawCallback {
