@@ -1,12 +1,23 @@
 #include "Drawable.hpp"
 
-namespace pyosg {
-
-namespace detail {
+namespace pybind11x {
 	template<>
-	void kwargs_init(osg::Drawable& self, const py::kwargs& kwargs) {
+	void kwargs_init_own(osg::Drawable& self, const py::kwargs& kwargs) {
+		if(kwargs.contains("initialBound")) self.setInitialBound(
+			kwargs["initialBound"].cast<osg::BoundingBox>()
+		);
+
+		if(kwargs.contains("useVertexBufferObjects")) self.setUseVertexBufferObjects(
+			kwargs["useVertexBufferObjects"].cast<bool>()
+		);
+
+		if(kwargs.contains("useVertexArrayObject")) self.setUseVertexArrayObject(
+			kwargs["useVertexArrayObject"].cast<bool>()
+		);
 	}
 }
+
+namespace pyosg {
 
 void bind_Drawable(py::module_& m) {
 	py::class_<osg::RenderInfo>(m, "RenderInfo")
@@ -40,16 +51,32 @@ void bind_Drawable(py::module_& m) {
 	;
 
 	drawable
-		// .def(py::init_alias<>())
 		.def(py::init<>())
-		/* .def(py::init([](py::kwargs kwargs) {
-			osg::ref_ptr<osg::Drawable> d = new osg::Drawable();
+		// Dual-factory `py::init(ClassFunc, AliasFunc)`: pybind11 picks ClassFunc for a plain
+		// `Drawable(...)` and AliasFunc only when the Python type actually subclasses it, so the
+		// `detail::Drawable` trampoline (needed for drawImplementation/computeBound/
+		// computeBoundingBox overrides) is built only when something could actually use it.
+		.def(py::init(
+			[](py::kwargs kwargs) {
+				auto* d = new osg::Drawable();
 
-			detail::kwargs_init(*d, kwargs);
+				pyx::kwargs_init(*d, kwargs);
 
-			return d;
-		})) */
-		// TODO: Do I use detail::Drawable here?
+				return d;
+			},
+			[](py::kwargs kwargs) {
+				auto* d = new detail::Drawable();
+
+				// `kwargs_init<T>()` template-deduces T from the argument's STATIC type, and
+				// `kwargs_base`/`kwargs_init_own` are only specialized for `osg::Drawable`, not
+				// this `detail::Drawable` alias -- deducing T=detail::Drawable here would silently
+				// match the empty default template instead and skip every kwarg (including the
+				// ones from Object/Node further up the chain).
+				pyx::kwargs_init(static_cast<osg::Drawable&>(*d), kwargs);
+
+				return d;
+			}
+		))
 		//.def("drawImplementation", [](osg::Drawable& self, osg::RenderInfo& ri) {
 		//	self.drawImplementation(ri);
 		//})

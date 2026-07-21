@@ -105,6 +105,67 @@ extern "C" PyObject* PyInit_OpenSceneGraph();
 	// #define PYOSG_INTERNAL [[gnu::visibility("hidden")]]
 #endif
 
+// Bare forward declarations -- just enough to name these types below, without dragging in their
+// (heavy) real headers, which each binding .cpp includes on its own before this manifest matters.
+namespace osg {
+	class Object;
+	class Node;
+	class Group;
+	class Geode;
+	class Drawable;
+	class StateAttribute;
+	class Program;
+	class Transform;
+	class MatrixTransform;
+	class PositionAttitudeTransform;
+	class Camera;
+	class Texture;
+	class Texture2D;
+	class Geometry;
+}
+
+// Central manifest for `pybind11x::kwargs_init` (the constructor-kwargs chaining mechanism defined
+// in pybind11x.hpp): every participating type needs its REAL immediate C++ base named here via
+// `kwargs_base`, whether or not that base defines any kwargs of its own -- that's what lets the
+// walk in `kwargs_init<T>` reach it automatically instead of every subclass having to manually
+// re-derive (and keep in sync) what its actual next base is. `kwargs_init_own<T>` is declared here
+// too (its real body lives next to that type's bind_X() in its own .cpp) -- this header is included
+// by nearly every binding TU, which is what makes each specialization visible wherever the walk
+// might instantiate it; skipping an entry here doesn't fail to compile, it just silently falls back
+// to the no-op default in whichever TU forgot to declare it, so keep this list in sync with reality.
+namespace pybind11x {
+	template<typename T> struct kwargs_base;
+	template<typename T> void kwargs_init_own(T& self, const py::kwargs& kwargs);
+
+	template<> struct kwargs_base<osg::Node> { using type = osg::Object; };
+	template<> struct kwargs_base<osg::Group> { using type = osg::Node; };
+	template<> struct kwargs_base<osg::Geode> { using type = osg::Group; };
+	template<> struct kwargs_base<osg::Drawable> { using type = osg::Node; };
+	template<> struct kwargs_base<osg::StateAttribute> { using type = osg::Object; };
+	template<> struct kwargs_base<osg::Program> { using type = osg::StateAttribute; };
+	template<> struct kwargs_base<osg::Transform> { using type = osg::Group; };
+	template<> struct kwargs_base<osg::MatrixTransform> { using type = osg::Transform; };
+	template<> struct kwargs_base<osg::PositionAttitudeTransform> { using type = osg::Transform; };
+	template<> struct kwargs_base<osg::Camera> { using type = osg::Transform; };
+	template<> struct kwargs_base<osg::Texture> { using type = osg::StateAttribute; };
+	template<> struct kwargs_base<osg::Texture2D> { using type = osg::Texture; };
+	template<> struct kwargs_base<osg::Geometry> { using type = osg::Drawable; };
+
+	template<> void kwargs_init_own(osg::Object& self, const py::kwargs& kwargs);
+	template<> void kwargs_init_own(osg::Node& self, const py::kwargs& kwargs);
+	template<> void kwargs_init_own(osg::Group& self, const py::kwargs& kwargs);
+	template<> void kwargs_init_own(osg::Geode& self, const py::kwargs& kwargs);
+	template<> void kwargs_init_own(osg::Drawable& self, const py::kwargs& kwargs);
+	template<> void kwargs_init_own(osg::Program& self, const py::kwargs& kwargs);
+	template<> void kwargs_init_own(osg::Transform& self, const py::kwargs& kwargs);
+	template<> void kwargs_init_own(osg::MatrixTransform& self, const py::kwargs& kwargs);
+	template<> void kwargs_init_own(osg::PositionAttitudeTransform& self, const py::kwargs& kwargs);
+	template<> void kwargs_init_own(osg::Camera& self, const py::kwargs& kwargs);
+	template<> void kwargs_init_own(osg::Texture& self, const py::kwargs& kwargs);
+	template<> void kwargs_init_own(osg::Texture2D& self, const py::kwargs& kwargs);
+	template<> void kwargs_init_own(osg::Geometry& self, const py::kwargs& kwargs);
+}
+
 namespace pyosg {
 
 namespace detail {
@@ -207,27 +268,6 @@ namespace detail {
 
 		return tuple;
 	}
-
-	// Constructors for pybind11 types cannot call methods of that type until AFTER it is created
-	// (obviously). We therefore need SOME unified, predictable way to create "chains" of
-	// initialization wherein each type/participant should add their supported keywords and then
-	// properly forward the unused arguments into their base classes.
-	//
-	// For example, both `Node` and `Group` define overrides of this template function (supporting
-	// different keyword-based arguments); once `Group` has performed the relevant processing, it
-	// necessarily calls its next bases' overide (so forth and so on).
-	//
-	// TODO: This will almost certainly need to be grouped with the "trampoline" wrappers that
-	// eventually go into their own shared "core" library!
-	template<typename T>
-	void kwargs_init(T& self, const py::kwargs& kwargs) {}
-
-	/* template<typename T, typename... Args>
-	static T* kwargs_ctor(py::kwargs& kwargs, Args&&... args) {
-		auto* obj = new T(std::forward<Args>(args)...);
-		init_kwargs(obj, kw);
-		return obj;
-	} */
 
 	// Small helpers for creating ALIASES (usually) for types that are already built into Python;
 	// for example, if you had something like `using Foo = uint32_t` and wanted to expose the `Foo`

@@ -3,6 +3,8 @@
 // One-line summaries of what you'll find in this file:
 //
 // try_unpack_sequence -> "Try to unpack a py::object as an exact-length tuple of specific types."
+// kwargs_init -> "Chain a type's constructor-kwargs handling through its actual C++ bases."
+// kwargs_ctor -> "Build the `py::init([](kwargs){ ... })` lambda for a kwargs_init participant."
 // SlotCache -> "Don't recreate Python objects unless the underlying pointer changed."
 // ProxyStorage -> "Attach all Python views to the lifetime of the C++ object."
 // PropertySlots -> "Make fields behave like stable Python attributes."
@@ -24,6 +26,7 @@
 #include <atomic>
 #include <optional>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 namespace py = pybind11;
@@ -52,6 +55,53 @@ auto n_index(size_t size, py::ssize_t index) {
 	);
 
 	return static_cast<R>(index);
+}
+
+// Chains a type's constructor-kwargs handling through its actual C++ base classes, automatically.
+// Each participating type specializes two things (see the manifest in pyosg.hpp, which is what
+// makes these specializations visible everywhere the chain below might need them):
+//
+//   - `kwargs_base<T>::type` -- T's REAL immediate base (left as `void` for the root of a chain,
+//     or for any type that doesn't participate at all)
+//   - `kwargs_init_own<T>`   -- whatever kwargs T itself understands; no delegation code needed,
+//     `kwargs_init<T>` walks `kwargs_base` up the chain for you
+//
+// A type's binding file therefore never has to know or re-derive what its "next" base is; if that
+// base later gains its own kwargs handling, every subclass picks it up for free.
+template<typename T>
+struct kwargs_base { using type = void; };
+
+template<typename T>
+void kwargs_init_own(T&, const py::kwargs&) {}
+
+template<typename T>
+void kwargs_init(T& self, const py::kwargs& kwargs) {
+	using Base = typename kwargs_base<T>::type;
+
+	if constexpr(!std::is_void_v<Base>) kwargs_init(static_cast<Base&>(self), kwargs);
+
+	kwargs_init_own(self, kwargs);
+}
+
+// The common `py::init([](Args... args, py::kwargs kwargs) { auto obj = new T(args...);
+// kwargs_init(*obj, kwargs); return obj; })` pattern -- `Args...` are T's REAL leading positional
+// constructor parameter types (empty for the plain default-constructible case, e.g.
+// `kwargs_ctor<osg::Node>()`; e.g. `kwargs_ctor<osg::MatrixTransform, const osg::Matrix&>()` for
+// a type whose real constructor takes a required leading arg, letting `osg.MatrixTransform(m,
+// name=...)` work instead of forcing a separate `xform.name = ...` statement afterward). Each
+// `Args` parameter is necessarily positional-only from Python's side -- pybind11 has no name to
+// match a keyword against an unnamed lambda parameter, so `py::kwargs` is the only way anything
+// past it can be passed. Types needing custom/aliased allocation (a Python-subclassing trampoline)
+// still write their own lambda and just call `kwargs_init(*obj, kwargs)` directly.
+template<typename T, typename... Args>
+auto kwargs_ctor() {
+	return [](Args... args, py::kwargs kwargs) {
+		osg::ref_ptr<T> obj = new T(args...);
+
+		kwargs_init(*obj, kwargs);
+
+		return obj;
+	};
 }
 
 namespace detail {
