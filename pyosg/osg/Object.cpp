@@ -1,19 +1,19 @@
 #include "Object.hpp"
 
-namespace pyosg {
-
-namespace detail {
+namespace pybind11x {
 	template<>
-	void kwargs_init(osg::Object& self, const py::kwargs& kwargs) {
+	void kwargs_init_own(osg::Object& self, const py::kwargs& kwargs) {
 		if(kwargs.contains("name")) self.setName(kwargs["name"].cast<std::string>());
 
 		if(kwargs.contains("dataVariance")) self.setDataVariance(
 			kwargs["dataVariance"].cast<osg::Object::DataVariance>()
 		);
 
-		if(kwargs.contains("debug")) LifetimeProbe::attachTo(&self, kwargs["debug"]);
+		if(kwargs.contains("debug")) pyosg::detail::LifetimeProbe::attachTo(&self, kwargs["debug"]);
 	}
 }
+
+namespace pyosg {
 
 void bind_Object(py::module_& m) {
 	py::object RefCounts = py::module_::import("collections").attr("namedtuple")(
@@ -62,7 +62,7 @@ void bind_Object(py::module_& m) {
 		.def(py::init([](py::kwargs kwargs) {
 			osg::ref_ptr<osg::Object> o = new detail::Object();
 
-			detail::kwargs_init(*o, kwargs);
+			pyx::kwargs_init(*o, kwargs);
 
 			return o;
 		}))
