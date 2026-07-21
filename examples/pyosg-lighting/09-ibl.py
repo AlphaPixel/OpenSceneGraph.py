@@ -286,11 +286,15 @@ float shadowFactor(vec3 eyePos) {
 
 vec3 sh_irradiance(vec3 N) {
 	return max(
-		iblSH[0]
-		+ iblSH[1]*N.y + iblSH[2]*N.z + iblSH[3]*N.x
-		+ iblSH[4]*N.x*N.y + iblSH[5]*N.y*N.z
-		+ iblSH[6]*(3.0*N.z*N.z - 1.0)
-		+ iblSH[7]*N.x*N.z + iblSH[8]*(N.x*N.x - N.y*N.y),
+		iblSH[0] * 0.282095
+		+ iblSH[1] * (0.488603 * N.y)
+		+ iblSH[2] * (0.488603 * N.z)
+		+ iblSH[3] * (0.488603 * N.x)
+		+ iblSH[4] * (1.092548 * N.x * N.y)
+		+ iblSH[5] * (1.092548 * N.y * N.z)
+		+ iblSH[6] * (0.315392 * (3.0 * N.z * N.z - 1.0))
+		+ iblSH[7] * (1.092548 * N.x * N.z)
+		+ iblSH[8] * (0.546274 * (N.x * N.x - N.y * N.y)),
 		vec3(0.0)
 	);
 }
@@ -705,11 +709,12 @@ class SingleBake:
 # --------------------------------------------------------------------------- #
 
 def make_brdf_lut(lut_size=512):
-	lut_tex = osg.Texture2D()
-	lut_tex.size = (lut_size, lut_size)
-	lut_tex.internalFormat = GL_RGBA
-	lut_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
-	lut_tex.wrap = osg.Texture.CLAMP_TO_EDGE
+	lut_tex = osg.Texture2D(
+		size=(lut_size, lut_size),
+		internalFormat=GL_RGBA,
+		filter=(osg.Texture.LINEAR, osg.Texture.LINEAR),
+		wrap=osg.Texture.CLAMP_TO_EDGE,
+	)
 
 	bake_p = osg.Program(name="brdf_lut", shaders=(
 		osg.Shader(osg.Shader.VERTEX, FULLSCREEN_VERTEX),
@@ -729,15 +734,16 @@ def make_brdf_lut(lut_size=512):
 
 	SingleBake(bake_group)
 
-	cam = osg.Camera()
-	cam.name = "BRDFLutBake"
-	cam.renderOrder = osg.Camera.PRE_RENDER
-	cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
-	cam.referenceFrame = osg.Transform.ABSOLUTE_RF
-	cam.clearMask = GL_COLOR_BUFFER_BIT
-	cam.viewport = osg.Viewport(0, 0, lut_size, lut_size)
-	cam.projectionMatrix = osg.Matrix.identity()
-	cam.viewMatrix = osg.Matrix.identity()
+	cam = osg.Camera(
+		name="BRDFLutBake",
+		renderOrder=osg.Camera.PRE_RENDER,
+		renderTargetImplementation=osg.Camera.FRAME_BUFFER_OBJECT,
+		referenceFrame=osg.Transform.ABSOLUTE_RF,
+		clearMask=GL_COLOR_BUFFER_BIT,
+		viewport=osg.Viewport(0, 0, lut_size, lut_size),
+		projectionMatrix=osg.Matrix.identity(),
+		viewMatrix=osg.Matrix.identity(),
+	)
 	cam.attach(osg.Camera.COLOR_BUFFER0, lut_tex, 0, 0, False)
 	cam.stateSet.setAttributeAndModes(bake_p)
 	cam.children.append(quad_geode)
@@ -916,17 +922,16 @@ if __name__ == "__main__":
 	shadow_strength_u = osg.Uniform("shadowStrength", 0.7)
 
 	# --- Shadow map --------------------------------------------------------- #
-	shadow_tex = osg.Texture2D()
-	shadow_tex.size = (SHADOW_SIZE, SHADOW_SIZE)
-	shadow_tex.internalFormat = GL_DEPTH_COMPONENT24
-	shadow_tex.sourceFormat = GL_DEPTH_COMPONENT
-	shadow_tex.sourceType = GL_FLOAT
-	shadow_tex.filter = osg.Texture.NEAREST
-	shadow_tex.wrap = osg.Texture.CLAMP_TO_EDGE
+	shadow_tex = osg.Texture2D(
+		size=(SHADOW_SIZE, SHADOW_SIZE),
+		internalFormat=GL_DEPTH_COMPONENT24,
+		sourceFormat=GL_DEPTH_COMPONENT,
+		sourceType=GL_FLOAT,
+		filter=osg.Texture.NEAREST,
+		wrap=osg.Texture.CLAMP_TO_EDGE,
+	)
 
-	dummy_color = osg.Texture2D()
-	dummy_color.size = (SHADOW_SIZE, SHADOW_SIZE)
-	dummy_color.internalFormat = GL_RGB
+	dummy_color = osg.Texture2D(size=(SHADOW_SIZE, SHADOW_SIZE), internalFormat=GL_RGB)
 
 	# Shadow camera gets its OWN position - deliberately decoupled from key_light_pos (which stays
 	# exactly as validated for direct-light shading/attenuation). Reusing key_light_pos's distance
@@ -955,14 +960,15 @@ if __name__ == "__main__":
 
 	light_proj = osg.Matrix.perspective(2.0 * SHADOW_HALF_FOV_DEG, 1.0, shadow_near, shadow_far)
 
-	shadow_cam = osg.Camera()
-	shadow_cam.name = "ShadowCam"
-	shadow_cam.renderOrder = osg.Camera.PRE_RENDER
-	shadow_cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
-	shadow_cam.referenceFrame = osg.Transform.ABSOLUTE_RF
-	shadow_cam.clearMask = GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT
-	shadow_cam.clearColor = osg.Vec4(1, 1, 1, 1)
-	shadow_cam.viewport = osg.Viewport(0, 0, SHADOW_SIZE, SHADOW_SIZE)
+	shadow_cam = osg.Camera(
+		name="ShadowCam",
+		renderOrder=osg.Camera.PRE_RENDER,
+		renderTargetImplementation=osg.Camera.FRAME_BUFFER_OBJECT,
+		referenceFrame=osg.Transform.ABSOLUTE_RF,
+		clearMask=GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT,
+		clearColor=osg.Vec4(1, 1, 1, 1),
+		viewport=osg.Viewport(0, 0, SHADOW_SIZE, SHADOW_SIZE),
+	)
 	shadow_cam.attach(osg.Camera.DEPTH_BUFFER, shadow_tex)
 	shadow_cam.attach(osg.Camera.COLOR_BUFFER, dummy_color)
 	shadow_cam.viewMatrix = light_view

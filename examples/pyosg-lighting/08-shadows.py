@@ -395,20 +395,22 @@ if __name__ == "__main__":
 	shadow_strength_u = osg.Uniform("shadowStrength", 0.7)
 
 	# --- Shadow map depth texture ---
-	shadow_tex = osg.Texture2D()
-	shadow_tex.size = (SHADOW_SIZE, SHADOW_SIZE)
-	shadow_tex.internalFormat = GL_DEPTH_COMPONENT24
-	shadow_tex.sourceFormat = GL_DEPTH_COMPONENT
-	shadow_tex.sourceType = GL_FLOAT
-	shadow_tex.filter = osg.Texture.NEAREST
-	shadow_tex.wrap = osg.Texture.CLAMP_TO_EDGE
+	shadow_tex = osg.Texture2D(
+		size=(SHADOW_SIZE, SHADOW_SIZE),
+		internalFormat=GL_DEPTH_COMPONENT24,
+		sourceFormat=GL_DEPTH_COMPONENT,
+		sourceType=GL_FLOAT,
+		filter=osg.Texture.NEAREST,
+		wrap=osg.Texture.CLAMP_TO_EDGE,
+	)
 
 	# Dummy color texture so the FBO is complete without setDrawBuffer(GL_NONE).
 	# NOTE(binding-gap): expose Camera.setDrawBuffer / setReadBuffer to remove this.
-	dummy_color = osg.Texture2D()
-	dummy_color.size = (SHADOW_SIZE, SHADOW_SIZE)
-	dummy_color.internalFormat = GL_RGB
-	dummy_color.filter = osg.Texture.NEAREST
+	dummy_color = osg.Texture2D(
+		size=(SHADOW_SIZE, SHADOW_SIZE),
+		internalFormat=GL_RGB,
+		filter=osg.Texture.NEAREST,
+	)
 
 	# --- Shadow camera ---
 	# Light is static: set view/proj once, never touch them again.

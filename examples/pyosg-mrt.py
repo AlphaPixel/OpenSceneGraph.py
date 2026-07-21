@@ -275,33 +275,37 @@ def create_scene():
 # normal, depth) from one geometry pass. Returns the camera plus all three
 # `Texture` instances, which the composite HUD camera samples from directly.
 def create_gbuffer_camera(w=W, h=H):
-	color_tex = osg.Texture2D()
-	color_tex.size = (w, h)
-	color_tex.internalFormat = GL_RGBA
-	color_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
+	color_tex = osg.Texture2D(
+		size=(w, h),
+		internalFormat=GL_RGBA,
+		filter=(osg.Texture.LINEAR, osg.Texture.LINEAR),
+	)
 
 	# Float format so signed [-1, 1] normal components need no encode/decode
 	# remap -- same convention as the lighting-class series (env_tex/cube_tex/
 	# prefilter_tex all use GL_RGB16F for the same reason).
-	normal_tex = osg.Texture2D()
-	normal_tex.size = (w, h)
-	normal_tex.internalFormat = GL_RGB16F
-	normal_tex.filter = (osg.Texture.NEAREST, osg.Texture.NEAREST)
+	normal_tex = osg.Texture2D(
+		size=(w, h),
+		internalFormat=GL_RGB16F,
+		filter=(osg.Texture.NEAREST, osg.Texture.NEAREST),
+	)
 
-	depth_tex = osg.Texture2D()
-	depth_tex.size = (w, h)
-	depth_tex.internalFormat = GL_DEPTH_COMPONENT24
-	depth_tex.sourceFormat = GL_DEPTH_COMPONENT
-	depth_tex.sourceType = GL_FLOAT
-	depth_tex.filter = (osg.Texture.NEAREST, osg.Texture.NEAREST)
+	depth_tex = osg.Texture2D(
+		size=(w, h),
+		internalFormat=GL_DEPTH_COMPONENT24,
+		sourceFormat=GL_DEPTH_COMPONENT,
+		sourceType=GL_FLOAT,
+		filter=(osg.Texture.NEAREST, osg.Texture.NEAREST),
+	)
 
-	cam = osg.Camera()
-	cam.renderOrder = osg.Camera.PRE_RENDER
-	cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
-	cam.clearMask = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT
-	cam.clearColor = osg.Vec4(0.0, 0.0, 0.0, 0.0)
-	cam.viewport = osg.Viewport(0, 0, w, h)
-	cam.name = "G-Buffer Camera"
+	cam = osg.Camera(
+		renderOrder=osg.Camera.PRE_RENDER,
+		renderTargetImplementation=osg.Camera.FRAME_BUFFER_OBJECT,
+		clearMask=GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
+		clearColor=osg.Vec4(0.0, 0.0, 0.0, 0.0),
+		viewport=osg.Viewport(0, 0, w, h),
+		name="G-Buffer Camera",
+	)
 
 	# True MRT: two SIMULTANEOUS color attachments from a single geometry
 	# pass, plus depth -- the thing neither pyosg-rtt.py (COLOR+DEPTH, one
@@ -316,14 +320,15 @@ def create_gbuffer_camera(w=W, h=H):
 # either runs the deferred toon-lighting pass or dumps one raw buffer to the
 # screen, depending on `visualizeMode` (see VisualizeModeHandler below).
 def create_hud_camera(color_tex, normal_tex, depth_tex):
-	cam = osg.Camera()
-	cam.referenceFrame = osg.Transform.ABSOLUTE_RF
-	cam.renderOrder = osg.Camera.POST_RENDER
-	cam.clearMask = 0
-	cam.allowEventFocus = False
-	cam.projectionMatrix = osg.Matrix.identity()
-	cam.viewMatrix = osg.Matrix.identity()
-	cam.name = "Composite HUD"
+	cam = osg.Camera(
+		referenceFrame=osg.Transform.ABSOLUTE_RF,
+		renderOrder=osg.Camera.POST_RENDER,
+		clearMask=0,
+		allowEventFocus=False,
+		projectionMatrix=osg.Matrix.identity(),
+		viewMatrix=osg.Matrix.identity(),
+		name="Composite HUD",
+	)
 
 	g = osg.Geode()
 	g.drawables.append(osg.createTexturedQuadGeometry(

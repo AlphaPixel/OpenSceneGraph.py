@@ -39,7 +39,8 @@ import argparse
 import asyncio
 import pathlib
 
-W, H = 1024, 768
+# W, H = 1024, 768
+W, H = 1169, 768
 
 os.environ.update({
 	"OSG_WINDOW": f"50 50 {W} {H}",
@@ -196,10 +197,7 @@ def make_ssao_noise_texture(size=SSAO_NOISE_SIZE, seed=1):
 	arr[..., 1] = rng.uniform(-1.0, 1.0, (size, size))
 	arr[..., 2] = 0.0
 
-	tex = osg.Texture2D()
-	tex.image = [img]
-	tex.filter = osg.Texture.NEAREST
-	tex.wrap = osg.Texture.REPEAT
+	tex = osg.Texture2D(image=img, filter=osg.Texture.NEAREST, wrap=osg.Texture.REPEAT)
 
 	return tex
 
@@ -764,11 +762,15 @@ float shadowFactor(vec3 eyePos) {
 
 vec3 sh_irradiance(vec3 N) {
 	return max(
-		iblSH[0]
-		+ iblSH[1]*N.y + iblSH[2]*N.z + iblSH[3]*N.x
-		+ iblSH[4]*N.x*N.y + iblSH[5]*N.y*N.z
-		+ iblSH[6]*(3.0*N.z*N.z - 1.0)
-		+ iblSH[7]*N.x*N.z + iblSH[8]*(N.x*N.x - N.y*N.y),
+		iblSH[0] * 0.282095
+		+ iblSH[1] * (0.488603 * N.y)
+		+ iblSH[2] * (0.488603 * N.z)
+		+ iblSH[3] * (0.488603 * N.x)
+		+ iblSH[4] * (1.092548 * N.x * N.y)
+		+ iblSH[5] * (1.092548 * N.y * N.z)
+		+ iblSH[6] * (0.315392 * (3.0 * N.z * N.z - 1.0))
+		+ iblSH[7] * (1.092548 * N.x * N.z)
+		+ iblSH[8] * (0.546274 * (N.x * N.x - N.y * N.y)),
 		vec3(0.0)
 	);
 }
@@ -1240,11 +1242,12 @@ class SingleBake:
 # --------------------------------------------------------------------------- #
 
 def make_brdf_lut(lut_size=512):
-	lut_tex = osg.Texture2D()
-	lut_tex.size = (lut_size, lut_size)
-	lut_tex.internalFormat = GL_RGBA
-	lut_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
-	lut_tex.wrap = osg.Texture.CLAMP_TO_EDGE
+	lut_tex = osg.Texture2D(
+		size=(lut_size, lut_size),
+		internalFormat=GL_RGBA,
+		filter=(osg.Texture.LINEAR, osg.Texture.LINEAR),
+		wrap=osg.Texture.CLAMP_TO_EDGE,
+	)
 
 	bake_p = osg.Program(name="brdf_lut", shaders=(
 		osg.Shader(osg.Shader.VERTEX, FULLSCREEN_VERTEX),
@@ -1264,15 +1267,16 @@ def make_brdf_lut(lut_size=512):
 
 	SingleBake(bake_group)
 
-	cam = osg.Camera()
-	cam.name = "BRDFLutBake"
-	cam.renderOrder = osg.Camera.PRE_RENDER
-	cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
-	cam.referenceFrame = osg.Transform.ABSOLUTE_RF
-	cam.clearMask = GL_COLOR_BUFFER_BIT
-	cam.viewport = osg.Viewport(0, 0, lut_size, lut_size)
-	cam.projectionMatrix = osg.Matrix.identity()
-	cam.viewMatrix = osg.Matrix.identity()
+	cam = osg.Camera(
+		name="BRDFLutBake",
+		renderOrder=osg.Camera.PRE_RENDER,
+		renderTargetImplementation=osg.Camera.FRAME_BUFFER_OBJECT,
+		referenceFrame=osg.Transform.ABSOLUTE_RF,
+		clearMask=GL_COLOR_BUFFER_BIT,
+		viewport=osg.Viewport(0, 0, lut_size, lut_size),
+		projectionMatrix=osg.Matrix.identity(),
+		viewMatrix=osg.Matrix.identity(),
+	)
 	cam.attach(osg.Camera.COLOR_BUFFER0, lut_tex, 0, 0, False)
 	cam.stateSet.setAttributeAndModes(bake_p)
 	cam.children.append(quad_geode)
@@ -1291,37 +1295,43 @@ def make_brdf_lut(lut_size=512):
 # gbuffer camera -- that's what keeps eye-space consistent between here and the composite
 # pass's depth-reconstructed eyePos.
 def create_gbuffer_camera(w=W, h=H, msaa_samples=0):
-	albedo_tex = osg.Texture2D()
-	albedo_tex.size = (w, h)
-	albedo_tex.internalFormat = GL_RGBA
-	albedo_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
+	albedo_tex = osg.Texture2D(
+		size=(w, h),
+		internalFormat=GL_RGBA,
+		filter=(osg.Texture.LINEAR, osg.Texture.LINEAR),
+	)
 
-	normal_tex = osg.Texture2D()
-	normal_tex.size = (w, h)
-	normal_tex.internalFormat = GL_RGB16F
-	normal_tex.filter = (osg.Texture.NEAREST, osg.Texture.NEAREST)
+	normal_tex = osg.Texture2D(
+		size=(w, h),
+		internalFormat=GL_RGB16F,
+		filter=(osg.Texture.NEAREST, osg.Texture.NEAREST),
+	)
 
-	material_tex = osg.Texture2D()
-	material_tex.size = (w, h)
-	material_tex.internalFormat = GL_RGB
-	material_tex.filter = (osg.Texture.NEAREST, osg.Texture.NEAREST)
+	material_tex = osg.Texture2D(
+		size=(w, h),
+		internalFormat=GL_RGB,
+		filter=(osg.Texture.NEAREST, osg.Texture.NEAREST),
+	)
 
-	emissive_tex = osg.Texture2D()
-	emissive_tex.size = (w, h)
-	emissive_tex.internalFormat = GL_RGB16F
-	emissive_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
+	emissive_tex = osg.Texture2D(
+		size=(w, h),
+		internalFormat=GL_RGB16F,
+		filter=(osg.Texture.LINEAR, osg.Texture.LINEAR),
+	)
 
-	position_tex = osg.Texture2D()
-	position_tex.size = (w, h)
-	position_tex.internalFormat = GL_RGB32F
-	position_tex.filter = (osg.Texture.NEAREST, osg.Texture.NEAREST)
+	position_tex = osg.Texture2D(
+		size=(w, h),
+		internalFormat=GL_RGB32F,
+		filter=(osg.Texture.NEAREST, osg.Texture.NEAREST),
+	)
 
-	depth_tex = osg.Texture2D()
-	depth_tex.size = (w, h)
-	depth_tex.internalFormat = GL_DEPTH_COMPONENT24
-	depth_tex.sourceFormat = GL_DEPTH_COMPONENT
-	depth_tex.sourceType = GL_FLOAT
-	depth_tex.filter = (osg.Texture.NEAREST, osg.Texture.NEAREST)
+	depth_tex = osg.Texture2D(
+		size=(w, h),
+		internalFormat=GL_DEPTH_COMPONENT24,
+		sourceFormat=GL_DEPTH_COMPONENT,
+		sourceType=GL_FLOAT,
+		filter=(osg.Texture.NEAREST, osg.Texture.NEAREST),
+	)
 
 	# Marked DYNAMIC (not left at OSG's default) since each of these is both a render
 	# target here AND a sampler input in later passes -- same fix
@@ -1331,13 +1341,14 @@ def create_gbuffer_camera(w=W, h=H, msaa_samples=0):
 	for tex in (albedo_tex, normal_tex, material_tex, emissive_tex, position_tex, depth_tex):
 		tex.dataVariance = osg.Object.DYNAMIC
 
-	cam = osg.Camera()
-	cam.renderOrder = (osg.Camera.PRE_RENDER, 1)
-	cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
-	cam.clearMask = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT
-	cam.clearColor = osg.Vec4(0.0, 0.0, 0.0, 0.0)
-	cam.viewport = osg.Viewport(0, 0, w, h)
-	cam.name = "G-Buffer Camera"
+	cam = osg.Camera(
+		renderOrder=(osg.Camera.PRE_RENDER, 1),
+		renderTargetImplementation=osg.Camera.FRAME_BUFFER_OBJECT,
+		clearMask=GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
+		clearColor=osg.Vec4(0.0, 0.0, 0.0, 0.0),
+		viewport=osg.Viewport(0, 0, w, h),
+		name="G-Buffer Camera",
+	)
 
 	# A non-zero count makes OSG render the whole MRT G-buffer into multisample
 	# renderbuffers, then resolve each attachment into these ordinary Texture2Ds.
@@ -1416,13 +1427,14 @@ def make_fullscreen_rtt_pass(textures, output_tex, frag_shader, w, h, name="Post
 # its point-light radii -- a fixed-world-unit radius doesn't generalize between
 # BoomBox-scale and Lantern-scale models).
 def create_ssao_camera(depth_tex, normal_tex, noise_tex, position_tex, samples_u, radius, bias=0.02, w=W, h=H):
-	ao_raw_tex = osg.Texture2D()
-	ao_raw_tex.size = (w, h)
-	ao_raw_tex.internalFormat = GL_R8
-	ao_raw_tex.sourceFormat = GL_RED
-	ao_raw_tex.sourceType = GL_UNSIGNED_BYTE
-	ao_raw_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
-	ao_raw_tex.dataVariance = osg.Object.DYNAMIC
+	ao_raw_tex = osg.Texture2D(
+		size=(w, h),
+		internalFormat=GL_R8,
+		sourceFormat=GL_RED,
+		sourceType=GL_UNSIGNED_BYTE,
+		filter=(osg.Texture.LINEAR, osg.Texture.LINEAR),
+		dataVariance=osg.Object.DYNAMIC,
+	)
 
 	cam = make_fullscreen_rtt_pass(
 		textures={
@@ -1447,13 +1459,14 @@ def create_ssao_camera(depth_tex, normal_tex, noise_tex, position_tex, samples_u
 	return cam, ao_raw_tex
 
 def create_ssao_blur_camera(ao_raw_tex, w=W, h=H):
-	ao_tex = osg.Texture2D()
-	ao_tex.size = (w, h)
-	ao_tex.internalFormat = GL_R8
-	ao_tex.sourceFormat = GL_RED
-	ao_tex.sourceType = GL_UNSIGNED_BYTE
-	ao_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
-	ao_tex.dataVariance = osg.Object.DYNAMIC
+	ao_tex = osg.Texture2D(
+		size=(w, h),
+		internalFormat=GL_R8,
+		sourceFormat=GL_RED,
+		sourceType=GL_UNSIGNED_BYTE,
+		filter=(osg.Texture.LINEAR, osg.Texture.LINEAR),
+		dataVariance=osg.Object.DYNAMIC,
+	)
 
 	cam = make_fullscreen_rtt_pass(
 		textures={0: (ao_raw_tex, "aoRawTex")},
@@ -1474,18 +1487,19 @@ def create_ssao_blur_camera(ao_raw_tex, w=W, h=H):
 def create_composite_camera(gbuf, shadow_tex, prefilter_tex, lut_tex, ao_tex, hdr_color_tex, w=W, h=H):
 	albedo_tex, normal_tex, material_tex, emissive_tex, position_tex, depth_tex = gbuf
 
-	cam = osg.Camera()
-	cam.referenceFrame = osg.Transform.ABSOLUTE_RF
-	cam.renderOrder = (osg.Camera.PRE_RENDER, 4)
-	cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
-	cam.dataVariance = osg.Object.DYNAMIC
-	cam.clearMask = GL_COLOR_BUFFER_BIT
-	cam.clearColor = osg.Vec4(0.0, 0.0, 0.0, 0.0)
-	cam.viewport = osg.Viewport(0, 0, w, h)
-	cam.allowEventFocus = False
-	cam.projectionMatrix = osg.Matrix.identity()
-	cam.viewMatrix = osg.Matrix.identity()
-	cam.name = "Composite"
+	cam = osg.Camera(
+		referenceFrame=osg.Transform.ABSOLUTE_RF,
+		renderOrder=(osg.Camera.PRE_RENDER, 4),
+		renderTargetImplementation=osg.Camera.FRAME_BUFFER_OBJECT,
+		dataVariance=osg.Object.DYNAMIC,
+		clearMask=GL_COLOR_BUFFER_BIT,
+		clearColor=osg.Vec4(0.0, 0.0, 0.0, 0.0),
+		viewport=osg.Viewport(0, 0, w, h),
+		allowEventFocus=False,
+		projectionMatrix=osg.Matrix.identity(),
+		viewMatrix=osg.Matrix.identity(),
+		name="Composite",
+	)
 
 	cam.attach(osg.Camera.COLOR_BUFFER0, hdr_color_tex)
 
@@ -1541,20 +1555,23 @@ def create_composite_camera(gbuf, shadow_tex, prefilter_tex, lut_tex, ao_tex, hd
 # pyramid -- the sanctioned simplification for a teaching example (real engines pyramid
 # for a wider, cheaper glow; footnote only, not built here).
 def create_bloom_cameras(hdr_color_tex, w=W, h=H):
-	bright_tex = osg.Texture2D()
-	bright_tex.size = (w, h)
-	bright_tex.internalFormat = GL_RGB16F
-	bright_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
+	bright_tex = osg.Texture2D(
+		size=(w, h),
+		internalFormat=GL_RGB16F,
+		filter=(osg.Texture.LINEAR, osg.Texture.LINEAR),
+	)
 
-	blur_a_tex = osg.Texture2D()
-	blur_a_tex.size = (w, h)
-	blur_a_tex.internalFormat = GL_RGB16F
-	blur_a_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
+	blur_a_tex = osg.Texture2D(
+		size=(w, h),
+		internalFormat=GL_RGB16F,
+		filter=(osg.Texture.LINEAR, osg.Texture.LINEAR),
+	)
 
-	blur_b_tex = osg.Texture2D()
-	blur_b_tex.size = (w, h)
-	blur_b_tex.internalFormat = GL_RGB16F
-	blur_b_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
+	blur_b_tex = osg.Texture2D(
+		size=(w, h),
+		internalFormat=GL_RGB16F,
+		filter=(osg.Texture.LINEAR, osg.Texture.LINEAR),
+	)
 
 	for tex in (bright_tex, blur_a_tex, blur_b_tex):
 		tex.dataVariance = osg.Object.DYNAMIC
@@ -1595,14 +1612,15 @@ def create_bloom_cameras(hdr_color_tex, w=W, h=H):
 # drawing straight to the window (no renderTargetImplementation set, same as pyosg-mrt.py's
 # HUD camera / composite_cam's own pre-increment-2 shape).
 def create_final_camera(hdr_color_tex, bloom_tex, ao_tex, w=W, h=H):
-	cam = osg.Camera()
-	cam.referenceFrame = osg.Transform.ABSOLUTE_RF
-	cam.renderOrder = osg.Camera.POST_RENDER
-	cam.clearMask = 0
-	cam.allowEventFocus = False
-	cam.projectionMatrix = osg.Matrix.identity()
-	cam.viewMatrix = osg.Matrix.identity()
-	cam.name = "Final"
+	cam = osg.Camera(
+		referenceFrame=osg.Transform.ABSOLUTE_RF,
+		renderOrder=osg.Camera.POST_RENDER,
+		clearMask=0,
+		allowEventFocus=False,
+		projectionMatrix=osg.Matrix.identity(),
+		viewMatrix=osg.Matrix.identity(),
+		name="Final",
+	)
 
 	g = osg.Geode()
 	g.drawables.append(osg.createTexturedQuadGeometry(
@@ -1917,12 +1935,13 @@ def create_light_gizmo(bound_center, bound_radius, light_dir_u, light_color_u):
 		bound_center, plane_geom, color_u, light_dir_u, light_color_u, plane_half_size, normal_length
 	)
 
-	cam = osg.Camera()
-	cam.name = "LightGizmo"
-	cam.renderOrder = (osg.Camera.POST_RENDER, 1)
-	cam.clearMask = 0
-	cam.allowEventFocus = False
-	cam.cullingActive = False
+	cam = osg.Camera(
+		name="LightGizmo",
+		renderOrder=(osg.Camera.POST_RENDER, 1),
+		clearMask=0,
+		allowEventFocus=False,
+		cullingActive=False,
+	)
 	cam.stateSet.setMode(GL_DEPTH_TEST, osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE)
 	cam.children.append(group)
 
@@ -2164,17 +2183,16 @@ if __name__ == "__main__":
 	post_enabled_u = osg.Uniform("postEnabled", True)
 
 	# --- Shadow map (verbatim from 09-ibl.py) -------------------------------- #
-	shadow_tex = osg.Texture2D()
-	shadow_tex.size = (SHADOW_SIZE, SHADOW_SIZE)
-	shadow_tex.internalFormat = GL_DEPTH_COMPONENT24
-	shadow_tex.sourceFormat = GL_DEPTH_COMPONENT
-	shadow_tex.sourceType = GL_FLOAT
-	shadow_tex.filter = osg.Texture.NEAREST
-	shadow_tex.wrap = osg.Texture.CLAMP_TO_EDGE
+	shadow_tex = osg.Texture2D(
+		size=(SHADOW_SIZE, SHADOW_SIZE),
+		internalFormat=GL_DEPTH_COMPONENT24,
+		sourceFormat=GL_DEPTH_COMPONENT,
+		sourceType=GL_FLOAT,
+		filter=osg.Texture.NEAREST,
+		wrap=osg.Texture.CLAMP_TO_EDGE,
+	)
 
-	dummy_color = osg.Texture2D()
-	dummy_color.size = (SHADOW_SIZE, SHADOW_SIZE)
-	dummy_color.internalFormat = GL_RGB
+	dummy_color = osg.Texture2D(size=(SHADOW_SIZE, SHADOW_SIZE), internalFormat=GL_RGB)
 
 	shadow_tex.dataVariance = osg.Object.DYNAMIC
 	dummy_color.dataVariance = osg.Object.DYNAMIC
@@ -2209,14 +2227,15 @@ if __name__ == "__main__":
 		shadow_near, shadow_far
 	)
 
-	shadow_cam = osg.Camera()
-	shadow_cam.name = "ShadowCam"
-	shadow_cam.renderOrder = (osg.Camera.PRE_RENDER, 0)
-	shadow_cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
-	shadow_cam.referenceFrame = osg.Transform.ABSOLUTE_RF
-	shadow_cam.clearMask = GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT
-	shadow_cam.clearColor = osg.Vec4(1, 1, 1, 1)
-	shadow_cam.viewport = osg.Viewport(0, 0, SHADOW_SIZE, SHADOW_SIZE)
+	shadow_cam = osg.Camera(
+		name="ShadowCam",
+		renderOrder=(osg.Camera.PRE_RENDER, 0),
+		renderTargetImplementation=osg.Camera.FRAME_BUFFER_OBJECT,
+		referenceFrame=osg.Transform.ABSOLUTE_RF,
+		clearMask=GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT,
+		clearColor=osg.Vec4(1, 1, 1, 1),
+		viewport=osg.Viewport(0, 0, SHADOW_SIZE, SHADOW_SIZE),
+	)
 	shadow_cam.attach(osg.Camera.DEPTH_BUFFER, shadow_tex)
 	shadow_cam.attach(osg.Camera.COLOR_BUFFER, dummy_color)
 	shadow_cam.viewMatrix = light_view
@@ -2262,11 +2281,12 @@ if __name__ == "__main__":
 	ssao_blur_cam, ao_tex = create_ssao_blur_camera(ao_raw_tex, W, H)
 
 	# --- Composite (PRE_RENDER, writes linear HDR) ------------------------------ #
-	hdr_color_tex = osg.Texture2D()
-	hdr_color_tex.size = (W, H)
-	hdr_color_tex.internalFormat = GL_RGB16F
-	hdr_color_tex.filter = (osg.Texture.LINEAR, osg.Texture.LINEAR)
-	hdr_color_tex.dataVariance = osg.Object.DYNAMIC
+	hdr_color_tex = osg.Texture2D(
+		size=(W, H),
+		internalFormat=GL_RGB16F,
+		filter=(osg.Texture.LINEAR, osg.Texture.LINEAR),
+		dataVariance=osg.Object.DYNAMIC,
+	)
 
 	composite_cam = create_composite_camera(
 		(albedo_tex, normal_tex, material_tex, emissive_tex, position_tex, depth_tex),
@@ -2491,7 +2511,11 @@ if __name__ == "__main__":
 
 			if changed: visualize_mode_u.value = value
 
-		gui.addSection("Visualize Mode", draw_visualize_mode)
+		gui.addSection(
+			"Visualize Mode",
+			draw_visualize_mode,
+			osgDebug.imgui.SectionOptions(default_open=True)
+		)
 
 		def draw_ibl_knobs(ri):
 			changed, value = osgDebug.imgui.slider_float_nudge(

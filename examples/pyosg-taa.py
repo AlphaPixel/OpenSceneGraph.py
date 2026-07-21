@@ -139,12 +139,13 @@ void main() { fragColor = texture(displayTex, uv); }
 
 
 def make_texture(w, h, linear=True):
-	tex = osg.Texture2D()
-	tex.size = (w, h)
-	tex.internalFormat = GL_RGBA16F
-	tex.filter = (osg.Texture.LINEAR if linear else osg.Texture.NEAREST,) * 2
-	tex.wrap = (osg.Texture.CLAMP_TO_EDGE, osg.Texture.CLAMP_TO_EDGE)
-	tex.dataVariance = osg.Object.DYNAMIC
+	tex = osg.Texture2D(
+		size=(w, h),
+		internalFormat=GL_RGBA16F,
+		filter=(osg.Texture.LINEAR if linear else osg.Texture.NEAREST,) * 2,
+		wrap=(osg.Texture.CLAMP_TO_EDGE, osg.Texture.CLAMP_TO_EDGE),
+		dataVariance=osg.Object.DYNAMIC,
+	)
 	return tex
 
 
@@ -182,21 +183,23 @@ def create_scene():
 def create_gbuffer(scene):
 	color = make_texture(W, H)
 	normal = make_texture(W, H, False)
-	depth = osg.Texture2D()
-	depth.size = (W, H)
-	depth.internalFormat = GL_DEPTH_COMPONENT24
-	depth.sourceFormat = GL_DEPTH_COMPONENT
-	depth.sourceType = GL_FLOAT
-	depth.filter = (osg.Texture.NEAREST, osg.Texture.NEAREST)
-	depth.dataVariance = osg.Object.DYNAMIC
+	depth = osg.Texture2D(
+		size=(W, H),
+		internalFormat=GL_DEPTH_COMPONENT24,
+		sourceFormat=GL_DEPTH_COMPONENT,
+		sourceType=GL_FLOAT,
+		filter=(osg.Texture.NEAREST, osg.Texture.NEAREST),
+		dataVariance=osg.Object.DYNAMIC,
+	)
 
-	cam = osg.Camera()
-	cam.name = "TAA jittered G-buffer"
-	cam.renderOrder = (osg.Camera.PRE_RENDER, 0)
-	cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
-	cam.clearMask = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT
-	cam.clearColor = osg.Vec4(0, 0, 0, 0)
-	cam.viewport = osg.Viewport(0, 0, W, H)
+	cam = osg.Camera(
+		name="TAA jittered G-buffer",
+		renderOrder=(osg.Camera.PRE_RENDER, 0),
+		renderTargetImplementation=osg.Camera.FRAME_BUFFER_OBJECT,
+		clearMask=GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
+		clearColor=osg.Vec4(0, 0, 0, 0),
+		viewport=osg.Viewport(0, 0, W, H),
+	)
 	cam.attach(osg.Camera.COLOR_BUFFER0, color)
 	cam.attach(osg.Camera.COLOR_BUFFER1, normal)
 	cam.attach(osg.Camera.DEPTH_BUFFER, depth)
@@ -205,17 +208,18 @@ def create_gbuffer(scene):
 
 
 def fullscreen_rtt(name, order, output, inputs, fragment, uniforms=()):
-	cam = osg.Camera()
-	cam.name = name
-	cam.referenceFrame = osg.Transform.ABSOLUTE_RF
-	cam.renderOrder = (osg.Camera.PRE_RENDER, order)
-	cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
-	cam.clearMask = GL_COLOR_BUFFER_BIT
-	cam.clearColor = osg.Vec4(0, 0, 0, 1)
-	cam.viewport = osg.Viewport(0, 0, W, H)
-	cam.projectionMatrix = osg.Matrix.identity()
-	cam.viewMatrix = osg.Matrix.identity()
-	cam.allowEventFocus = False
+	cam = osg.Camera(
+		name=name,
+		referenceFrame=osg.Transform.ABSOLUTE_RF,
+		renderOrder=(osg.Camera.PRE_RENDER, order),
+		renderTargetImplementation=osg.Camera.FRAME_BUFFER_OBJECT,
+		clearMask=GL_COLOR_BUFFER_BIT,
+		clearColor=osg.Vec4(0, 0, 0, 1),
+		viewport=osg.Viewport(0, 0, W, H),
+		projectionMatrix=osg.Matrix.identity(),
+		viewMatrix=osg.Matrix.identity(),
+		allowEventFocus=False,
+	)
 	cam.attach(osg.Camera.COLOR_BUFFER0, output)
 	cam.stateSet.setMode(GL_DEPTH_TEST, osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE)
 	for unit, (texture, uniform_name) in enumerate(inputs):
@@ -229,14 +233,15 @@ def fullscreen_rtt(name, order, output, inputs, fragment, uniforms=()):
 
 
 def display_camera(name, texture):
-	cam = osg.Camera()
-	cam.name = name
-	cam.referenceFrame = osg.Transform.ABSOLUTE_RF
-	cam.renderOrder = osg.Camera.POST_RENDER
-	cam.clearMask = 0
-	cam.projectionMatrix = osg.Matrix.identity()
-	cam.viewMatrix = osg.Matrix.identity()
-	cam.allowEventFocus = False
+	cam = osg.Camera(
+		name=name,
+		referenceFrame=osg.Transform.ABSOLUTE_RF,
+		renderOrder=osg.Camera.POST_RENDER,
+		clearMask=0,
+		projectionMatrix=osg.Matrix.identity(),
+		viewMatrix=osg.Matrix.identity(),
+		allowEventFocus=False,
+	)
 	cam.stateSet.setMode(GL_DEPTH_TEST, osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE)
 	cam.stateSet.textureAttributes[0] = texture
 	cam.stateSet.uniforms["displayTex"] = 0
