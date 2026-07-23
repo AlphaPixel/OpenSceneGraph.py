@@ -84,6 +84,9 @@ namespace detail {
 			case osg::Uniform::FLOAT_VEC3:
 				return new osg::Uniform(name.c_str(), value.cast<osg::Vec3>());
 
+			case osg::Uniform::FLOAT_VEC4:
+				return new osg::Uniform(name.c_str(), value.cast<osg::Vec4>());
+
 			case osg::Uniform::FLOAT_MAT4:
 				return new osg::Uniform(name.c_str(), value.cast<osg::Matrixf>());
 
@@ -119,6 +122,10 @@ namespace detail {
 
 		if(py::isinstance<osg::Vec3>(h)) {
 			return new osg::Uniform(name.c_str(), h.cast<osg::Vec3>());
+		}
+
+		if(py::isinstance<osg::Vec4>(h)) {
+			return new osg::Uniform(name.c_str(), h.cast<osg::Vec4>());
 		}
 
 		if(py::isinstance<osg::Matrixf>(h)) {
@@ -203,6 +210,9 @@ namespace detail {
 			case osg::Uniform::FLOAT_VEC3:
 				_uniform_set<osg::Vec3f>(self, i, obj); return;
 
+			case osg::Uniform::FLOAT_VEC4:
+				_uniform_set<osg::Vec4f>(self, i, obj); return;
+
 			case osg::Uniform::FLOAT_MAT4:
 				_uniform_set<osg::Matrixf>(self, i, obj); return;
 
@@ -264,6 +274,12 @@ namespace detail {
 				return py::cast(v);
 			}
 
+			case osg::Uniform::FLOAT_VEC4: {
+				osg::Vec4 v; self.getElement(i, v);
+
+				return py::cast(v);
+			}
+
 			case osg::Uniform::FLOAT_MAT4: {
 				osg::Matrixf v; self.getElement(i, v);
 
@@ -291,6 +307,7 @@ namespace detail {
 		if(py::isinstance<py::float_>(h)) return osg::Uniform::FLOAT;
 		if(py::isinstance<osg::Vec2>(h)) return osg::Uniform::FLOAT_VEC2;
 		if(py::isinstance<osg::Vec3>(h)) return osg::Uniform::FLOAT_VEC3;
+		if(py::isinstance<osg::Vec4>(h)) return osg::Uniform::FLOAT_VEC4;
 		if(py::isinstance<osg::Matrixf>(h)) return osg::Uniform::FLOAT_MAT4;
 		if(py::isinstance<osg::Matrixd>(h)) return osg::Uniform::DOUBLE_MAT4;
 
