@@ -99,7 +99,9 @@ PYBIND11_MODULE(OpenSceneGraph, m) {
 	gl.attr("GL_RGBA") = GL_RGBA;
 	gl.attr("GL_RGBA8") = GL_RGBA8;
 	gl.attr("GL_RGB16F") = GL_RGB16F;
+	gl.attr("GL_RGB32F") = GL_RGB32F;
 	gl.attr("GL_RGBA16F") = GL_RGBA16F;
+	gl.attr("GL_RGBA32F") = GL_RGBA32F;
 	gl.attr("GL_DEPTH_COMPONENT24") = GL_DEPTH_COMPONENT24;
 	gl.attr("GL_DEPTH_COMPONENT") = GL_DEPTH_COMPONENT;
 	gl.attr("GL_FLOAT") = GL_FLOAT;

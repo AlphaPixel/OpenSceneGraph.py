@@ -280,9 +280,25 @@ void bind(py::module_& m) {
 	>(m, "ViewerBase")
 		// .def(py::init_alias<>())
 		.def("frame", [](osgViewer::ViewerBase& self) {
-			py::gil_scoped_release release;
+			// Only release the GIL for genuinely multi-threaded models (real OSG cull/draw
+			// threads that would otherwise contend with Python for no reason). Under
+			// SingleThreaded (this project's standing default -- see CLAUDE.md/examples),
+			// there is no concurrency benefit to releasing it, only a hazard: OSG defers
+			// actual GL-object teardown (dropping the last ref_ptr on an old Program/Uniform/
+			// etc.) to a flush pass that can run *inside* this call, and if that drop is the
+			// last reference to a pybind11-tracked object, its destructor needs the GIL to
+			// deregister the Python wrapper -- which isn't held, aborting the process
+			// (confirmed via a minimal repro: attach a scene with a Program+Uniform, replace
+			// it with a second one, keep calling frame() -- reliably crashes without this).
+			if(self.getThreadingModel() == osgViewer::ViewerBase::SingleThreaded) {
+				self.frame();
+			}
 
-			self.frame();
+			else {
+				py::gil_scoped_release release;
+
+				self.frame();
+			}
 		})
 
 		.def_property(
