@@ -8,12 +8,6 @@ PYOSG_ENABLE_WARNINGS
 
 namespace pyosg {
 
-namespace detail {
-	template<>
-	void kwargs_init(osg::Sphere& self, const py::kwargs& kwargs) {
-	}
-}
-
 void bind_Shape(py::module_& m) {
 	py::class_<osg::Shape, osg::Object, osg::ref_ptr<osg::Shape>>(m, "Shape");
 
