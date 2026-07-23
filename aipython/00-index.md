@@ -18,6 +18,7 @@ Read the others situationally:
 |---|---|
 | [`01-core.md`](01-core.md) | Always, first. Session bootstrap, callback safety, tmux/IPython mechanics. |
 | [`05-camera-manipulator.md`](05-camera-manipulator.md) | Building/customizing an `osgGA.CameraManipulator` subclass, or doing camera-relative work (e.g. "light the subject from the camera's upper-right"). |
+| [`07-lighting.md`](07-lighting.md) | Getting PBR/IBL lighting going quickly via `osgx`'s `#pragma osgx::*` shader-library system -- fastest path to a lit glTF model with zero IBL assets, plus the full IBL pipeline when one is worth loading. |
 | [`10-rtt.md`](10-rtt.md) | Building a render-to-texture / multi-camera scene graph live (RTT cameras, `osg.Camera()` construction quirks, `Group.children` limitations). |
 | [`15-shader-hotswap.md`](15-shader-hotswap.md) | Debugging shader-side logic live by patching GLSL and hot-swapping a `Program`, or when a live variable reassignment "has no effect." |
 | [`20-object-lifetime.md`](20-object-lifetime.md) | Investigating a leak, a "removed but still alive" object, or verifying true C++ destruction vs. just scene-graph detachment. |

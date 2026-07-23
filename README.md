@@ -63,13 +63,13 @@
   ))
   ```
 
-  > [!NOTE]
-  > Wherever it is practical to improve the ergonomics of the aging OSG API in
-  > Python, we do. Most attributes can be set both at construction time and
-  > through traditional setter-based APIs. Likewise, anything that functions as
-  > a callback in OSG can usually be supplied either through the traditional
-  > method-override approach or by simply passing any suitable Python
-  > callable.
+> [!NOTE]
+> Wherever it is practical to improve the ergonomics of the aging OSG API in
+> Python, we do. Most attributes can be set both at construction time and
+> through traditional setter-based APIs. Likewise, anything that functions as
+> a callback in OSG can usually be supplied either through the traditional
+> method-override approach or by simply passing any suitable Python
+> callable.
 
 - Container-like APIs are backed by semantic proxies, not thin wrappers. These
   preserve object identity, native behavior, and ownership rules while

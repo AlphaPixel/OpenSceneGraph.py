@@ -4,7 +4,18 @@ import pytest
 
 from .conftest import f32, floatif, refcmp
 
-from OpenSceneGraph.osg import Uniform, Vec3f, Matrixf
+from OpenSceneGraph.osg import StateSet, Uniform, Vec3f, Matrixf
+
+
+def test_uniform_mapping_update():
+	ss = StateSet()
+
+	ss.uniforms.update({"integer": 7}, floating=1.5)
+	ss.uniforms.update((("color", Vec3f(1, 2, 3)),))
+
+	assert ss.uniforms["integer"].value == 7
+	assert ss.uniforms["floating"].value == pytest.approx(1.5)
+	assert ss.uniforms["color"].value == Vec3f(1, 2, 3)
 
 def test_construction(uniform_init):
 	for ty, val in uniform_init:

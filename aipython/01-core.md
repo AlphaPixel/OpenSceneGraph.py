@@ -112,6 +112,46 @@ insert garbage whitespace that happens to be harmless for GLSL but would
   again explicitly to see the true, settled state before concluding a block
   succeeded or failed.
 
+**The most reliable way to run a nontrivial script live**: write it to a real
+file, then send exactly these two single-line statements (each safe from
+autoindent, since neither has an indented continuation):
+
+```python
+p = "/absolute/path/to/script.py"
+exec(compile(open(p).read(), p, "exec"), locals())
+```
+
+Two non-obvious requirements packed into that one line, both confirmed by
+hitting them directly (2026-07-22):
+
+- **Use the real absolute path as the `compile()` filename, never a fake
+  short name** like `"script.py"`. This embedded shell's `VerboseTB`
+  formatter uses `stack_data`/`executing` to introspect source by filename;
+  a name that doesn't resolve on disk makes `executing` itself throw
+  (`executing.executing.NotOneValueFound: Expected one value, found 0`),
+  which then **replaces the real traceback** with a confusing, wrong-looking
+  one (observed: a frame that appeared to be `aipython/integration.py`'s
+  shell-exit code, attributed to the wrong file/line entirely) --
+  wasted real debugging time before the actual cause (a plain `NameError` in
+  the executed script) was found. Once the filename is a real, readable
+  path, tracebacks are accurate: correct file, correct line, correct source
+  shown.
+- **Pass `locals()` explicitly as the exec globals dict.** In this embedded
+  shell, `globals() is locals()` is **False** at the top-level prompt --
+  almost certainly IPython's top-level-`await` support compiling each cell
+  as an async wrapper function, whose `f_locals` differs from its
+  `f_globals`. Everything `pyosg_repl.py`'s `from OpenSceneGraph import *`
+  put in the namespace (`osg`, `osgGA`, `viewer`, ...) lives in `locals()`,
+  not `globals()`. A bare top-level reference to `osg` still resolves fine
+  (`LOAD_NAME` checks locals then globals), but a bare `exec(code)` with no
+  explicit args uses `(globals(), locals())` of the calling frame -- so any
+  `def` executed that way gets `__globals__` bound to the globals-only dict,
+  which lacks `osg`, and calling that function later raises `NameError: name
+  'osg' is not defined` even though top-level statements in the very same
+  exec'd block worked fine. Passing `locals()` as the single explicit arg
+  makes exec use that (correct, `osg`-containing) dict for both globals and
+  locals of the executed code.
+
 ## 5. `help(x)` hangs the session
 
 Opens a pager; the tmux pane blocks waiting for pager input, showing
@@ -164,3 +204,33 @@ screenshot capture as unproven until it's retested.
 If a session using either backend appears completely frozen (no window
 response, capture requests never resolving), check rule 2 first -- it's the
 most common actual cause, not a backend bug.
+
+## 8. Replacing a live scene graph could abort the whole process (fixed 2026-07-22, verify it's still fixed)
+
+`viewer.frame()`'s binding used to release the GIL unconditionally for the
+whole call. OSG defers actual GL-object teardown (dropping the last
+`ref_ptr` on an old `Program`/`Uniform`/etc. after a scene-graph replacement)
+to a flush pass that can run *inside* a later `frame()` call -- if that drop
+is the last reference to a pybind11-tracked Python-wrapped object, its
+destructor needs the GIL to deregister the wrapper, which wasn't held. This
+aborted the entire process (`pybind11::handle::dec_ref() ... PyGILState_Check()
+failure`, `Aborted (core dumped)`) -- not a Python exception, the whole tmux
+session and viewer window die, no traceback to work from unless you already
+suspect this.
+
+**Trigger, confirmed via a from-scratch minimal repro**: attach a scene with
+a `Program`+`Uniform` to an already-running (already-`frame()`'d) viewer,
+replace it with a second such scene, keep calling `frame()` -- crashed
+reliably every time. Zero relation to what the replacing scene actually
+contains; purely "replace a live scene graph while already running," which
+every scripted example avoids by building the whole scene *before* the first
+`frame()` call. A REPL workflow -- build a scene, tweak it, rebuild and
+re-`exec()` the whole script again -- hits exactly this shape.
+
+**Fix**: `pyosg/pyosgViewer.cpp`'s `frame()` binding now only releases the
+GIL when `threadingModel != SingleThreaded`. Since this project's standing
+default is always `OSG_THREADING=SingleThreaded`, there's no concurrency
+benefit lost, only the hazard removed. **As of 2026-07-22 this fix exists
+only in a locally rebuilt, uncommitted tree** -- if a fresh checkout hits
+this exact abort, this is the first thing to check/reapply, not a new
+mystery to re-debug from scratch.

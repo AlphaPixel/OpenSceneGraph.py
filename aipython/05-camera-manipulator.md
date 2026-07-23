@@ -77,3 +77,13 @@ decrease the frontal component," not literal aiming.
 - **`osg.setNotifyLevel` set too high floods the tmux pane** with X11 event
   spam (`FocusIn`/`KeymapNotify`/etc.), making the pane unreadable. Fix live:
   `osg.setNotifyLevel(osg.NotifySeverity.WARN)`.
+
+## There is no `viewer.home()`
+
+`osgViewer::ViewerBase`/`Viewer` has no `home()` in these bindings --
+`viewer.cameraManipulator.home` exists but wants `(ea, aa)` event-handler
+args that aren't trivially available outside actual event dispatch. In
+practice this doesn't matter: assigning `viewer.cameraManipulator = ...`
+*after* `viewer.sceneData` is already set triggers the manipulator's own
+`autoComputeHomePosition` framing automatically (confirmed live) -- no
+explicit home call needed for the common "just frame the scene" case.
