@@ -233,6 +233,12 @@ public:
 		return s.py;
 	}
 
+	// TODO: Investigate a future optimization similar to get() above -- unlike get(), this always
+	// reassigns even when `ptr` is unchanged from the cached slot, relying on pybind11's own
+	// registered-instance registry (py::cast() returns the existing wrapper for a known pointer)
+	// to avoid allocating a duplicate Python object. That's a hashmap-lookup-plus-refcount cost
+	// per set() call that get()'s short-circuit avoids; skip it here unless a real profile shows
+	// it matters (see osgSlug's ShapeDrawable.layers proxy for the case that prompted this note).
 	template<typename T>
 	void set(key_type k, py::object obj, T* ptr) {
 		auto& s = Storage::slot(k);
@@ -574,7 +580,13 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 
 			auto* ptr = traits_type::get(obj, i);
 
-			base_type::set(i, py_obj, ptr);
+			// Cache the canonical pointer's own wrapper, not the raw input py_obj -- see the
+			// "Caching Rules" section of ai/context-pybind11x.md. Only mattered silently before
+			// because every prior SequenceTraits had value_type == element_type*, where py_obj
+			// already wrapped the same pointer get() would independently return; a value_type
+			// distinct from element_type* (e.g. assigning a plain struct that gets copied into
+			// C++ state addressed by a separate handle type) exposes the difference.
+			base_type::set(i, py::cast(ptr), ptr);
 		}
 	}
 
@@ -827,6 +839,44 @@ public MapSlotCache<typename MappingTraits<T, Tag>::key_type> {
 		else return traits_type::contains(obj, key);
 	}
 
+	// Match dict.update(): accept one mapping (via keys()), one iterable of
+	// key/value pairs, and keyword arguments. Crucially, every assignment goes
+	// through set(), so individual MappingTraits retain their conversion,
+	// replacement, and proxy-cache behavior.
+	void update(py::args args, py::kwargs kwargs) {
+		if(args.size() > 1) throw py::type_error(
+			"update expected at most 1 positional argument"
+		);
+
+		auto apply_pair = [this](py::handle key, py::handle value) {
+			set(key.cast<key_type>(), py::reinterpret_borrow<py::object>(value));
+		};
+
+		if(args.size() == 1) {
+			py::object other = py::reinterpret_borrow<py::object>(args[0]);
+
+			if(py::hasattr(other, "keys")) {
+				for(py::handle key : other.attr("keys")()) {
+					apply_pair(key, other.attr("__getitem__")(key));
+				}
+			}
+
+			else {
+				for(py::handle item : other) {
+					auto pair = py::reinterpret_borrow<py::sequence>(item);
+
+					if(pair.size() != 2) throw py::value_error(
+						"update sequence element does not have length 2"
+					);
+
+					apply_pair(pair[0], pair[1]);
+				}
+			}
+		}
+
+		for(auto item : kwargs) apply_pair(item.first, item.second);
+	}
+
 	py::list keys() {
 		if constexpr(!MappingIterable<T, Tag>) throw py::type_error(
 			"Mapping does not support key-based iteration"
@@ -911,6 +961,7 @@ public MapSlotCache<typename MappingTraits<T, Tag>::key_type> {
 			.def("keys", &MappingProxy<T, Tag>::keys)
 			.def("values", &MappingProxy<T, Tag>::values)
 			.def("items", &MappingProxy<T, Tag>::items)
+			.def("update", &MappingProxy<T, Tag>::update)
 		;
 
 		return mp;
