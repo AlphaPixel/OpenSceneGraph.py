@@ -19,6 +19,17 @@ void bind_GraphicsContext(py::module_& m) {
 	>(m, "DisplaySettings")
 		.def(py::init<>())
 		.def(py::init<osg::ArgumentParser&>())
+		// I know the syntax here LOOKS WEIRD, but there's a lot of "magic" happening; see:
+		// https://pybind11.readthedocs.io/en/latest/advanced/classes.html?utm_source=chatgpt.com#static-properties
+		.def_property_readonly_static(
+			"instance",
+			[](py::object cls) { return osg::DisplaySettings::instance(); }
+		)
+		.def_property(
+			"numMultiSamples",
+			&osg::DisplaySettings::getNumMultiSamples,
+			&osg::DisplaySettings::setNumMultiSamples
+		)
 	;
 
 	auto gc = py::class_<
