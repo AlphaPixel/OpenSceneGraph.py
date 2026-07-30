@@ -23,6 +23,7 @@
 #   scene.nodeMask = 0; await asyncio.sleep(1); scene.nodeMask = 0xffffffff
 #   n = _osg_repl_state["frames"]
 #   await asyncio.sleep(1); _osg_repl_state["frames"] - n
+#   await _osg_repl_controller.capture_framebuffer("frame.png")  # raw framebuffer PNG
 #
 # Type `exit` or Ctrl-D to leave the REPL and close the viewer.
 
@@ -403,16 +404,9 @@ def repl(viewer, namespace=None, frame_callback=None):
 if __name__ == "__main__":
 	viewer = osgViewer.Viewer()
 
-	if len(sys.argv) <= 1:
-		scene = osg.Geode()
-		sphere = osg.ShapeDrawable(osg.Sphere(osg.Vec3(), 1.0))
+	if len(sys.argv) > 1:
+		viewer.sceneData = osgDB.readNodeFile(sys.argv[1])
 
-		scene.drawables.append(sphere)
-
-	else:
-		scene = osgDB.readNodeFile(sys.argv[1])
-
-	viewer.sceneData = scene
 	viewer.cameraManipulator = osgGA.TrackballManipulator()
 	# viewer.cameraManipulator = REPLCameraManipulator()
 	# viewer.cameraManipulator = CinematicOrbitManipulator(viewer.camera)

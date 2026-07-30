@@ -30,7 +30,7 @@ from a pre-existing prompt.
 ## 2. Bind every free variable in a C++-invoked callback as a default argument, never rely on closure/global lookup
 
 This is the single most expensive lesson in this whole document, confirmed
-independently **six separate times** across draw callbacks, `osgDebug.imgui`
+independently **six separate times** across draw callbacks, `osgx.imgui`
 section callbacks, `debug=<callable>` deletion callbacks, and
 `osg.NodeCallback`/`updateCallback`:
 
@@ -60,7 +60,7 @@ default-argument binding covers non-module objects as well.
 **Consequences of getting this wrong vary by callback type, and can look
 like a totally unrelated bug:**
 - A `DrawCallback` exception crashes the whole render thread/process.
-- An `osgDebug.imgui` section callback exception corrupts ImGui's frame state
+- An `osgx.imgui` section callback exception corrupts ImGui's frame state
   (exception fires after `NewFrame()` but before `Render()`); the *next*
   frame's `NewFrame()` hits a native C++ `assert()` and hard-aborts the
   process -- no Python `try/except` can catch this after the fact.
