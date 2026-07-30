@@ -43,12 +43,7 @@ void bind_Image(py::module_& m) {
 			"height"_a,
 			"pixelFormat"_a,
 			"type"_a,
-			"packing"_a=1,
-			py::doc(
-				"Read a rectangle from the currently bound framebuffer using glReadPixels.\n\n"
-				"Call this only while an OpenGL context is current, normally from a "
-				"Camera draw callback."
-			)
+			"packing"_a=1
 		)
 		.def(
 			"readImageFromCurrentTexture",

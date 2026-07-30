@@ -201,13 +201,7 @@ void bind_Camera(py::module_& m) {
 			"viewport",
 			py::overload_cast<>(&osg::Camera::getViewport, py::const_),
 			detail::camera_viewport_property_setter(),
-			py::return_value_policy::reference_internal,
-			py::doc(
-				"Get or set the camera viewport.\n\n"
-				"Setter accepts either:\n"
-				"  - osg.Viewport\n"
-				"  - (x, y, width, height) tuple"
-			)
+			py::return_value_policy::reference_internal
 		)
 
 		.def_property(
