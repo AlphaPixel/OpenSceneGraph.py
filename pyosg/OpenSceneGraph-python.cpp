@@ -4,10 +4,6 @@
 #include "pyosgGA.hpp"
 #include "pyosgViewer.hpp"
 
-#ifdef PYOSG_LINUX
-#include "linux/linux.hpp"
-#endif
-
 #include "pybind11x.hpp"
 
 #include <osg/Version>
@@ -121,13 +117,6 @@ PYBIND11_MODULE(OpenSceneGraph, m) {
 	gl.attr("GL_SRC_ALPHA") = GL_SRC_ALPHA;
 	gl.attr("GL_ONE_MINUS_SRC_ALPHA") = GL_ONE_MINUS_SRC_ALPHA;
 	gl.attr("GL_ONE") = GL_ONE;
-
-	// ============================================================================================
-#ifdef PYOSG_LINUX
-	auto l = m.def_submodule("linux");
-
-	pyosg_linux::bind(l);
-#endif
 
 	// ============================================================================================
 	py::dict info;

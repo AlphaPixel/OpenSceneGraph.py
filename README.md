@@ -431,28 +431,15 @@ examples, we transition to a single directional light to keep things simple.
 
 # Extras
 
-`OpenSceneGraph.linux` is an optional submodule, gated behind the `PYOSG_LINUX`
-build flag, exposing a handful of Linux-native windowing utilities that OSG's
-cross-platform API doesn't offer on its own. It has been tested on real
-Nvidia hardware, including direct DRM/KMS scanout with no X server running at
-all.
-
-- `alwaysOnTop(viewer, enabled=True)` - pin the viewer's native X11 window
-  above all others via the EWMH `_NET_WM_STATE_ABOVE` protocol.
-- `listMonitors()` - query the real XRandR monitor layout (position/size in
-  root-window coordinates). Monitors are *not* assumed to be flush/adjacent,
-  so multi-monitor placement math can be done directly against the returned
-  rects.
-- `moveWindow(viewer, x, y, width=-1, height=-1)` - reposition (and
-  optionally resize) an already-realized X11 window in one call, keeping
-  OSG's own viewport/camera bookkeeping in sync. Pass `width`/`height <= 0`
-  to keep the current size.
-- `createEGLWindow(traits)` - create an X11 window driven by EGL instead of
-  GLX. Skeleton/proof-of-concept; assign the result to `camera.graphicsContext`.
-- `createGBMWindow(traits)` - create a direct-scanout DRM/KMS+GBM window,
-  with no X11 and no window manager involved at all. Skeleton/proof-of-concept;
-  requires exclusive DRM master access, so it will fail under a running X
-  server. Assign the result to `camera.graphicsContext`.
+Linux-native windowing utilities that OSG's cross-platform API doesn't offer on its own --
+`alwaysOnTop()`, `listMonitors()`, `moveWindow()`, plus the experimental `createEGLWindow()`/
+`createGBMWindow()` GraphicsWindow factories -- used to live here as an `OpenSceneGraph.linux`
+submodule. They were never actually OSG.py-specific, so they moved to the separate
+[`osgx`](https://github.com/cubicool/osgx) project's `osgx.platform` submodule instead; see
+`examples/pyosg-linux.py` for the Python-side usage and osgx's own README for the full API
+(it has also since grown mouse-capture helpers, `osgx.platform.PointerCapture`). `import osgx`
+alongside `OpenSceneGraph` to use it -- it has been tested on real Nvidia hardware, including
+direct DRM/KMS scanout with no X server running at all.
 
 # Building
 
@@ -493,11 +480,12 @@ library, cover more specialized functionality:
   mesh/texture loading with full PBR/IBL support: base color, normal, ORM,
   and emissive textures, plus specular/diffuse IBL prefiltering, live GPU
   cubemap baking and (**very**) rudimentary GPU-based skeletal animation.
-- **[osgDebug](https://github.com/cubicool/osgdebug)** - GL debug-extension
-  integration (driver message callbacks, KHR debug groups, GPU timestamp
-  profiling for tools like Nsight/APITrace), plus the ImGui-based live-tuning
-  widget system used for on-screen controls throughout the Lighting Series
-  examples.
+- **[osgx](https://github.com/cubicool/osgx)** - modernized C++20 OpenSceneGraph
+  utility layer, plus two opt-in subsystems: `osgx::debug` (GL debug-extension
+  integration -- driver message callbacks, KHR debug groups, GPU timestamp
+  profiling for tools like Nsight/APITrace) and `osgx::imgui` (the ImGui-based
+  live-tuning widget system used for on-screen controls throughout the
+  Lighting Series examples).
 - **[osgSlug](https://github.com/AlphaPixel/osgSlug)** - an OpenSceneGraph
   frontend for [slughorn](https://github.com/AlphaPixel/slughorn), bringing
   Eric Lengyel's GPU vector-text rendering technique
