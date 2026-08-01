@@ -6,6 +6,10 @@ PYOSG_DISABLE_WARNINGS
 
 PYOSG_ENABLE_WARNINGS
 
+#include "pybind11x.hpp"
+
+namespace pyx = pybind11x;
+
 namespace pyosg {
 
 // namespace detail {}
@@ -25,8 +29,8 @@ void bind_Shader(py::module_& m) {
 	;
 
 	shader
-		.def(py::init<osg::Shader::Type>(), "type"_a=osg::Shader::UNDEFINED)
-		.def(py::init<osg::Shader::Type, const std::string&>())
+		.def(py::init(pyx::kwargs_ctor<osg::Shader, osg::Shader::Type>()), "type"_a=osg::Shader::UNDEFINED)
+		.def(py::init(pyx::kwargs_ctor<osg::Shader, osg::Shader::Type, const std::string&>()))
 		// .def(py::init<osg::Shader::Type, osg::ShaderBinary*>())
 		// .def(py::init<const osg::Shader&>())
 		.def_property("type", &osg::Shader::getType, &osg::Shader::setType)

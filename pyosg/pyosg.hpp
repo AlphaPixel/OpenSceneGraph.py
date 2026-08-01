@@ -115,6 +115,7 @@ namespace osg {
 	class Drawable;
 	class StateAttribute;
 	class Program;
+	class Shader;
 	class Transform;
 	class MatrixTransform;
 	class PositionAttitudeTransform;
@@ -143,6 +144,7 @@ namespace pybind11x {
 	template<> struct kwargs_base<osg::Drawable> { using type = osg::Node; };
 	template<> struct kwargs_base<osg::StateAttribute> { using type = osg::Object; };
 	template<> struct kwargs_base<osg::Program> { using type = osg::StateAttribute; };
+	template<> struct kwargs_base<osg::Shader> { using type = osg::Object; };
 	template<> struct kwargs_base<osg::Transform> { using type = osg::Group; };
 	template<> struct kwargs_base<osg::MatrixTransform> { using type = osg::Transform; };
 	template<> struct kwargs_base<osg::PositionAttitudeTransform> { using type = osg::Transform; };
