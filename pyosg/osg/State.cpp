@@ -231,6 +231,27 @@ void bind_State(py::module_& m) {
 		})
 	;
 
+	// Same shape as `uniforms` above -- the attribute's own `getType()` supplies the key, so
+	// `append()`/`extend()` work without requiring the type to be named twice.
+	auto ap = detail::AttributesProxy::bind(ss, "_Attributes");
+
+	ap
+		.def("append", [](detail::AttributesProxy& self, py::object attr) {
+			pyx::MappingTraits<osg::StateSet, detail::AttributesTag>::apply(
+				self.obj,
+				std::nullopt,
+				attr
+			);
+		})
+		.def("extend", [](detail::AttributesProxy& self, py::iterable attrs) {
+			for(auto attr : attrs) pyx::MappingTraits<osg::StateSet, detail::AttributesTag>::apply(
+				self.obj,
+				std::nullopt,
+				attr
+			);
+		})
+	;
+
 	ss
 		.def("setRenderBinDetails", [](
 			osg::StateSet& self,
@@ -351,6 +372,13 @@ void bind_State(py::module_& m) {
 			"uniforms",
 			[](osg::StateSet& self) -> detail::UniformsProxy& {
 				return detail::StateSetStorage::get(self)->template proxy<detail::UniformsProxy>();
+			},
+			py::return_value_policy::reference_internal
+		)
+		.def_property_readonly(
+			"attributes",
+			[](osg::StateSet& self) -> detail::AttributesProxy& {
+				return detail::StateSetStorage::get(self)->template proxy<detail::AttributesProxy>();
 			},
 			py::return_value_policy::reference_internal
 		)

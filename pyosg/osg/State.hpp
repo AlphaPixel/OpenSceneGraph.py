@@ -21,6 +21,7 @@ namespace pyx = pybind11x;
 namespace pyosg::detail {
 	struct UniformsTag;
 	struct TextureAttributesTag;
+	struct AttributesTag;
 }
 
 template<>
@@ -252,15 +253,90 @@ struct pyx::MappingTraits<osg::StateSet, pyosg::detail::TextureAttributesTag> {
 	}
 };
 
+// The main (non-texture) `StateAttribute` list, keyed by `StateAttribute::Type` -- e.g.
+// `stateSet.attributes[osg.StateAttribute.PROGRAM]`. Real OSG additionally keys this list by a
+// "member" index (`StateAttribute::TypeMemberPair`) to allow multiple attributes of the SAME type
+// (e.g. stacked ClipPlanes); this proxy only ever addresses member 0, matching the member=0
+// default every other Python-facing attribute method here already assumes.
+template<>
+struct pyx::MappingTraits<osg::StateSet, pyosg::detail::AttributesTag> {
+	using element_type = osg::StateAttribute;
+	using key_type = osg::StateAttribute::Type;
+	using value_type = element_type*;
+
+	static value_type from_python(py::handle h) {
+		return h.cast<value_type>();
+	}
+
+	static size_t size(osg::StateSet* ss) {
+		return ss->getAttributeList().size();
+	}
+
+	static element_type* get(osg::StateSet* ss, key_type type) {
+		return ss->getAttribute(type);
+	}
+
+	static void apply(osg::StateSet* ss, std::optional<key_type> k, py::handle h) {
+		auto obj = py::reinterpret_borrow<py::object>(h);
+
+		osg::StateAttribute* attr = nullptr;
+		auto mode = osg::StateAttribute::OverrideValue(osg::StateAttribute::OFF);
+		bool has_mode = false;
+
+		if(py::isinstance<osg::StateAttribute>(obj)) {
+			attr = obj.cast<osg::StateAttribute*>();
+		}
+
+		else if(auto vals = pyx::try_unpack_sequence<
+			osg::StateAttribute*, osg::StateAttribute::OverrideValue
+		>(obj)) {
+			std::tie(attr, mode) = *vals;
+
+			has_mode = true;
+		}
+
+		else throw py::type_error("Expected StateAttribute or (StateAttribute, mode)");
+
+		if(k && attr->getType() != *k) throw py::value_error(
+			"Cannot assign StateAttribute with mismatched type; use append() instead."
+		);
+
+		if(has_mode) ss->setAttribute(attr, mode);
+
+		else ss->setAttribute(attr);
+	}
+
+	static void set(osg::StateSet* ss, key_type k, py::handle h) {
+		apply(ss, k, h);
+	}
+
+	static void del(osg::StateSet* ss, key_type k) {
+		ss->removeAttribute(k);
+	}
+
+	static std::vector<key_type> keys(osg::StateSet* ss) {
+		std::vector<key_type> out;
+		const auto& attrs = ss->getAttributeList();
+
+		out.reserve(attrs.size());
+
+		for(const auto& [typeMember, _] : attrs) out.push_back(typeMember.first);
+
+		return out;
+	}
+};
+
 namespace pyosg {
 
 namespace detail {
 	using UniformsProxy = pyx::MappingProxy<osg::StateSet, UniformsTag>;
 	using TextureAttributesProxy = pyx::MappingProxy<osg::StateSet, TextureAttributesTag>;
+	using AttributesProxy = pyx::MappingProxy<osg::StateSet, AttributesTag>;
 	using StateSetStorage = pyx::ProxyStorageOSG<
 		osg::StateSet,
 		UniformsProxy,
-		TextureAttributesProxy
+		TextureAttributesProxy,
+		AttributesProxy
 	>;
 }
 
