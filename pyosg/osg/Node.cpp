@@ -62,6 +62,15 @@ void bind_Node(py::module_& m) {
 	;
 
 	node.attr("NodeMask") = detail::builtin_int();
+
+	// Deliberately NOT a `Node` method/property, unlike `.stateSet` (which is the common,
+	// get-or-create path). This is the rare, non-creating variant -- returns `None` rather than
+	// forcing a `StateSet` into existence -- kept off `node.<TAB>` and matched to the
+	// `osg.computeLocalToWorld(nodePath)`-style module-function precedent for "advanced, reach
+	// for it deliberately" operations.
+	m.def("getStateSet", [](osg::Node& self) -> osg::StateSet* {
+		return self.getStateSet();
+	}, py::return_value_policy::reference, "node"_a);
 }
 
 }
