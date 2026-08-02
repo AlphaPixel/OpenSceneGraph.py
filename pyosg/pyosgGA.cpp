@@ -137,7 +137,6 @@ void bind(py::module_& m) {
 		>(&osgGA::EventQueue::mouseScroll))
 	;
 
-	// TODO: This WILL NEED a trampoline class in the `detail` namespace!
 	py::class_<
 		osgGA::CameraManipulator,
 		detail::CameraManipulator,
@@ -150,6 +149,17 @@ void bind(py::module_& m) {
 			osgGA::GUIActionAdapter&
 		>(&osgGA::CameraManipulator::home))
 		.def("home", py::overload_cast<double>(&osgGA::CameraManipulator::home))
+		// Bound as a plain method (not just made overridable in the trampoline) for the same
+		// reason updateCamera() is: lets test code (and real callers) invoke it through a
+		// genuine C++ virtual call, which is the only way to actually prove a trampoline
+		// override fires -- a direct Python-side call on a Python subclass instance always
+		// finds the subclass's own method via ordinary attribute lookup regardless of whether
+		// the trampoline works at all (see test/osgGA_CameraManipulator.py's
+		// test_direct_python_call_is_not_proof_of_real_dispatch).
+		.def("computeHomePosition", &osgGA::CameraManipulator::computeHomePosition,
+			"camera"_a=nullptr,
+			"useBoundingBox"_a=false
+		)
 		.def_property(
 			"node",
 			detail::CameraManipulatorSlots::getter<detail::NodeSlot>(

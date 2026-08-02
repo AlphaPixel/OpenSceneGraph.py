@@ -157,6 +157,31 @@ namespace detail {
 			PYBIND11_OVERRIDE(void, osgGA::CameraManipulator, home, t);
 		}
 
+		bool handle(const osgGA::GUIEventAdapter& ea, osgGA::GUIActionAdapter& aa) override {
+			// BINDING GAP FIX (2026-08-02): like updateCamera() below, this was entirely
+			// missing from the trampoline, so REAL C++-side event dispatch never called a
+			// Python handle() override at all. osgViewer::Viewer's eventTraversal() reaches
+			// this via GUIEventHandler::handle(Event*,Object*,NodeVisitor*) -> the 4-arg
+			// handle(ea,aa,obj,nv) -> its default body calling this 2-arg form -- every step
+			// along that chain is an unoverridden C++ default until here, and
+			// osgGA::CameraManipulator::handle(ea,aa)'s own real implementation
+			// (CameraManipulator.cpp) is a literal `return false;`.
+			//
+			// Confirmed empirically, not just by reading source: a DIRECT Python-side call
+			// (`manip.handle(ea, aa)`) looked like it worked and called the Python override
+			// -- but that's ordinary Python attribute lookup finding the subclass's method
+			// directly on the Python object, completely unrelated to whether a real C++-side
+			// virtual call (through this trampoline's vtable) reaches it. That false positive
+			// masked this gap. The real test is driving it through an actual `viewer.frame()`
+			// with an injected event -- see test/osgGA_CameraManipulator.py.
+			//
+			// Same non-copyable-argument hazard as home(ea, aa) above -- call_override, not
+			// PYBIND11_OVERRIDE.
+			if(auto r = pyosg::detail::call_override<bool>("handle", this, &ea, &aa)) return *r;
+
+			return osgGA::CameraManipulator::handle(ea, aa);
+		}
+
 		void setAutoComputeHomePosition(bool flag) override {
 			PYBIND11_OVERRIDE(void, osgGA::CameraManipulator, setAutoComputeHomePosition, flag);
 		}
@@ -247,9 +272,24 @@ namespace detail {
 			osgGA::CameraManipulator::updateCamera(camera);
 		}
 
-		/* void computeHomePosition(const osg::Camera* camera=nullptr, bool useBoundingBox=false) {
-			PYBIND11_OVERRIDE(void, osgGA::CameraManipulator, setAutoComputeHomePosition, flag);
-		} */
+		void computeHomePosition(const osg::Camera* camera=nullptr, bool useBoundingBox=false) override {
+			// BINDING GAP FIX (2026-08-02): this was entirely missing from the trampoline (the
+			// one commented-out attempt here had copy-pasted setAutoComputeHomePosition's macro
+			// args instead of its own -- dead, wrong code, never actually compiled). Not pure
+			// virtual, so PYBIND11_OVERRIDE (not call_override) is correct here -- falls through
+			// to the real OSG default (computes eye/center/up from the node's bounding sphere/
+			// box) when no Python override exists. `camera` is a pointer, not a by-value/
+			// reference non-copyable type, so this doesn't hit the same copy-marshaling hazard
+			// home()/updateCamera() did -- same shape as setNode(osg::Node*) just above, which
+			// already safely uses plain PYBIND11_OVERRIDE with a pointer argument.
+			PYBIND11_OVERRIDE(
+				void,
+				osgGA::CameraManipulator,
+				computeHomePosition,
+				camera,
+				useBoundingBox
+			);
+		}
 	};
 }
 
