@@ -63,18 +63,26 @@ void bind_NodeVisitor(py::module_& m) {
 			self._traverse(node);
 		})
 		.def("apply", py::overload_cast<osg::Node&>(&osg::NodeVisitor::apply))
+		.def("reset", &osg::NodeVisitor::reset)
 		.def_property(
 			"traversalMask",
 			&osg::NodeVisitor::getTraversalMask,
 			&osg::NodeVisitor::setTraversalMask
 		)
 		.def_property(
+			"traversalNumber",
+			&osg::NodeVisitor::getTraversalNumber,
+			&osg::NodeVisitor::setTraversalNumber
+		)
+		.def_property(
 			"traversalMode",
 			&osg::NodeVisitor::getTraversalMode,
 			&osg::NodeVisitor::setTraversalMode
 		)
-		.def_property_readonly("frameStamp",
+		.def_property(
+			"frameStamp",
 			py::overload_cast<>(&osg::NodeVisitor::getFrameStamp, py::const_),
+			&osg::NodeVisitor::setFrameStamp,
 			py::return_value_policy::reference
 		)
 		// TODO: See the comment for `bind_vector` above!
