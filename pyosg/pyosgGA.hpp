@@ -231,6 +231,22 @@ namespace detail {
 			);
 		}
 
+		void updateCamera(osg::Camera& camera) override {
+			// BINDING GAP FIX: this was entirely missing from the trampoline, so a Python
+			// override of updateCamera() was silently never called -- osgViewer::Viewer::
+			// updateTraversal() always ran the C++ default (camera.setViewMatrix(getInverse
+			// Matrix())) instead, no matter what a subclass defined. Same shape as the
+			// setNode()/getNode()/home() gaps documented in aipython/05-camera-manipulator.md.
+			//
+			// Same non-copyable-argument hazard as home(ea, aa) above -- osg::Camera (derived
+			// from osg::Referenced) can't be copied, so PYBIND11_OVERRIDE's implicit copy-for-
+			// marshaling would crash the instant a Python subclass overrides this. call_override
+			// passes by reference instead.
+			if(pyosg::detail::call_override<void>("updateCamera", this, &camera)) return;
+
+			osgGA::CameraManipulator::updateCamera(camera);
+		}
+
 		/* void computeHomePosition(const osg::Camera* camera=nullptr, bool useBoundingBox=false) {
 			PYBIND11_OVERRIDE(void, osgGA::CameraManipulator, setAutoComputeHomePosition, flag);
 		} */

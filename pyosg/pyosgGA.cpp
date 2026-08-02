@@ -198,6 +198,11 @@ void bind(py::module_& m) {
 			&osgGA::CameraManipulator::getMatrix,
 			&osgGA::CameraManipulator::setByMatrix
 		)
+		// Bound as a plain method (not just made overridable in the trampoline above) so a
+		// Python decorator manipulator can delegate to an INNER manipulator's own updateCamera()
+		// before composing anything on top of it -- e.g. self.inner.updateCamera(camera) -- see
+		// aipython/06-camera-effects.md.
+		.def("updateCamera", &osgGA::CameraManipulator::updateCamera)
 		// coordianteFrame
 		// sideVector
 		// frontVector
