@@ -357,12 +357,17 @@ void bind_State(py::module_& m) {
 			"uniform"_a,
 			"value"_a=osg::StateAttribute::ON
 		)
-		.def("getUniform", [](osg::StateSet& self, const std::string& name) {
-			return self.getUniform(name);
-		}, py::return_value_policy::reference)
-		.def("getTextureMode", &osg::StateSet::setTextureMode)
-		.def("setTextureMode", &osg::StateSet::setTextureMode)
-		.def("removeTextureMode", &osg::StateSet::removeTextureMode)
+		// No getUniform() -- .uniforms[name] (a MappingProxy, see UniformsTag above) already
+		// covers this with proper dict semantics (__getitem__/__contains__/KeyError), same as
+		// .attributes[] replaced getAttribute()/setAttribute() (see aipython/02-inspect.md).
+		//
+		// No {get,set,remove}TextureMode() either -- GL_TEXTURE_GEN_*/GL_TEXTURE_1D/2D/3D
+		// per-unit fixed-function-pipeline toggles, same vintage as the rest of the FFP surface
+		// this project deliberately doesn't bind. (setTextureMode/getTextureMode/getUniform were
+		// all pulled at once, so this file's diff also fixes a real bug that lived alongside
+		// them: getTextureMode used to be bound to &osg::StateSet::setTextureMode, a copy-paste
+		// from the line below it -- calling it silently called the SETTER instead of reading
+		// anything back.)
 		.def_property_readonly("parents", [](osg::StateSet& self) {
 			// return detail::make_list(self.getParents());
 			return detail::make_tuple(self.getParents());
