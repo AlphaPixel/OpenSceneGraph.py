@@ -134,20 +134,16 @@ namespace detail {
 	constexpr size_t EventQueueSlot = 2;
 
 	using ViewSlots = pyx::PropertySlots<osgViewer::View, 3>;
-
-	// One canonical storage alias per owner type -- see ai/context-todo-pybind11x.md's
-	// "Important Storage Rule": splitting this into per-proxy storage aliases would attach
-	// independent sidecars to the same OSG object instead of one shared one.
 	using ViewStorage = pyx::ProxyStorageOSG<osgViewer::View, EventHandlersProxy, ViewSlots>;
 
 	// setCameraManipulator() takes a second `resetPosition` argument that plain attribute
-	// assignment can't supply directly (`obj.attr = value` only ever passes one value) --
+	// assignment can't supply directly (`obj.attr = value` only ever passes one value) -
 	// matching the (eye, center, up) tuple convention `CameraManipulator.homePosition`
 	// already uses (pyosgGA.cpp), accept either a bare manipulator (resetPosition=True) or a
 	// (manip, resetPosition) pair:
 	//
-	//   view.cameraManipulator = manip
-	//   view.cameraManipulator = (manip, False)
+	// view.cameraManipulator = manip
+	// view.cameraManipulator = (manip, False)
 	auto view_camera_manipulator_setter() {
 		return [](osgViewer::View& self, py::object obj) {
 			py::object manip_obj = obj;
@@ -187,7 +183,6 @@ void bind(py::module_& m) {
 		// shared_ptr-based, doesn't fit). No keep_alive here currently either, so this is an
 		// identity-stability gap, not a lifetime leak: Scene holds its own ref_ptr<Node>
 		// internally, so the C++ side already keeps sceneData alive independent of Python.
-		// See ai/context-todo-keep-alive-audit.md.
 		.def_property(
 			"data",
 			py::cpp_function(
@@ -218,7 +213,8 @@ void bind(py::module_& m) {
 		osg::ref_ptr<osgViewer::GraphicsWindowEmbedded>
 	>(m, "GraphicsWindowEmbedded");
 
-	// We LEAVE OUT osgGA::GUIActionAdapter here as a base class...
+	// osgGA::GUIActionAdapter is deliberately LEFT OUT of the base classes here! It doesn't use
+	// a `ref_ptr` as a "holder", and pybind can't "mix" them!
 	auto view = py::class_<osgViewer::View, osg::View, osg::ref_ptr<osgViewer::View>>(m, "View");
 
 	pyx::bind_proxy_property<detail::EventHandlersProxy, osgViewer::View, detail::ViewStorage>(
@@ -228,7 +224,7 @@ void bind(py::module_& m) {
 	view
 		.def(py::init<>())
 
-		// No addEventHandler() method binding -- use `.eventHandlers.append(handler)` above
+		// No addEventHandler() method binding - use `.eventHandlers.append(handler)` above
 		// instead (same removal as Geometry.addPrimitiveSet -> `.primitiveSets.append(...)`).
 		// Also a strict capability upgrade, not just a rename: EventHandlersProxy's from_python
 		// already accepts a plain Python callable (wrapping it in CallableGUIEventHandler), which
@@ -282,14 +278,14 @@ void bind(py::module_& m) {
 		.def("frame", [](osgViewer::ViewerBase& self) {
 			// Only release the GIL for genuinely multi-threaded models (real OSG cull/draw
 			// threads that would otherwise contend with Python for no reason). Under
-			// SingleThreaded (this project's standing default -- see CLAUDE.md/examples),
+			// SingleThreaded (this project's standing default - see CLAUDE.md/examples),
 			// there is no concurrency benefit to releasing it, only a hazard: OSG defers
 			// actual GL-object teardown (dropping the last ref_ptr on an old Program/Uniform/
 			// etc.) to a flush pass that can run *inside* this call, and if that drop is the
 			// last reference to a pybind11-tracked object, its destructor needs the GIL to
-			// deregister the Python wrapper -- which isn't held, aborting the process
+			// deregister the Python wrapper - which isn't held, aborting the process
 			// (confirmed via a minimal repro: attach a scene with a Program+Uniform, replace
-			// it with a second one, keep calling frame() -- reliably crashes without this).
+			// it with a second one, keep calling frame()-- reliably crashes without this).
 			if(self.getThreadingModel() == osgViewer::ViewerBase::SingleThreaded) {
 				self.frame();
 			}
