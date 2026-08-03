@@ -75,6 +75,7 @@ endif()
 
 find_package(OpenSceneGraph REQUIRED
 	osg
+	osgAnimation
 	osgUtil
 	osgDB
 	osgGA
@@ -116,6 +117,7 @@ set(PYOSG_SOURCES
 	"pyosg/osg/Image.cpp"
 	"pyosg/osg/GraphicsContext.cpp"
 	"pyosg/osg/Operation.cpp"
+	"pyosg/pyosgAnimation.cpp"
 	"pyosg/pyosgUtil.cpp"
 	"pyosg/pyosgDB.cpp"
 	"pyosg/pyosgGA.cpp"
