@@ -2,7 +2,7 @@
 
 from .conftest import refcmp
 
-from OpenSceneGraph.osg import Object, Node, NodeCallback, StateSet #, Callback
+from OpenSceneGraph.osg import Callback, Object, Node, NodeCallback, StateSet
 from OpenSceneGraph.osgUtil import UpdateVisitor
 
 def test_construction():
@@ -74,17 +74,25 @@ def test_updatecallback():
 	# It should STILL only have 2 values, since we removed the `updateCallback`.
 	assert len(updated) == 2
 
-	# class UpdateCallback(Callback):
-	# 	def run(self, obj, data):
-	# 		nonlocal updated
-	#
-	# 		updated.append(3)
-	#
-	# n.updateCallback = UpdateCallback()
-	#
-	# n.accept(UpdateVisitor())
-	#
-	# assert updated[-1] == 3
+	# A plain Callback (not NodeCallback) works too now: real OSG's Node::setUpdateCallback()
+	# already takes a bare osg::Callback*, and run() is the modern, unified entry point that
+	# NodeCallback::run() itself is built on top of (adapting it to the "old style" operator()).
+	# Deliberately no explicit return (implicit None): call_override<bool> treats that as "no
+	# opinion," falling through to the real osg::Callback::run() default (which calls traverse()),
+	# so children/nested callbacks still get visited normally -- an explicit True/False here would
+	# instead REPLACE that default outcome outright, same as detail::NodeCallback::run()'s existing
+	# behavior for its own "run" override.
+	class UpdateCallback(Callback):
+		def run(self, obj, data):
+			nonlocal updated
+
+			updated.append(3)
+
+	n.updateCallback = UpdateCallback()
+
+	n.accept(UpdateVisitor())
+
+	assert updated[-1] == 3
 
 def test_stateset():
 	n = Node()
