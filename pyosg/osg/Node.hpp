@@ -64,12 +64,23 @@ namespace detail {
 	}
 
 	// Combines all of the "glue" above into a single, reusable entry point.
+	//
+	// The isinstance-check/cast type here is osg::Callback, NOT UpdateCallbackType (NodeCallback) --
+	// real OSG's Node::setUpdateCallback()/setEventCallback() already take a plain osg::Callback*
+	// (the modern, unified callback entry point; NodeCallback::run() only exists to adapt IT to the
+	// "old style" operator()(Node*, NodeVisitor*) method, per NodeCallback's own doc comment in
+	// osg/Callback). Using osg::Callback here is a strict superset of the old NodeCallback-only
+	// check -- any NodeCallback instance still passes it (NodeCallback IS-A Callback) -- so this
+	// doesn't change behavior for existing NodeCallback-based code, it just also accepts a plain
+	// Callback subclass overriding run() directly. UpdateCallbackWrapper is UNCHANGED (still
+	// NodeCallback-shaped): it's a separate concern, wrapping a bare Python callable for the
+	// Node-visitor-specific (node, nv) convenience signature, not affected by this.
 	inline auto node_update_callback_property_setter() {
 		return node_callback_property_setter<
 			UpdateCallbackSlot,
 			UpdateCallbackSetter,
 			UpdateCallbackGetter,
-			UpdateCallbackType,
+			osg::Callback,
 			UpdateCallbackWrapper
 		>();
 	}
@@ -79,7 +90,7 @@ namespace detail {
 			EventCallbackSlot,
 			EventCallbackSetter,
 			EventCallbackGetter,
-			UpdateCallbackType,
+			osg::Callback,
 			UpdateCallbackWrapper
 		>();
 	}
