@@ -12,6 +12,11 @@ namespace pybind11x {
 			kwargs["updateCallback"]
 		);
 
+		if(kwargs.contains("eventCallback")) pyosg::detail::node_event_callback_property_setter()(
+			self,
+			kwargs["eventCallback"]
+		);
+
 		if(kwargs.contains("cullingActive")) self.setCullingActive(
 			kwargs["cullingActive"].cast<bool>()
 		);
@@ -28,6 +33,11 @@ void bind_Node(py::module_& m) {
 			"updateCallback",
 			detail::NodeSlots::getter<detail::UpdateCallbackSlot>(detail::UpdateCallbackGetter),
 			detail::node_update_callback_property_setter()
+		)
+		.def_property(
+			"eventCallback",
+			detail::NodeSlots::getter<detail::EventCallbackSlot>(detail::EventCallbackGetter),
+			detail::node_event_callback_property_setter()
 		)
 		.def("accept", [](osg::Node& self, osg::NodeVisitor* nv) { self.accept(*nv); })
 		.def_property(

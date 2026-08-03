@@ -3,11 +3,22 @@
 namespace pyosgGA {
 
 void bind(py::module_& m) {
-	py::class_<osgGA::GUIActionAdapter>(m, "GUIActionAdapter");
+	py::class_<osgGA::GUIActionAdapter, detail::GUIActionAdapter>(m, "GUIActionAdapter")
+		.def(py::init_alias<>())
+		.def("requestRedraw", &osgGA::GUIActionAdapter::requestRedraw)
+		.def("requestContinuousUpdate", &osgGA::GUIActionAdapter::requestContinuousUpdate,
+			"needed"_a=true)
+		.def("requestWarpPointer", &osgGA::GUIActionAdapter::requestWarpPointer)
+	;
+
+	py::class_<osgGA::Event, osg::Object, osg::ref_ptr<osgGA::Event>>(m, "Event")
+		.def_property("handled", &osgGA::Event::getHandled, &osgGA::Event::setHandled)
+		.def_property("time", &osgGA::Event::getTime, &osgGA::Event::setTime)
+	;
 
 	auto gea = py::class_<
 		osgGA::GUIEventAdapter,
-		osg::Object,
+		osgGA::Event,
 		osg::ref_ptr<osgGA::GUIEventAdapter>
 	>(m, "GUIEventAdapter")
 		// TODO: Continue converting these down below!
@@ -20,6 +31,31 @@ void bind(py::module_& m) {
 		.def_property_readonly("modKeyMask", &osgGA::GUIEventAdapter::getModKeyMask)
 		.def_property_readonly("key", &osgGA::GUIEventAdapter::getKey)
 		.def_property_readonly("handled", &osgGA::GUIEventAdapter::getHandled)
+	;
+
+	py::class_<
+		osgGA::EventVisitor,
+		osg::NodeVisitor,
+		osg::ref_ptr<osgGA::EventVisitor>
+	>(m, "EventVisitor")
+		.def(py::init<>())
+		.def_property(
+			"actionAdapter",
+			py::overload_cast<>(&osgGA::EventVisitor::getActionAdapter),
+			&osgGA::EventVisitor::setActionAdapter,
+			py::return_value_policy::reference
+		)
+		.def("addEvent", &osgGA::EventVisitor::addEvent)
+		.def("removeEvent", &osgGA::EventVisitor::removeEvent)
+		.def_property_readonly("eventHandled", &osgGA::EventVisitor::getEventHandled)
+		.def("setEventHandled", &osgGA::EventVisitor::setEventHandled)
+		.def_property_readonly("events", [](osgGA::EventVisitor& self) {
+			py::list events;
+
+			for(auto& event : self.getEvents()) events.append(event);
+
+			return events;
+		})
 	;
 
 	py::enum_<osgGA::GUIEventAdapter::EventType>(gea, "EventType")
@@ -95,6 +131,8 @@ void bind(py::module_& m) {
 		osg::Referenced,
 		osg::ref_ptr<osgGA::EventQueue>
 	>(m, "EventQueue")
+		.def(py::init<>())
+		.def("clear", &osgGA::EventQueue::clear)
 		.def_property_readonly(
 			"currentEventState",
 			py::overload_cast<>(&osgGA::EventQueue::getCurrentEventState),
@@ -135,6 +173,34 @@ void bind(py::module_& m) {
 		.def("mouseScroll", py::overload_cast<
 			osgGA::GUIEventAdapter::ScrollingMotion, double
 		>(&osgGA::EventQueue::mouseScroll))
+
+		.def("keyPress", [](
+			osgGA::EventQueue& self,
+			int key,
+			double time=0.0,
+			int unmodifiedKey=0
+		) {
+			return self.keyPress(key, time, unmodifiedKey);
+		}, "key"_a, "time"_a=0.0, "unmodifiedKey"_a=0)
+		.def("keyRelease", [](
+			osgGA::EventQueue& self,
+			int key,
+			double time=0.0,
+			int unmodifiedKey=0
+		) {
+			return self.keyRelease(key, time, unmodifiedKey);
+		}, "key"_a, "time"_a=0.0, "unmodifiedKey"_a=0)
+		.def("frame", &osgGA::EventQueue::frame, "time"_a=0.0)
+		.def("takeEvents", [](osgGA::EventQueue& self) {
+			osgGA::EventQueue::Events source;
+			py::list events;
+
+			self.takeEvents(source);
+
+			for(auto& event : source) events.append(event);
+
+			return events;
+		})
 	;
 
 	py::class_<

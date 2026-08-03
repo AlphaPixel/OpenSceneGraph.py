@@ -15,10 +15,11 @@ namespace pyx = pybind11x;
 namespace pyosg {
 
 namespace detail {
-	using NodeSlots = pyx::PropertySlots<osg::Node, 1>;
+	using NodeSlots = pyx::PropertySlots<osg::Node, 2>;
 	using NodeStorage = pyx::ProxyStorageOSG<osg::Node, NodeSlots>;
 
 	constexpr size_t UpdateCallbackSlot = 0;
+	constexpr size_t EventCallbackSlot = 1;
 
 	using UpdateCallbackType = osg::NodeCallback;
 	using UpdateCallbackWrapper = CallableCallback<
@@ -38,6 +39,14 @@ namespace detail {
 
 	constexpr auto UpdateCallbackSetter =
 		static_cast<void(osg::Node::*)(osg::Callback*)>(&osg::Node::setUpdateCallback)
+	;
+
+	constexpr auto EventCallbackGetter =
+		static_cast<osg::Callback*(osg::Node::*)()>(&osg::Node::getEventCallback)
+	;
+
+	constexpr auto EventCallbackSetter =
+		static_cast<void(osg::Node::*)(osg::Callback*)>(&osg::Node::setEventCallback)
 	;
 
 	// Slot-backed callback setter. We canonicalize the stored pointer via the getter so SlotCache
@@ -60,6 +69,16 @@ namespace detail {
 			UpdateCallbackSlot,
 			UpdateCallbackSetter,
 			UpdateCallbackGetter,
+			UpdateCallbackType,
+			UpdateCallbackWrapper
+		>();
+	}
+
+	inline auto node_event_callback_property_setter() {
+		return node_callback_property_setter<
+			EventCallbackSlot,
+			EventCallbackSetter,
+			EventCallbackGetter,
 			UpdateCallbackType,
 			UpdateCallbackWrapper
 		>();

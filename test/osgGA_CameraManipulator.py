@@ -2,9 +2,8 @@
 
 from .conftest import refcmp
 
-from OpenSceneGraph.osg import Geode, Matrix, Matrixd
+from OpenSceneGraph.osg import Camera, Geode, Matrix, Matrixd
 from OpenSceneGraph.osgGA import CameraManipulator
-from OpenSceneGraph.osgViewer import Viewer
 
 class BareManipulator(CameraManipulator):
 	"""Minimal concrete CameraManipulator: only the four required pure-virtual
@@ -132,7 +131,7 @@ def test_node_property_slot_does_not_accumulate():
 	assert destroyed == list(range(9))
 	assert m.node.name == "node-9"
 
-def test_home_dispatches_without_crashing():
+def test_home_dispatches_without_crashing(simulate_frame):
 	"""Regression test for a second, separate pybind11 trampoline bug in the same
 	class: home(const GUIEventAdapter&, GUIActionAdapter&) used raw PYBIND11_OVERRIDE,
 	which tries to COPY `ea` when marshaling it to a Python override. GUIEventAdapter
@@ -142,7 +141,8 @@ def test_home_dispatches_without_crashing():
 	View.setCameraManipulator(..., resetPosition=True), which is exactly what
 	`viewer.cameraManipulator = manip` runs, and always calls this two-argument
 	overload. No window/realize() needed to reproduce -- just constructing a bare
-	Viewer and assigning sceneData + cameraManipulator is enough.
+	The same virtual call can now be driven headlessly through the bound base
+	method with an EventQueue-created event state and a Python action adapter.
 
 	Fixed by switching to call_override (passes ea/aa by reference instead of
 	copying), matching detail::GUIEventHandler::handle's existing use of it for
@@ -157,9 +157,138 @@ def test_home_dispatches_without_crashing():
 		def home(self, ea, aa):
 			calls.append((ea, aa))
 
-	v = Viewer()
-	v.sceneData = Geode()
-
-	v.cameraManipulator = HomeManip()
+	CameraManipulator.home(
+		HomeManip(),
+		simulate_frame.events.currentEventState,
+		simulate_frame.actions
+	)
 
 	assert len(calls) == 1
+
+def test_direct_python_call_is_not_proof_of_real_dispatch(simulate_frame):
+	"""Methodology trap, preserved deliberately as its own test: calling a bound
+	method directly on a Python object (`manip.handle(ea, aa)`) always finds the
+	subclass's own Python-level method via ordinary Python attribute lookup --
+	this succeeds regardless of whether the pybind11 TRAMPOLINE actually routes a
+	real C++-side virtual call to it. It is not evidence the trampoline works.
+
+	This exact false positive delayed finding the real bug in
+	test_handle_dispatches_through_real_event_dispatch below: a direct call
+	looked like proof handle() worked, when the trampoline had no handle()
+	override at all and real event dispatch never reached Python.
+	"""
+
+	calls = []
+
+	class HandleManip(BareManipulator):
+		def handle(self, ea, aa):
+			calls.append((ea, aa))
+
+			return False
+
+	m = HandleManip()
+	ea = simulate_frame.events.currentEventState
+
+	# This call succeeds and calls IS populated -- but it proves nothing about
+	# the trampoline. It's plain Python method resolution, not a C++ virtual call.
+	m.handle(ea, simulate_frame.actions)
+
+	assert len(calls) == 1
+
+def test_handle_dispatches_through_real_event_dispatch(simulate_frame):
+	"""Regression test for a real pybind11 trampoline bug, same shape as
+	test_home_dispatches_without_crashing above but for handle() instead of
+	home() -- and much easier to miss, because a naive test
+	(test_direct_python_call_is_not_proof_of_real_dispatch above) looks like it
+	proves this already works when it doesn't.
+
+	CameraManipulator's trampoline (pyosg/pyosgGA.hpp) had NO handle() override
+	at all. Real OSG event dispatch (osgViewer::Viewer::eventTraversal(), which
+	is what viewer.frame() drives) reaches a manipulator's handle() through a
+	chain of C++ defaults: GUIEventHandler::handle(Event*,Object*,NodeVisitor*)
+	-> its 4-arg handle(ea,aa,obj,nv) default -> this 2-arg handle(ea,aa) --
+	every link in that chain was an unoverridden default, and
+	osgGA::CameraManipulator::handle(ea,aa)'s own real implementation
+	(CameraManipulator.cpp) is a literal `return false;`. So a Python
+	handle() override was silently NEVER called by real interactive use --
+	confirmed live in examples/pyosg-fire.py as "mouse orbiting stopped
+	responding entirely" once a manipulator wrapping a real inner manipulator
+	was installed as viewer.cameraManipulator (see aipython/06-camera-effects.md).
+
+	The test forces that same C++ default chain directly through the bound
+	GUIEventHandler base method, avoiding Viewer/window/render lifecycle while
+	still bypassing Python's ordinary subclass-method lookup.
+	"""
+
+	calls = []
+
+	class HandleManip(BareManipulator):
+		def handle(self, ea, aa):
+			calls.append((ea, aa))
+
+			return False
+
+	m = HandleManip()
+	event = simulate_frame.events.mouseMotion(10, 10)
+	simulate_frame.dispatchEvent(m, event)
+
+	assert len(calls) == 1
+
+def test_updateCamera_dispatches_through_real_update_dispatch(simulate_frame):
+	"""Regression test for updateCamera(), the third method in this class found
+	completely missing from the trampoline (pyosg/pyosgGA.hpp) -- same shape as
+	handle() above. osgViewer::Viewer::updateTraversal() calls
+	`_cameraManipulator->updateCamera(*_camera)` unconditionally every frame, so
+	this is the hook a decorator manipulator needs to compose temporary effects
+	(camera shake, etc.) on top of a live interactive manipulator's own output --
+	see aipython/06-camera-effects.md. This test forces the same virtual call
+	through `CameraManipulator.updateCamera(...)`, avoiding a Viewer while still
+	bypassing direct Python subclass-method lookup.
+	"""
+
+	calls = []
+
+	class UpdateCameraManip(BareManipulator):
+		def updateCamera(self, camera):
+			calls.append(camera.addr)
+
+	CameraManipulator.updateCamera(UpdateCameraManip(), Camera())
+
+	assert len(calls) == 1
+
+def test_computeHomePosition_dispatches_via_explicit_base_call():
+	"""Regression test for the fourth trampoline gap found in this audit: the
+	sole existing attempt at overriding computeHomePosition() was dead,
+	uncompiled, commented-out code that had copy-pasted setAutoComputeHomePosition's
+	macro arguments instead of its own.
+
+	Unlike handle()/updateCamera() above, nothing in this project's OSG-internal
+	call sites invokes computeHomePosition() automatically for a bare
+	CameraManipulator, so there's no real event/frame to drive through. Instead
+	this uses a DIFFERENT technique for forcing genuine C++ dispatch (proven
+	necessary by the false-positive trap documented above): calling the method
+	through the BASE class explicitly -- `CameraManipulator.computeHomePosition(m,
+	...)` instead of `m.computeHomePosition(...)` -- bypasses Python's own
+	subclass-method-shadowing lookup, forcing pybind11's bound wrapper (`self`
+	typed as the real C++ base) to run, which makes a genuine virtual call
+	through the vtable rather than plain Python attribute resolution.
+
+	NOTE: this same technique does NOT work for handle()/home() -- confirmed
+	live, `CameraManipulator.handle(m, ea, viewer)` hits the identical
+	GUIActionAdapter TypeError forwarding does, because it's still calling a
+	bound method that needs a real GUIActionAdapter argument. It only works
+	here because computeHomePosition()'s arguments (a Camera pointer and a
+	bool) have no such restriction.
+	"""
+
+	calls = []
+
+	class ComputeHomeManip(BareManipulator):
+		def computeHomePosition(self, camera, useBoundingBox=False):
+			calls.append((camera, useBoundingBox))
+
+	m = ComputeHomeManip()
+
+	CameraManipulator.computeHomePosition(m, None, True)
+
+	assert calls == [(None, True)]

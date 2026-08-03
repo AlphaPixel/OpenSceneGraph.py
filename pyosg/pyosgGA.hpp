@@ -6,6 +6,7 @@
 PYOSG_DISABLE_WARNINGS
 
 #include <osgGA/GUIEventHandler>
+#include <osgGA/EventVisitor>
 #include <osgGA/EventQueue>
 #include <osgGA/TrackballManipulator>
 
@@ -20,6 +21,26 @@ namespace pyosgGA {
 void bind(py::module_& m);
 
 namespace detail {
+	class GUIActionAdapter: public osgGA::GUIActionAdapter {
+	public:
+		void requestRedraw() override {
+			PYBIND11_OVERRIDE_PURE(void, osgGA::GUIActionAdapter, requestRedraw);
+		}
+
+		void requestContinuousUpdate(bool needed=true) override {
+			PYBIND11_OVERRIDE_PURE(
+				void,
+				osgGA::GUIActionAdapter,
+				requestContinuousUpdate,
+				needed
+			);
+		}
+
+		void requestWarpPointer(float x, float y) override {
+			PYBIND11_OVERRIDE_PURE(void, osgGA::GUIActionAdapter, requestWarpPointer, x, y);
+		}
+	};
+
 	constexpr size_t NodeSlot = 0;
 
 	using CameraManipulatorSlots = pyx::PropertySlots<osgGA::CameraManipulator, 1>;
