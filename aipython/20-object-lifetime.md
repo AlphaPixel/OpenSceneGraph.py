@@ -37,13 +37,26 @@ object still alive.
 
 ## `debug=True` / `debug=<callable>` -- ground-truth destruction proof
 
-Pass as a kwarg to **any** `osg.Object`-derived constructor to attach a
-lifetime probe via the object's `UserDataContainer`:
+Pass as a kwarg to an `osg.Object`-derived constructor to attach a lifetime
+probe via the object's `UserDataContainer`:
 
 ```python
 node = osg.Node(debug=True)                    # notify()'s "Observing"/"Destroying"
 node = osg.Node(debug=lambda addr, type_, name, deletions=deletions: ...)  # custom callback
 ```
+
+**This only works for types actually wired into the binding layer's
+`kwargs_init` chain** (see `pyosg/pyosg.hpp`'s manifest -- `kwargs_base<T>`
++ each type's own `kwargs_init_own`). Most `osg::Object` subclasses are, but
+it isn't automatic just from deriving from `osg::Object` in C++ -- a type
+whose binding predates this system, or was hand-written with plain
+`py::init<...>()` overloads, silently rejects `debug=` (and `name=`,
+`dataVariance=`) with a constructor-overload-mismatch error rather than a
+clear "unsupported kwarg" message. `osg.Shader` was exactly this case until
+2026-08-01 -- two raw `py::init<Type>()` / `py::init<Type, string>()`
+overloads with zero kwargs support at all. If `debug=` (or `name=`) fails
+with `incompatible constructor arguments`, check whether the type is in that
+manifest before assuming the probe itself is broken.
 
 Since the probe lives inside the target's own `UserDataContainer`, its
 destructor fires at **true C++ destruction** -- not "removed from the scene

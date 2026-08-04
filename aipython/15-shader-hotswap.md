@@ -27,6 +27,14 @@ node.stateSet.setAttributeAndModes(p, osg.StateAttribute.ON | osg.StateAttribute
 
 No restart needed, no loss of current camera position/state.
 
+**To prove the old `Program`/`Shader`s actually got destroyed** (not just
+detached), add `debug=True` to each constructor call above -- see
+[`20-object-lifetime.md`](20-object-lifetime.md). This requires `osg.Shader`
+to be wired into the `kwargs_init` chain, which it was NOT prior to
+2026-08-01 (a real binding-layer bug, now fixed) -- so any hot-swap session
+predating that fix could not have used this verification, and needed to
+trust the swap-and-drop-the-old-ref pattern on faith instead.
+
 ## The deeper trap: a live variable reassignment silently not reaching the running callback
 
 Two layers of this, both real, both cost significant debugging time before

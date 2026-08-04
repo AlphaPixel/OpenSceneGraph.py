@@ -27,35 +27,63 @@ second. If you need a custom scene instead of the module's default empty
 directly (it's meant to be edited per-session) rather than trying to drive it
 from a pre-existing prompt.
 
-## 2. Bind every free variable in a C++-invoked callback as a default argument, never rely on closure/global lookup
+## 2. [FIXED 2026-08-01] Free variables in a C++-invoked callback used to resolve unpredictably -- root-caused and fixed at the source, terminal backend only so far
 
-This is the single most expensive lesson in this whole document, confirmed
-independently **six separate times** across draw callbacks, `osgx.imgui`
-section callbacks, `debug=<callable>` deletion callbacks, and
-`osg.NodeCallback`/`updateCallback`:
+This was the single most expensive lesson in this whole document, confirmed
+independently **seven separate times** across draw callbacks, `osgx.imgui`
+section callbacks, `debug=<callable>` deletion callbacks,
+`osg.NodeCallback`/`updateCallback`, and a plain function appended to
+`viewer.eventHandlers` -- always described as "root cause not fully nailed
+down." It's fully nailed down now:
+
+**Root cause:** `IPython.terminal.embed.InteractiveShellEmbed.mainloop()`
+keeps `self.user_ns` (what top-level prompt code -- imports, assignments,
+`def` statements -- actually writes into, since that code compiles to
+`LOAD_NAME`, which checks locals first) and `self.user_module.__dict__` /
+`user_global_ns` (what `func.__globals__` always is for anything you `def`,
+looked up via `LOAD_GLOBAL`, no locals fallback) as **two separate dict
+objects**, unconditionally, on every embed -- confirmed directly:
+`probe.__globals__ is ip.user_global_ns` is `True`,
+`probe.__globals__ is ip.user_ns` is `False`. A name present in the
+namespace *at `repl()`-embed time* (`viewer`, `osg`, ...) ends up in both and
+resolves fine inside any callback forever after. A name typed at the prompt
+*afterward* -- literally any new import, variable, class, or `def` --
+lands only in `user_ns`, is invisible via `LOAD_GLOBAL`, and raises
+`NameError` only when that function is later invoked from a callback --
+never when called directly at the prompt, which is why this always looked
+"unpredictable" (`v` resolving while `GatherVisitor`, defined moments
+earlier at the same prompt, did not, in the very same function body) rather
+than an all-or-nothing failure.
+
+**Fix:** `aipython/integration.py`'s `_drive_terminal()` now wraps
+`shell.interact` to merge `user_ns` into `user_module.__dict__` and alias
+them together right before the prompt starts accepting input, so every
+future write lands in the one dict both lookup paths read from. Verified
+live: a callback referencing a variable defined seconds earlier at the
+prompt, invoked from inside `viewer.frame()`'s C++ update traversal (both a
+direct call and the background asyncio-driven loop), resolved correctly
+with zero workaround.
+
+**Not yet verified: the kernel backend (`_drive_kernel`).** A normal
+Jupyter kernel doesn't go through the same "embed into an already-running
+program with foreign locals" path, so it may not have had this problem in
+the first place -- but that's an assumption, not a confirmed fact yet.
+Don't assume kernel-backed sessions are covered by this fix until checked
+the same way (compare `ip.user_ns is ip.user_global_ns` there).
+
+**Still worth doing defensively, especially against older/unpatched
+sessions or the unverified kernel path:** bind free variables as default
+arguments anyway --
 
 ```python
-# BROKEN -- will raise NameError: name 'osg' is not defined, unpredictably,
-# from inside whatever C++ call path invokes it (render thread, update
-# traversal, a destructor, an imgui section draw):
-spin_xform.updateCallback = lambda node, nv: setattr(
-    node, "matrix", osg.Matrix.rotate(nv.frameStamp.simulationTime * 0.4, osg.Vec3(0, 0, 1))
-)
-
-# WORKS -- default arguments are bound to the function object once, at
-# def-time, with zero runtime namespace lookup:
+# Still safe even if the root fix somehow isn't in effect:
 spin_xform.updateCallback = lambda node, nv, osg=osg: setattr(
     node, "matrix", osg.Matrix.rotate(nv.frameStamp.simulationTime * 0.4, osg.Vec3(0, 0, 1))
 )
 ```
 
-Root cause is not fully nailed down (an IPython embedded-namespace subtlety),
-and it is **not** simply "stale reference from before some event" -- a
-*brand new* closure, defined the instant after confirming the same name
-resolves fine at the top-level prompt, fails identically. Only
-default-argument binding is reliable. `import X` inside the callback body
-works too (it's the module-shaped special case of the same trick), but
-default-argument binding covers non-module objects as well.
+-- but for a `_drive_terminal()` session launched with the fix in place,
+this is no longer *required* to avoid `NameError`, just cheap insurance.
 
 **Consequences of getting this wrong vary by callback type, and can look
 like a totally unrelated bug:**

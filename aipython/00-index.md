@@ -17,10 +17,14 @@ Read the others situationally:
 | File | Read when... |
 |---|---|
 | [`01-core.md`](01-core.md) | Always, first. Session bootstrap, callback safety, tmux/IPython mechanics. |
+| [`02-inspect.md`](02-inspect.md) | Handed a live viewer or loaded scene you didn't build and don't have context on -- get a real read on its structure/shaders/uniforms instead of guessing. |
+| [`03-headless-frames.md`](03-headless-frames.md) | Testing callbacks, events, visitors, or Python/C++ trampolines without behavior that genuinely needs a Viewer, graphics context, cull, or draw traversal. |
 | [`05-camera-manipulator.md`](05-camera-manipulator.md) | Building/customizing an `osgGA.CameraManipulator` subclass, or doing camera-relative work (e.g. "light the subject from the camera's upper-right"). |
+| [`06-camera-effects.md`](06-camera-effects.md) | Layering a TEMPORARY camera effect (shake, kick, scripted move) on top of the user's live manipulator without taking control away -- an update callback on the camera cannot do this, read why before trying. |
 | [`07-lighting.md`](07-lighting.md) | Getting PBR/IBL lighting going quickly via `osgx`'s `#pragma osgx::*` shader-library system -- fastest path to a lit glTF model with zero IBL assets, plus the full IBL pipeline when one is worth loading. |
 | [`10-rtt.md`](10-rtt.md) | Building a render-to-texture / multi-camera scene graph live (RTT cameras, `osg.Camera()` construction quirks, `Group.children` limitations). |
 | [`15-shader-hotswap.md`](15-shader-hotswap.md) | Debugging shader-side logic live by patching GLSL and hot-swapping a `Program`, or when a live variable reassignment "has no effect." |
+| [`17-particles.md`](17-particles.md) | Building a one-shot, GPU-only instanced particle/burst effect (fire, explosions, debris) driven purely by `osg_SimulationTime` + a `triggerTime` uniform, or wiring an `osgx.imgui` live-tuning panel on top of one. |
 | [`20-object-lifetime.md`](20-object-lifetime.md) | Investigating a leak, a "removed but still alive" object, or verifying true C++ destruction vs. just scene-graph detachment. |
 
 ## Why this exists as `aipython/*.md` and not a Claude Code skill
