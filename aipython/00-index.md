@@ -25,7 +25,9 @@ Read the others situationally:
 | [`10-rtt.md`](10-rtt.md) | Building a render-to-texture / multi-camera scene graph live (RTT cameras, `osg.Camera()` construction quirks, `Group.children` limitations). |
 | [`15-shader-hotswap.md`](15-shader-hotswap.md) | Debugging shader-side logic live by patching GLSL and hot-swapping a `Program`, or when a live variable reassignment "has no effect." |
 | [`17-particles.md`](17-particles.md) | Building a one-shot, GPU-only instanced particle/burst effect (fire, explosions, debris) driven purely by `osg_SimulationTime` + a `triggerTime` uniform, or wiring an `osgx.imgui` live-tuning panel on top of one. |
+| [`18-deterministic-captures.md`](18-deterministic-captures.md) | Capturing a precise, repeatable animation state by freezing an effect-local elapsed-time uniform instead of racing the realtime frame loop. |
 | [`20-object-lifetime.md`](20-object-lifetime.md) | Investigating a leak, a "removed but still alive" object, or verifying true C++ destruction vs. just scene-graph detachment. |
+| [`30-pbribl.md`](30-pbribl.md) | Applying `osgx.gltf.pbribl`'s full reflective PBR/IBL renderer to ordinary OSG geometry such as `ShapeDrawable`. |
 
 ## Why this exists as `aipython/*.md` and not a Claude Code skill
 

@@ -83,24 +83,28 @@ Lo += (diffuse + specular) * lightColor[i] * attenuation;
 
 ## One-call PBR/IBL renderer
 
-When a prefiltered GGX KTX2 and its source HDR are available, use osgGLTF's optional renderer:
+For a pre-baked environment, load its `osgx_pbribl` manifest and use osgx's optional renderer:
 
 ```python
 model = osgDB.readNodeFile("scene.gltf")
-environment = osgGLTF.pbr.preparePBRIBLEnvironment(
-	"papermill.ktx2",
-	"papermill.hdr",
-)
-scene = osgGLTF.pbr.createPBRIBLScene(model, environment)
+environment = osgx.gltf.pbribl.loadPBRIBLEnvironment("papermill.gltf")
+scene = osgx.gltf.pbribl.createPBRIBLScene(model, environment)
 
 if not environment.valid() or not scene.valid():
 	raise RuntimeError("PBR/IBL setup failed")
 
-root = osg.Group(children=(environment.root, scene.node))
+root = osg.Group()
+
+if environment.root is not None:
+	root.children.append(environment.root)
+
+root.children.append(scene.node)
 ```
 
-The environment root must participate in the rendered scene graph so its LUT and diffuse-bake passes can run. The helper is IBL-only and does not
-invent authored/direct lights. Generic light rigs remain in `osgx.pbr`; glTF-authored camera and
+The environment root must participate in the rendered scene graph when the manifest uses a built-in
+LUT. For a fully dynamic setup, use `preparePBRIBLEnvironment("environment.hdr")`; it bakes
+specular, diffuse, and the BRDF LUT from that one source. The helper is IBL-only and does not invent
+authored/direct lights. Generic light rigs remain in `osgx.pbr`; glTF-authored camera and
 `KHR_lights_punctual` support are separate loader work.
 
 Use `examples/pyosg-khronos-viewer2.py` for the thin one-call renderer consumer. Use
