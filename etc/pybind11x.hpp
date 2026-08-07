@@ -57,6 +57,20 @@ auto n_index(size_t size, py::ssize_t index) {
 	return static_cast<R>(index);
 }
 
+// list.insert()'s index rule is deliberately different from n_index() above: it never raises,
+// it clamps -- insert(-100, x) on a 3-element list inserts at 0, insert(100, x) inserts at 3
+// (the end). This matches CPython's list.insert() exactly.
+template<typename R=size_t>
+auto n_insert_index(size_t size, py::ssize_t index) {
+	if(index < 0) index += static_cast<py::ssize_t>(size);
+
+	if(index < 0) index = 0;
+
+	else if(static_cast<size_t>(index) > size) index = static_cast<py::ssize_t>(size);
+
+	return static_cast<R>(index);
+}
+
 // Chains a type's constructor-kwargs handling through its actual C++ base classes, automatically.
 // Each participating type specializes two things (see the manifest in pyosg.hpp, which is what
 // makes these specializations visible everywhere the chain below might need them):
@@ -535,6 +549,22 @@ concept SequenceAppendable = requires(T* obj, py::object py_obj) {
 	SequenceTraits<T, Tag>::append(obj, SequenceTraits<T, Tag>::from_python(py_obj));
 };
 
+// Does this specialization provide a REAL insert-at-position primitive (e.g. Group's
+// insertChild, Geometry's insertPrimitiveSet, or View reaching into its own mutable
+// std::list)? Not every owner has one -- Geode and Program only expose append/remove.
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
+concept SequenceTraitsProvidesInsert = requires(T* obj, size_t i, py::object py_obj) {
+	SequenceTraits<T, Tag>::insert(obj, i, SequenceTraits<T, Tag>::from_python(py_obj));
+};
+
+// insert() is supported either via a native traits-provided primitive, or -- for owners
+// without one -- by emulating it out of append()/del(), both of which are already required
+// to be optional-but-present via their own concepts above.
+template<typename T, typename Tag=DEFAULT_PROXY_TAG>
+concept SequenceInsertable =
+	SequenceTraitsProvidesInsert<T, Tag> || (SequenceAppendable<T, Tag> && SequenceDeletable<T, Tag>)
+;
+
 // A Python list-like wrapper over arbitrary C++ containers.
 //
 // - Delegates all logic to SequenceTraits
@@ -601,12 +631,137 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 
 			traits_type::del(obj, i);
 
-			// old_size, not the now-shrunk size() -- otherwise the slot at the OLD last
-			// index never gets erase()'d, silently leaking a cached py::object reference
-			// (and everything it keeps alive) until some LATER slot operation happens to
-			// reuse that same index and overwrite it.
-			for(auto j = i; j < old_size; j++) base_type::erase(j);
+			// Every index AFTER i shifts down by one -- it's still a live, still-present
+			// element (just relocated), so its cached slot must SHIFT down with it, not be
+			// erased: erasing here can drop the only strong Python reference a trampoline-
+			// backed object has (e.g. `viewer.eventHandlers.append(SomeHandler())` with no
+			// local variable retaining it), letting it get garbage collected even though
+			// OSG's own ref_ptr keeps the C++ object alive -- silently downgrading later
+			// access to the nearest bound C++ base type, with no error anywhere. This used
+			// to erase every slot from i through the old last index; that was the root cause
+			// behind "del viewer.eventHandlers[i] corrupts identity, use [i] = x instead"
+			// being a known workaround rather than something that needed one.
+			//
+			// Copy into a local first, then assign -- `slot(j - 1) = slot(j)` directly hits
+			// the same C++17 evaluation-order hazard insert() did: assignment sequences its
+			// RIGHT side before its LEFT side, so the right-hand slot(j) reference would be
+			// taken before the left-hand slot(j - 1) call's possible resize/reallocation,
+			// leaving that already-taken reference dangling before the assignment runs.
+			for(auto j = i + 1; j < old_size; j++) {
+				auto moved = base_type::slot(j);
+
+				base_type::slot(j - 1) = moved;
+			}
+
+			// old_size - 1, not the now-shrunk size() - 1 -- whatever's left there is either
+			// the deleted element's own slot (if i was already the last index, so nothing
+			// shifted) or a stale duplicate of what the loop above just copied down one slot.
+			// Either way it must be cleared, or it leaks a duplicate strong reference.
+			base_type::erase(old_size - 1);
 		}
+	}
+
+	// list.insert(i, x). Prefers a native SequenceTraits::insert() when the specialization
+	// provides one (O(1)/native for Group.children, Geometry.primitiveSets, View.eventHandlers
+	// -- see the owner traits files for how each reaches its underlying container). Falls back,
+	// for owners with only append()/del() (Geode, Program), to rotating the tail out and back
+	// in around the new value: capture it via get(), remove it back-to-front (front-to-back
+	// would shift indices out from under later del() calls), append the new value, then
+	// re-append the tail. Each captured py::object is the SAME wrapper get() already cached, so
+	// re-appending it (rather than a fresh lookup) preserves identity through the round trip.
+	void insert(py::ssize_t index, py::object py_obj) {
+		if constexpr(!SequenceInsertable<T, Tag>) throw py::type_error(
+			"Sequence does not support insert"
+		);
+
+		else {
+			if(py_obj.is_none()) throw py::type_error("cannot insert None");
+
+			auto i = n_insert_index(size(), index);
+
+			if constexpr(SequenceTraitsProvidesInsert<T, Tag>) {
+				auto old_size = size();
+				auto value = traits_type::from_python(py_obj);
+
+				traits_type::insert(obj, i, value);
+
+				// UNLIKE del()'s "just erase, let it re-derive later" -- erasing here would be
+				// wrong, not just less efficient. A trampoline-backed element (e.g. a Python
+				// GUIEventHandler subclass passed straight into append()/insert() with no local
+				// variable retaining it, as viewer.eventHandlers.append(MyHandler()) commonly
+				// is) can have this SlotCache slot as its ONLY strong Python reference; OSG's
+				// own ref_ptr keeps the C++ object alive regardless, but erasing the slot here
+				// would drop the only thing keeping the PYTHON wrapper (and its subclass
+				// identity/handle() override) alive, silently downgrading later access to it to
+				// the nearest bound C++ base type once GC collects it. So: shift each surviving
+				// slot to follow its element to its new (+1) index, back-to-front so a not-yet-
+				// moved entry is never clobbered, then cache the newly-inserted element the same
+				// way append()/set() do (also as a strong reference, not left to be discovered
+				// later, for the identical reason).
+				//
+				// Copy into a local first, THEN assign -- do not write `slot(j) = slot(j - 1)`
+				// directly. Since C++17, assignment sequences its right side before its left
+				// side, so slot(j - 1) (a reference) is taken FIRST while the backing vector is
+				// still short, and slot(j) evaluated second is exactly what may grow/reallocate
+				// that vector -- invalidating the reference slot(j - 1) already handed back
+				// before the assignment it's part of ever runs. Segfaulted inside
+				// IdentitySlot::operator=, Py_INCREF on a dangling pointer, until fixed this way.
+				for(auto j = old_size; j > i; j--) {
+					auto moved = base_type::slot(j - 1);
+
+					base_type::slot(j) = moved;
+				}
+
+				auto* ptr = traits_type::get(obj, i);
+
+				base_type::set(i, py_obj, ptr);
+			}
+
+			else {
+				auto old_size = size();
+				std::vector<py::object> tail;
+
+				tail.reserve(old_size - i);
+
+				for(auto j = i; j < old_size; j++) tail.push_back(get(static_cast<py::ssize_t>(j)));
+
+				for(auto j = old_size; j > i; j--) del(static_cast<py::ssize_t>(j - 1));
+
+				append(py_obj);
+
+				for(auto& t : tail) append(t);
+			}
+		}
+	}
+
+	// list.pop(index=-1): remove-and-return. Deliberately implemented as get() (before
+	// mutation) followed by del() (which already does the correct from-i cache invalidation),
+	// rather than duplicating that invalidation logic here.
+	py::object pop(py::ssize_t index) {
+		if constexpr(!SequenceDeletable<T, Tag>) throw py::type_error(
+			"Sequence does not support deletion"
+		);
+
+		else {
+			auto result = get(index);
+
+			del(index);
+
+			return result;
+		}
+	}
+
+	py::object pop() { return pop(static_cast<py::ssize_t>(-1)); }
+
+	void clear() {
+		if constexpr(!SequenceDeletable<T, Tag>) throw py::type_error(
+			"Sequence does not support deletion"
+		);
+
+		// Remove from the back so each del() only ever invalidates the single slot being
+		// removed (see the comment on del() above), instead of the O(n) re-invalidation a
+		// front-to-back clear would trigger on every iteration.
+		else while(size() > 0) del(static_cast<py::ssize_t>(size() - 1));
 	}
 
 	void append(py::object py_obj) {
@@ -631,18 +786,42 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 		for(py::handle item : iterable) append(py::reinterpret_borrow<py::object>(item));
 	}
 
-	bool contains(py::object py_obj) {
-		if(py_obj.is_none()) return false;
+	// Shared by contains()/index()/remove() -- first index whose element pointer equals
+	// py_obj's, or nullopt if py_obj is None or not found. Identity comparison (pointer
+	// equality), same as contains() always used -- not value equality.
+	std::optional<size_t> _find_index(py::object py_obj) {
+		if(!py_obj.is_none()) {
+			auto* ptr = py_obj.cast<element_type*>();
 
-		auto* ptr = py_obj.cast<element_type*>();
-
-		for(size_t i = 0; i < size(); i++) {
-			if(traits_type::get(obj, i) == ptr) {
-				return true;
+			for(size_t i = 0; i < size(); i++) {
+				if(traits_type::get(obj, i) == ptr) return i;
 			}
 		}
 
-		return false;
+		return std::nullopt;
+	}
+
+	bool contains(py::object py_obj) {
+		return _find_index(py_obj).has_value();
+	}
+
+	// list.index(x): position of the first matching element, ValueError if absent -- same
+	// exception CPython's list.index() raises, not IndexError.
+	size_t index(py::object py_obj) {
+		if(auto i = _find_index(py_obj)) return *i;
+
+		throw py::value_error("value not found in sequence");
+	}
+
+	// list.remove(x): remove the first matching element. index() already raises ValueError
+	// if absent, matching list.remove()'s own exception; del() already does the correct
+	// shift-not-erase SlotCache handling, so there's nothing extra to get right here.
+	void remove(py::object py_obj) {
+		if constexpr(!SequenceDeletable<T, Tag>) throw py::type_error(
+			"Sequence does not support deletion"
+		);
+
+		else del(static_cast<py::ssize_t>(index(py_obj)));
 	}
 
 	size_t _index(py::ssize_t index) const { return n_index(size(), index); }
@@ -683,6 +862,12 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 			.def("__contains__", &SequenceProxy<T, Tag>::contains)
 			.def("append", &SequenceProxy<T, Tag>::append)
 			.def("extend", &SequenceProxy<T, Tag>::extend)
+			.def("insert", &SequenceProxy<T, Tag>::insert)
+			.def("pop", py::overload_cast<py::ssize_t>(&SequenceProxy<T, Tag>::pop))
+			.def("pop", py::overload_cast<>(&SequenceProxy<T, Tag>::pop))
+			.def("clear", &SequenceProxy<T, Tag>::clear)
+			.def("index", &SequenceProxy<T, Tag>::index)
+			.def("remove", &SequenceProxy<T, Tag>::remove)
 		;
 
 		return sp;
@@ -780,6 +965,17 @@ public MapSlotCache<typename MappingTraits<T, Tag>::key_type> {
 		return base_type::get(key, ptr);
 	}
 
+	// dict.get(key, default=None) -- a separate method from get() above (which is __getitem__
+	// and must raise KeyError) rather than a default argument on it, since the two need
+	// different missing-key behavior.
+	py::object get(key_type key, py::object default_value) {
+		auto* ptr = traits_type::get(obj, key);
+
+		if(!ptr) return default_value;
+
+		return base_type::get(key, ptr);
+	}
+
 	/* void set(key_type key, py::object py_obj) {
 		if constexpr(!MappingSettable<T, Tag>) throw py::type_error(
 			"Mapping does not support assignment"
@@ -821,6 +1017,27 @@ public MapSlotCache<typename MappingTraits<T, Tag>::key_type> {
 		}
 	}
 
+	// dict.setdefault(key, default=None): return the existing value if key is present,
+	// otherwise set it to default and return that. Unlike get()/pop(), there's no
+	// raise-vs-not-raise split to force two overloads -- a plain pybind11 default argument
+	// is enough, since setdefault() always treats a missing `default` the same way (as
+	// None), never differently depending on whether the caller passed it.
+	py::object setdefault(key_type key, py::object default_value) {
+		if constexpr(!MappingSettable<T, Tag>) throw py::type_error(
+			"Mapping does not support assignment"
+		);
+
+		else {
+			auto* ptr = traits_type::get(obj, key);
+
+			if(ptr) return base_type::get(key, ptr);
+
+			set(key, default_value);
+
+			return get(key);
+		}
+	}
+
 	void del(key_type key) {
 		if constexpr(!MappingDeletable<T, Tag>) throw py::type_error(
 			"Mapping does not support deletion"
@@ -831,6 +1048,46 @@ public MapSlotCache<typename MappingTraits<T, Tag>::key_type> {
 
 			base_type::erase(key);
 		}
+	}
+
+	// dict.pop(key): remove-and-return, raising KeyError if absent.
+	py::object pop(key_type key) {
+		if constexpr(!MappingDeletable<T, Tag>) throw py::type_error(
+			"Mapping does not support deletion"
+		);
+
+		else {
+			auto result = get(key);
+
+			del(key);
+
+			return result;
+		}
+	}
+
+	// dict.pop(key, default): same, but returns default instead of raising when absent. A
+	// second overload rather than a default argument on the one above, mirroring get()'s split
+	// for the same reason -- the no-default form must raise, the with-default form must not.
+	py::object pop(key_type key, py::object default_value) {
+		if constexpr(!MappingDeletable<T, Tag>) throw py::type_error(
+			"Mapping does not support deletion"
+		);
+
+		else {
+			if(!traits_type::get(obj, key)) return default_value;
+
+			return pop(key);
+		}
+	}
+
+	void clear() {
+		if constexpr(!MappingDeletable<T, Tag> || !MappingIterable<T, Tag>) throw py::type_error(
+			"Mapping does not support deletion or key-based iteration"
+		);
+
+		// Snapshot keys() up front -- del() mutates the underlying container, so iterating a
+		// live view of it while deleting would be undefined behavior.
+		else for(auto k : traits_type::keys(obj)) del(k);
 	}
 
 	bool contains(key_type key) {
@@ -952,7 +1209,7 @@ public MapSlotCache<typename MappingTraits<T, Tag>::key_type> {
 		;
 
 		mp
-			.def("__getitem__", &MappingProxy<T, Tag>::get)
+			.def("__getitem__", py::overload_cast<key_type>(&MappingProxy<T, Tag>::get))
 			.def("__setitem__", &MappingProxy<T, Tag>::set)
 			.def("__delitem__", &MappingProxy<T, Tag>::del)
 			.def("__contains__", &MappingProxy<T, Tag>::contains)
@@ -962,6 +1219,19 @@ public MapSlotCache<typename MappingTraits<T, Tag>::key_type> {
 			.def("values", &MappingProxy<T, Tag>::values)
 			.def("items", &MappingProxy<T, Tag>::items)
 			.def("update", &MappingProxy<T, Tag>::update)
+			.def(
+				"get",
+				py::overload_cast<key_type, py::object>(&MappingProxy<T, Tag>::get),
+				py::arg("key"), py::arg("default")=py::none()
+			)
+			.def("pop", py::overload_cast<key_type, py::object>(&MappingProxy<T, Tag>::pop))
+			.def("pop", py::overload_cast<key_type>(&MappingProxy<T, Tag>::pop))
+			.def("clear", &MappingProxy<T, Tag>::clear)
+			.def(
+				"setdefault",
+				&MappingProxy<T, Tag>::setdefault,
+				py::arg("key"), py::arg("default")=py::none()
+			)
 		;
 
 		return mp;
@@ -1052,6 +1322,14 @@ struct PYOBJECT_INTERNAL ValueMappingProxy {
 		return traits_type::get(obj, key);
 	}
 
+	// dict.get(key, default=None) -- see MappingProxy::get(key, default) for why this is a
+	// separate overload rather than a default argument on get() above.
+	py::object get(key_type key, py::object default_value) {
+		if(!contains(key)) return default_value;
+
+		return py::cast(traits_type::get(obj, key));
+	}
+
 	void set(key_type key, py::object py_obj) {
 		if constexpr(!ValueMappingSettable<T, Tag>) throw py::type_error(
 			"Mapping does not support assignment"
@@ -1064,12 +1342,66 @@ struct PYOBJECT_INTERNAL ValueMappingProxy {
 		}
 	}
 
+	// dict.setdefault(key, default=None) -- see MappingProxy::setdefault for why a single
+	// overload with a plain default argument is enough here.
+	py::object setdefault(key_type key, py::object default_value) {
+		if constexpr(!ValueMappingSettable<T, Tag>) throw py::type_error(
+			"Mapping does not support assignment"
+		);
+
+		else {
+			if(contains(key)) return py::cast(traits_type::get(obj, key));
+
+			set(key, default_value);
+
+			return py::cast(traits_type::get(obj, key));
+		}
+	}
+
 	void del(key_type key) {
 		if constexpr(!ValueMappingDeletable<T, Tag>) throw py::type_error(
 			"Mapping does not support deletion"
 		);
 
 		else traits_type::del(obj, key);
+	}
+
+	// dict.pop(key): remove-and-return, raising KeyError if absent.
+	value_type pop(key_type key) {
+		if constexpr(!ValueMappingDeletable<T, Tag>) throw py::type_error(
+			"Mapping does not support deletion"
+		);
+
+		else {
+			auto result = get(key);
+
+			del(key);
+
+			return result;
+		}
+	}
+
+	// dict.pop(key, default): same, but returns default instead of raising when absent. See
+	// MappingProxy::pop(key, default) for why this is a second overload.
+	py::object pop(key_type key, py::object default_value) {
+		if constexpr(!ValueMappingDeletable<T, Tag>) throw py::type_error(
+			"Mapping does not support deletion"
+		);
+
+		else {
+			if(!contains(key)) return default_value;
+
+			return py::cast(pop(key));
+		}
+	}
+
+	void clear() {
+		if constexpr(!ValueMappingDeletable<T, Tag> || !ValueMappingIterable<T, Tag>) {
+			throw py::type_error("Mapping does not support deletion or key-based iteration");
+		}
+
+		// Snapshot keys() up front, same reasoning as MappingProxy::clear().
+		else for(auto k : traits_type::keys(obj)) del(k);
 	}
 
 	bool contains(key_type key) {
@@ -1159,7 +1491,7 @@ struct PYOBJECT_INTERNAL ValueMappingProxy {
 		;
 
 		mp
-			.def("__getitem__", &ValueMappingProxy<T, Tag>::get)
+			.def("__getitem__", py::overload_cast<key_type>(&ValueMappingProxy<T, Tag>::get))
 			.def("__setitem__", &ValueMappingProxy<T, Tag>::set)
 			.def("__delitem__", &ValueMappingProxy<T, Tag>::del)
 			.def("__contains__", &ValueMappingProxy<T, Tag>::contains)
@@ -1168,6 +1500,19 @@ struct PYOBJECT_INTERNAL ValueMappingProxy {
 			.def("keys", &ValueMappingProxy<T, Tag>::keys)
 			.def("values", &ValueMappingProxy<T, Tag>::values)
 			.def("items", &ValueMappingProxy<T, Tag>::items)
+			.def(
+				"get",
+				py::overload_cast<key_type, py::object>(&ValueMappingProxy<T, Tag>::get),
+				py::arg("key"), py::arg("default")=py::none()
+			)
+			.def("pop", py::overload_cast<key_type, py::object>(&ValueMappingProxy<T, Tag>::pop))
+			.def("pop", py::overload_cast<key_type>(&ValueMappingProxy<T, Tag>::pop))
+			.def("clear", &ValueMappingProxy<T, Tag>::clear)
+			.def(
+				"setdefault",
+				&ValueMappingProxy<T, Tag>::setdefault,
+				py::arg("key"), py::arg("default")=py::none()
+			)
 		;
 
 		return mp;

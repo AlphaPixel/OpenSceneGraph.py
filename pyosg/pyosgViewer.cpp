@@ -105,6 +105,23 @@ struct pyx::SequenceTraits<osgViewer::View> {
 
 		v->addEventHandler(eh);
 	}
+
+	// std::list::insert(), so this is the actual native primitive the original
+	// eventHandlers.insert(0, handler) request wanted -- not an append()/del() emulation.
+	// Unlike nth() above, `i == size()` (insert-at-end) is a valid, in-range request here,
+	// so this walks to ehs.end() itself instead of reusing nth()'s stricter bounds check.
+	static void insert(osgViewer::View* v, size_t i, value_type eh) {
+		if(!eh) {
+			throw py::type_error("EventHandler cannot be None");
+		}
+
+		auto& ehs = v->getEventHandlers();
+		auto it = ehs.begin();
+
+		std::advance(it, static_cast<list_type::difference_type>(i));
+
+		ehs.insert(it, eh);
+	}
 };
 
 namespace pyosgViewer {
@@ -205,7 +222,16 @@ void bind(py::module_& m) {
 		// does NOT support usage with `osg::ref_ptr` (and causes the pybind11 chain to explode).
 		// osgGA::GUIActionAdapter,
 		osg::ref_ptr<osgViewer::GraphicsWindow>
-	>(m, "GraphicsWindow");
+	>(m, "GraphicsWindow")
+		// setWindowName's base implementation is a no-op (just an OSG_NOTICE) on backends that
+		// don't have a native window at all (GraphicsWindowEmbedded, offscreen pbuffers); real
+		// windowed backends (X11 confirmed) override it to actually retitle the OS window.
+		.def_property(
+			"windowName",
+			&osgViewer::GraphicsWindow::getWindowName,
+			&osgViewer::GraphicsWindow::setWindowName
+		)
+	;
 
 	py::class_<
 		osgViewer::GraphicsWindowEmbedded,

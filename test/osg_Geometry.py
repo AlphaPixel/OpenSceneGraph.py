@@ -96,6 +96,27 @@ def test_primitive_sets_setitem_and_delitem():
 	assert len(g.primitiveSets) == 1
 	assert g.primitiveSets[0].mode == PrimitiveSet.LINES
 
+def test_primitive_sets_insert():
+	g = Geometry()
+
+	ps0 = DrawArrays(PrimitiveSet.TRIANGLES, 0, 3)
+	ps1 = DrawArrays(PrimitiveSet.LINES, 0, 2)
+	ps2 = DrawArrays(PrimitiveSet.POINTS, 0, 1)
+
+	g.primitiveSets.extend((ps0, ps2))
+	g.primitiveSets.insert(1, ps1)
+
+	assert list(g.primitiveSets) == [ps0, ps1, ps2]
+
+	# Out-of-range indices clamp like list.insert(), rather than raising.
+	front = DrawArrays(PrimitiveSet.QUADS, 0, 4)
+	back = DrawArrays(PrimitiveSet.LINE_STRIP, 0, 2)
+
+	g.primitiveSets.insert(-100, front)
+	g.primitiveSets.insert(100, back)
+
+	assert list(g.primitiveSets) == [front, ps0, ps1, ps2, back]
+
 def test_geometry_has_no_add_primitive_set_method():
 	# addPrimitiveSet() was removed once .primitiveSets (SequenceProxy) existed -- use
 	# `.primitiveSets.append(...)` instead.

@@ -93,6 +93,141 @@ def test_texture_attributes_mapping():
 	assert ss.textureAttributes.keys() == [1]
 	assert 0 not in ss.textureAttributes
 
+def test_uniforms_get_pop_clear():
+	ss = StateSet()
+
+	ss.uniforms["a"] = 1.0
+	ss.uniforms["b"] = 2.0
+
+	assert ss.uniforms.get("a").value == pytest.approx(1.0)
+	assert ss.uniforms.get("missing") is None
+	assert ss.uniforms.get("missing", "fallback") == "fallback"
+
+	popped = ss.uniforms.pop("a")
+
+	assert popped.value == pytest.approx(1.0)
+	assert "a" not in ss.uniforms
+	assert len(ss.uniforms) == 1
+
+	assert ss.uniforms.pop("missing", "fallback") == "fallback"
+
+	with pytest.raises(KeyError):
+		ss.uniforms.pop("missing")
+
+	ss.uniforms.clear()
+
+	assert len(ss.uniforms) == 0
+
+def test_uniforms_setdefault():
+	ss = StateSet()
+
+	ss.uniforms["a"] = 1.0
+
+	# already present -- returns the existing value, unchanged
+	assert ss.uniforms.setdefault("a", 99.0).value == pytest.approx(1.0)
+
+	# absent -- sets it, then returns the (now-existing) value
+	created = ss.uniforms.setdefault("b", 2.0)
+
+	assert created.value == pytest.approx(2.0)
+	assert ss.uniforms["b"] is created
+	assert len(ss.uniforms) == 2
+
+def test_uniforms_pop_and_clear_release_when_no_other_ref():
+	# Same reasoning as Group's version of this test: len() dropping to 0 doesn't prove the
+	# Uniform objects were actually destroyed rather than kept alive by a leaked MapSlotCache
+	# entry. No local variables are kept beyond `popped` on purpose. (Uniform's constructor
+	# used to bypass kwargs_init entirely -- debug= failed here until that was fixed, see
+	# test_kwargs_init_debug_and_name in test/osg_Uniform.py.)
+	deleted = []
+	dbg = lambda addr, cls, name: deleted.append(name)
+
+	ss = StateSet()
+
+	ss.uniforms["a"] = Uniform(Uniform.FLOAT, "a", debug=dbg)
+	ss.uniforms["b"] = Uniform(Uniform.FLOAT, "b", debug=dbg)
+
+	popped = ss.uniforms.pop("a")
+
+	assert popped.name == "a"
+	assert deleted == []  # `popped` is still holding a reference to it
+
+	del popped
+
+	assert deleted == ["a"]
+
+	ss.uniforms.clear()
+
+	assert deleted == ["a", "b"]
+
+def test_texture_attributes_pop_and_clear_release_when_no_other_ref():
+	# Same reasoning, but through the textureAttributes MappingProxy specialization instead of
+	# uniforms -- proxy pop()/clear() are the same shared code across every MappingProxy, so
+	# this is complementary coverage via a second owner, not redundant.
+	deleted = []
+	dbg = lambda addr, cls, name: deleted.append(name)
+
+	ss = StateSet()
+
+	ss.textureAttributes[0] = Texture2D(name="t0", debug=dbg)
+	ss.textureAttributes[1] = Texture2D(name="t1", debug=dbg)
+
+	popped = ss.textureAttributes.pop(0)
+
+	assert deleted == []  # `popped` is still holding a reference to it
+
+	del popped
+
+	assert deleted == ["t0"]
+
+	ss.textureAttributes.clear()
+
+	assert deleted == ["t0", "t1"]
+
+def test_texture_attributes_get_pop_clear():
+	ss = StateSet()
+	t0 = Texture2D()
+	t1 = Texture2D()
+
+	ss.textureAttributes[0] = t0
+	ss.textureAttributes[1] = t1
+
+	assert ss.textureAttributes.get(0) is t0
+	assert ss.textureAttributes.get(99) is None
+	assert ss.textureAttributes.get(99, "fallback") == "fallback"
+
+	popped = ss.textureAttributes.pop(0)
+
+	assert popped is t0
+	assert 0 not in ss.textureAttributes
+	assert len(ss.textureAttributes) == 1
+
+	assert ss.textureAttributes.pop(99, "fallback") == "fallback"
+
+	with pytest.raises(KeyError):
+		ss.textureAttributes.pop(99)
+
+	ss.textureAttributes.clear()
+
+	assert len(ss.textureAttributes) == 0
+
+def test_attributes_get_pop_clear():
+	ss = StateSet()
+	p = Program(name="p")
+
+	ss.attributes[StateAttribute.PROGRAM] = p
+
+	assert ss.attributes.get(StateAttribute.PROGRAM) is p
+	assert ss.attributes.get(StateAttribute.TEXTURE) is None
+
+	popped = ss.attributes.pop(StateAttribute.PROGRAM)
+
+	assert popped is p
+	assert len(ss.attributes) == 0
+
+	with pytest.raises(KeyError):
+		ss.attributes.pop(StateAttribute.PROGRAM)
+
 def test_attributes_mapping():
 	ss = StateSet()
 	p = Program(name="p")

@@ -99,6 +99,10 @@ struct pyx::SequenceTraits<osg::Geometry> {
 	static void append(osg::Geometry* g, element_type* ps) {
 		g->addPrimitiveSet(ps);
 	}
+
+	static void insert(osg::Geometry* g, size_t i, element_type* ps) {
+		g->insertPrimitiveSet(static_cast<unsigned int>(i), ps);
+	}
 };
 
 namespace pyosg {

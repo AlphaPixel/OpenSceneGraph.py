@@ -156,14 +156,25 @@ void bind_Uniform(py::module_& m) {
 	;
 
 	uniform
-		.def(py::init<>())
+		.def(py::init(pyx::kwargs_ctor<osg::Uniform>()))
+		// Deliberately left as a plain (non-kwargs) copy constructor, matching the convention
+		// already established for MatrixTransform/PositionAttitudeTransform in Transform.cpp --
+		// a copy already fully initializes every field from the source object, so layering
+		// debug=/name=/etc. on top would mean overriding specific post-copy fields, a different
+		// (and not currently needed) feature from what kwargs_ctor is for.
 		.def(py::init<const osg::Uniform&>())
-		.def(py::init([](osg::Uniform::Type type, const std::string& name, py::sequence elements) {
-			return detail::make_uniform_array(type, name, elements);
+		.def(py::init([](
+			osg::Uniform::Type type, const std::string& name, py::sequence elements, py::kwargs kwargs
+		) {
+			osg::ref_ptr<osg::Uniform> obj = detail::make_uniform_array(type, name, elements);
+
+			pyx::kwargs_init(*obj, kwargs);
+
+			return obj;
 		}), "type"_a, "name"_a, "elements"_a)
 
 		.def(
-			py::init<osg::Uniform::Type, const std::string&, int>(),
+			py::init(pyx::kwargs_ctor<osg::Uniform, osg::Uniform::Type, const std::string&, int>()),
 			"type"_a,
 			"name"_a,
 			"numElements"_a=1
@@ -173,9 +184,9 @@ void bind_Uniform(py::module_& m) {
 		.def(py::init<const char*, unsigned long long>())
 		.def(py::init<const char*, long long>()) */
 
-		.def(py::init<const char*, const osg::Vec2&>())
-		.def(py::init<const char*, const osg::Vec3&>())
-		.def(py::init<const char*, const osg::Vec4&>())
+		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, const osg::Vec2&>()))
+		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, const osg::Vec3&>()))
+		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, const osg::Vec4&>()))
 
 		/* .def(py::init<const char*, const osg::Vec2d&>())
 		.def(py::init<const char*, const osg::Vec3d&>())
@@ -203,29 +214,41 @@ void bind_Uniform(py::module_& m) {
 		.def(py::init<const char*, const osg::Matrix4x2d&>())
 		.def(py::init<const char*, const osg::Matrix4x3d&>()) */
 
-		.def(py::init<const char*, const osg::Matrixf&>())
-		.def(py::init<const char*, const osg::Matrixd&>())
+		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, const osg::Matrixf&>()))
+		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, const osg::Matrixd&>()))
 
-		.def(py::init<const char*, int, int>())
-		.def(py::init<const char*, int, int, int>())
-		.def(py::init<const char*, int, int, int, int>())
+		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, int, int>()))
+		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, int, int, int>()))
+		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, int, int, int, int>()))
 
-		.def(py::init<const char*, unsigned int, unsigned int>())
-		.def(py::init<const char*, unsigned int, unsigned int, unsigned int>())
-		.def(py::init<const char*, unsigned int, unsigned int, unsigned int, unsigned int>())
+		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, unsigned int, unsigned int>()))
+		.def(py::init(
+			pyx::kwargs_ctor<osg::Uniform, const char*, unsigned int, unsigned int, unsigned int>()
+		))
+		.def(py::init(pyx::kwargs_ctor<
+			osg::Uniform, const char*, unsigned int, unsigned int, unsigned int, unsigned int
+		>()))
 
-		.def(py::init<const char*, bool, bool>())
-		.def(py::init<const char*, bool, bool, bool>())
-		.def(py::init<const char*, bool, bool, bool, bool>())
+		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, bool, bool>()))
+		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, bool, bool, bool>()))
+		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, bool, bool, bool, bool>()))
 
-		.def(py::init([](const char* name, py::object obj) {
-			if(py::isinstance<py::bool_>(obj)) return new osg::Uniform(name, obj.cast<bool>());
+		.def(py::init([](const char* name, py::object obj, py::kwargs kwargs) {
+			osg::ref_ptr<osg::Uniform> obj_u;
 
-			if(py::isinstance<py::int_>(obj)) return new osg::Uniform(name, obj.cast<int>());
+			if(py::isinstance<py::bool_>(obj)) obj_u = new osg::Uniform(name, obj.cast<bool>());
 
-			if(py::isinstance<py::float_>(obj)) return new osg::Uniform(name, obj.cast<float>());
+			else if(py::isinstance<py::int_>(obj)) obj_u = new osg::Uniform(name, obj.cast<int>());
 
-			throw py::type_error("Unsupported type for Uniform(name, value)");
+			else if(py::isinstance<py::float_>(obj)) {
+				obj_u = new osg::Uniform(name, obj.cast<float>());
+			}
+
+			else throw py::type_error("Unsupported type for Uniform(name, value)");
+
+			pyx::kwargs_init(*obj_u, kwargs);
+
+			return obj_u;
 		}))
 
 		.def_property("type", &osg::Uniform::getType, &osg::Uniform::setType)

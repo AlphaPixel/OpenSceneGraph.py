@@ -40,6 +40,10 @@ struct pyx::SequenceTraits<osg::Group> {
 	static void append(osg::Group* g, value_type n) {
 		g->addChild(n);
 	}
+
+	static void insert(osg::Group* g, size_t i, value_type n) {
+		g->insertChild(static_cast<unsigned int>(i), n);
+	}
 };
 
 namespace pyosg {
