@@ -1222,7 +1222,7 @@ public MapSlotCache<typename MappingTraits<T, Tag>::key_type> {
 			.def(
 				"get",
 				py::overload_cast<key_type, py::object>(&MappingProxy<T, Tag>::get),
-				py::arg("key"), py::arg("default")=py::none()
+				"key"_a, "default"_a=py::none()
 			)
 			.def("pop", py::overload_cast<key_type, py::object>(&MappingProxy<T, Tag>::pop))
 			.def("pop", py::overload_cast<key_type>(&MappingProxy<T, Tag>::pop))
@@ -1230,7 +1230,7 @@ public MapSlotCache<typename MappingTraits<T, Tag>::key_type> {
 			.def(
 				"setdefault",
 				&MappingProxy<T, Tag>::setdefault,
-				py::arg("key"), py::arg("default")=py::none()
+				"key"_a, "default"_a=py::none()
 			)
 		;
 
@@ -1503,7 +1503,7 @@ struct PYOBJECT_INTERNAL ValueMappingProxy {
 			.def(
 				"get",
 				py::overload_cast<key_type, py::object>(&ValueMappingProxy<T, Tag>::get),
-				py::arg("key"), py::arg("default")=py::none()
+				"key"_a, "default"_a=py::none()
 			)
 			.def("pop", py::overload_cast<key_type, py::object>(&ValueMappingProxy<T, Tag>::pop))
 			.def("pop", py::overload_cast<key_type>(&ValueMappingProxy<T, Tag>::pop))
@@ -1511,7 +1511,7 @@ struct PYOBJECT_INTERNAL ValueMappingProxy {
 			.def(
 				"setdefault",
 				&ValueMappingProxy<T, Tag>::setdefault,
-				py::arg("key"), py::arg("default")=py::none()
+				"key"_a, "default"_a=py::none()
 			)
 		;
 

@@ -147,7 +147,7 @@ void bind(py::module_& m) {
 
 			return obj;
 		},
-		py::arg("filename"),
+		"filename"_a,
 		"Read an OSG object from a file; pybind11 downcasts to the concrete type (e.g. osg.TextureCubeMap)"
 	);
 
@@ -159,7 +159,7 @@ void bind(py::module_& m) {
 
 			return node;
 		},
-		py::arg("filename"),
+		"filename"_a,
 		"Read an OSG node from a file and return it as an osg.Node"
 	);
 
@@ -171,7 +171,7 @@ void bind(py::module_& m) {
 
 			return img;
 		},
-		py::arg("filename"),
+		"filename"_a,
 		"Read an OSG image from a file and return it as an osg.Image"
 	);
 
@@ -198,8 +198,8 @@ void bind(py::module_& m) {
 	/* m.def(
 		"readNodeFile",
 		py::overload_cast<const std::string&, const osgDB::Options*>(&osgDB::readNodeFile),
-		py::arg("filename"),
-		py::arg("options")
+		"filename"_a,
+		"options"_a
 	); */
 }
 

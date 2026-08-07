@@ -116,7 +116,7 @@ namespace detail {
 
 		arr
 			.def(py::init<>())
-			.def(py::init<size_t>(), py::arg("size"))
+			.def(py::init<size_t>(), "size"_a)
 			.def(py::init([](const std::vector<typename T::ElementDataType>& vec) {
 				auto a = new T();
 

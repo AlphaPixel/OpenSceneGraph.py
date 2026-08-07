@@ -9,12 +9,23 @@ void bind_NodeCallback(py::module_& m) {
 	// from osg::Callback and need it as a real registered pybind base for that to work. Bound with
 	// the detail::Callback trampoline (see NodeCallback.hpp) so a Python subclass overriding run()
 	// actually dispatches through real C++ virtual calls, not just direct Python method lookup.
-	py::class_<
+	auto callback = py::class_<
 		osg::Callback,
 		detail::Callback,
 		osg::Object,
 		osg::ref_ptr<osg::Callback>
-	>(m, "Callback")
+	>(m, "Callback");
+
+	// callback.nestedCallbacks -- list view over the singly-linked nestedCallback chain (see
+	// SequenceTraits<osg::Callback, NestedCallbacksTag> in NodeCallback.hpp): indexing, len(),
+	// append(), insert(i, cb), del callback.nestedCallbacks[i], .remove(cb), .index(cb),
+	// iteration -- the usual SequenceProxy surface, instead of hand-walking getNestedCallback()
+	// chains or calling addNestedCallback()/removeNestedCallback() directly.
+	pyx::bind_proxy_property<detail::NestedCallbacksProxy, osg::Callback, detail::CallbackStorage>(
+		callback, "_NestedCallbacks", "nestedCallbacks"
+	);
+
+	callback
 		.def(py::init<>())
 	;
 

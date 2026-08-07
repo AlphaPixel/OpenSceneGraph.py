@@ -58,7 +58,7 @@ void bind_NodeVisitor(py::module_& m) {
 			py::init_alias<osg::NodeVisitor::TraversalMode>(),
 			"traversalMode"_a=osg::NodeVisitor::TRAVERSE_NONE
 		)
-		.def("traverse", &osg::NodeVisitor::traverse, py::arg("node"))
+		.def("traverse", &osg::NodeVisitor::traverse, "node"_a)
 		.def("_traverse", [](detail::NodeVisitor& self, osg::Node& node) {
 			self._traverse(node);
 		})

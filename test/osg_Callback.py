@@ -37,6 +37,84 @@ def test_direct_python_call_is_not_proof_of_real_dispatch():
 
 	assert len(calls) == 1
 
+def test_nested_callbacks_sequence_proxy():
+	# osg::Callback::nestedCallback is a singly-linked chain, not an array --
+	# Callback.nestedCallbacks (SequenceTraits<osg::Callback, NestedCallbacksTag>, see
+	# pyosg/osg/NodeCallback.hpp) flattens it into list semantics. This exercises the splice
+	# logic directly rather than just trusting it compiles.
+	root = Callback()
+	a, b, c = Callback(), Callback(), Callback()
+
+	a.name, b.name, c.name = "a", "b", "c"
+
+	root.nestedCallbacks.append(a)
+	root.nestedCallbacks.append(b)
+	root.nestedCallbacks.append(c)
+
+	assert [x.name for x in root.nestedCallbacks] == ["a", "b", "c"]
+	assert len(root.nestedCallbacks) == 3
+	# Each element's OWN nestedCallbacks continues the same chain one step further in --
+	# confirms indexing is really walking the real linked chain, not some separate list.
+	assert [x.name for x in root.nestedCallbacks[0].nestedCallbacks] == ["b", "c"]
+
+def test_nested_callbacks_del_splices_around_target():
+	root = Callback()
+	a, b, c = Callback(), Callback(), Callback()
+
+	a.name, b.name, c.name = "a", "b", "c"
+
+	root.nestedCallbacks.append(a)
+	root.nestedCallbacks.append(b)
+	root.nestedCallbacks.append(c)
+
+	del root.nestedCallbacks[1]
+
+	assert [x.name for x in root.nestedCallbacks] == ["a", "c"]
+	# b is fully detached, not just skipped -- it shouldn't still be pointing at c.
+	assert len(b.nestedCallbacks) == 0
+
+def test_nested_callbacks_insert_splices_in_front():
+	root = Callback()
+	a, c, d = Callback(), Callback(), Callback()
+
+	a.name, c.name, d.name = "a", "c", "d"
+
+	root.nestedCallbacks.append(a)
+	root.nestedCallbacks.append(c)
+	root.nestedCallbacks.insert(1, d)
+
+	assert [x.name for x in root.nestedCallbacks] == ["a", "d", "c"]
+
+def test_nested_callbacks_set_replaces_and_keeps_tail():
+	root = Callback()
+	a, b, c, e = Callback(), Callback(), Callback(), Callback()
+
+	a.name, b.name, c.name, e.name = "a", "b", "c", "e"
+
+	root.nestedCallbacks.append(a)
+	root.nestedCallbacks.append(b)
+	root.nestedCallbacks.append(c)
+
+	root.nestedCallbacks[1] = e
+
+	assert [x.name for x in root.nestedCallbacks] == ["a", "e", "c"]
+	# b was REPLACED (not spliced past) -- fully detached, same contract as del.
+	assert len(b.nestedCallbacks) == 0
+
+def test_nested_callbacks_remove_by_identity():
+	root = Callback()
+	a, b, c = Callback(), Callback(), Callback()
+
+	a.name, b.name, c.name = "a", "b", "c"
+
+	root.nestedCallbacks.append(a)
+	root.nestedCallbacks.append(b)
+	root.nestedCallbacks.append(c)
+	root.nestedCallbacks.remove(b)
+
+	assert [x.name for x in root.nestedCallbacks] == ["a", "c"]
+	assert root.nestedCallbacks.index(c) == 1
+
 def test_run_dispatches_through_real_traversal():
 	# The real test: drive it through actual C++-side dispatch (Node's internal update-traversal
 	# machinery calling the stored osg::Callback*'s run(), not a direct Python call).

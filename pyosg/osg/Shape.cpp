@@ -167,6 +167,11 @@ void bind_Shape(py::module_& m) {
 			return s;
 		}), "shape"_a, "hints"_a = nullptr) */
 		.def("build", &osg::ShapeDrawable::build)
+		.def_property(
+			"color",
+			&osg::ShapeDrawable::getColor,
+			&osg::ShapeDrawable::setColor
+		)
 	;
 }
 
