@@ -5,6 +5,7 @@
 import pytest
 
 from OpenSceneGraph.osg import StateSet, StateAttribute, Program, Texture2D, Uniform, Vec3f, Matrixf
+from OpenSceneGraph.GL import GL_DEPTH_TEST, GL_BLEND, GL_CULL_FACE
 
 def test_uniforms_append(uniform_init):
 	ss = StateSet()
@@ -272,3 +273,59 @@ def test_attributes_key_type_mismatch():
 
 	with pytest.raises(ValueError):
 		ss.attributes[StateAttribute.TEXTURE] = p
+
+def test_modes_mapping():
+	ss = StateSet()
+
+	ss.modes[GL_DEPTH_TEST] = StateAttribute.OFF
+	ss.modes[GL_BLEND] = StateAttribute.ON | StateAttribute.OVERRIDE
+
+	assert ss.modes[GL_DEPTH_TEST] == StateAttribute.OFF
+	assert ss.modes[GL_BLEND] == StateAttribute.ON | StateAttribute.OVERRIDE
+	assert len(ss.modes) == 2
+	assert sorted(ss.modes.keys()) == sorted((GL_DEPTH_TEST, GL_BLEND))
+	assert GL_DEPTH_TEST in ss.modes
+	assert GL_CULL_FACE not in ss.modes
+
+	del ss.modes[GL_DEPTH_TEST]
+
+	assert len(ss.modes) == 1
+	assert GL_DEPTH_TEST not in ss.modes
+
+def test_modes_get_pop_clear():
+	ss = StateSet()
+
+	ss.modes[GL_DEPTH_TEST] = StateAttribute.OFF
+	ss.modes[GL_BLEND] = StateAttribute.ON
+
+	assert ss.modes.get(GL_DEPTH_TEST) == StateAttribute.OFF
+	assert ss.modes.get(GL_CULL_FACE) is None
+	assert ss.modes.get(GL_CULL_FACE, "fallback") == "fallback"
+
+	popped = ss.modes.pop(GL_DEPTH_TEST)
+
+	assert popped == StateAttribute.OFF
+	assert GL_DEPTH_TEST not in ss.modes
+	assert len(ss.modes) == 1
+
+	assert ss.modes.pop(GL_CULL_FACE, "fallback") == "fallback"
+
+	with pytest.raises(KeyError):
+		ss.modes.pop(GL_CULL_FACE)
+
+	ss.modes.clear()
+
+	assert len(ss.modes) == 0
+
+def test_modes_setdefault():
+	ss = StateSet()
+
+	ss.modes[GL_DEPTH_TEST] = StateAttribute.OFF
+
+	# already present -- returns the existing value, unchanged
+	assert ss.modes.setdefault(GL_DEPTH_TEST, StateAttribute.ON) == StateAttribute.OFF
+
+	# absent -- sets it, then returns the (now-existing) value
+	assert ss.modes.setdefault(GL_BLEND, StateAttribute.ON) == StateAttribute.ON
+	assert ss.modes[GL_BLEND] == StateAttribute.ON
+	assert len(ss.modes) == 2

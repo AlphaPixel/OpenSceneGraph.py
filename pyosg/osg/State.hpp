@@ -12,8 +12,6 @@ PYOSG_ENABLE_WARNINGS
 
 #include <sstream>
 
-PYBIND11_MAKE_OPAQUE(osg::StateSet::ModeList);
-
 #include "pybind11x.hpp"
 
 namespace pyx = pybind11x;
@@ -22,6 +20,7 @@ namespace pyosg::detail {
 	struct UniformsTag;
 	struct TextureAttributesTag;
 	struct AttributesTag;
+	struct ModesTag;
 }
 
 template<>
@@ -253,7 +252,7 @@ struct pyx::MappingTraits<osg::StateSet, pyosg::detail::TextureAttributesTag> {
 	}
 };
 
-// The main (non-texture) `StateAttribute` list, keyed by `StateAttribute::Type` -- e.g.
+// The main (non-texture) `StateAttribute` list, keyed by `StateAttribute::Type` - e.g.
 // `stateSet.attributes[osg.StateAttribute.PROGRAM]`. Real OSG additionally keys this list by a
 // "member" index (`StateAttribute::TypeMemberPair`) to allow multiple attributes of the SAME type
 // (e.g. stacked ClipPlanes); this proxy only ever addresses member 0, matching the member=0
@@ -322,17 +321,74 @@ struct pyx::MappingTraits<osg::StateSet, pyosg::detail::AttributesTag> {
 	}
 };
 
+// The plain GL mode toggle list - e.g. `stateSet.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF`.
+// Unlike `.attributes`/`.textureAttributes`, values here are bare `GLModeValue` ints rather than
+// `StateAttribute*`, so this is a `ValueMappingTraits` (see `Program.hpp`'s BindAttribLocationTag
+// for the same shape) rather than a `MappingTraits`. `contains()`/`get()` are KeyError-on-missing
+// against `getModeList()` directly, matching `.attributes[]`'s semantics - NOT the same as real
+// OSG's own `StateSet::getMode()`, which returns the `INHERIT` sentinel for an unset mode instead
+// of throwing.
+template<>
+struct pyx::ValueMappingTraits<osg::StateSet, pyosg::detail::ModesTag> {
+	using key_type = osg::StateAttribute::GLMode;
+	using value_type = osg::StateAttribute::GLModeValue;
+
+	static value_type from_python(py::handle h) {
+		return h.cast<value_type>();
+	}
+
+	static size_t size(osg::StateSet* ss) {
+		return ss->getModeList().size();
+	}
+
+	static bool contains(osg::StateSet* ss, key_type key) {
+		const auto& modes = ss->getModeList();
+
+		return modes.find(key) != modes.end();
+	}
+
+	static value_type get(osg::StateSet* ss, key_type key) {
+		const auto& modes = ss->getModeList();
+		auto it = modes.find(key);
+
+		if(it == modes.end()) throw py::key_error("key not found");
+
+		return it->second;
+	}
+
+	static void set(osg::StateSet* ss, key_type key, value_type value) {
+		ss->setMode(key, value);
+	}
+
+	static void del(osg::StateSet* ss, key_type key) {
+		ss->removeMode(key);
+	}
+
+	static std::vector<key_type> keys(osg::StateSet* ss) {
+		std::vector<key_type> out;
+		const auto& modes = ss->getModeList();
+
+		out.reserve(modes.size());
+
+		for(const auto& [mode, _] : modes) out.push_back(mode);
+
+		return out;
+	}
+};
+
 namespace pyosg {
 
 namespace detail {
 	using UniformsProxy = pyx::MappingProxy<osg::StateSet, UniformsTag>;
 	using TextureAttributesProxy = pyx::MappingProxy<osg::StateSet, TextureAttributesTag>;
 	using AttributesProxy = pyx::MappingProxy<osg::StateSet, AttributesTag>;
+	using ModesProxy = pyx::ValueMappingProxy<osg::StateSet, ModesTag>;
 	using StateSetStorage = pyx::ProxyStorageOSG<
 		osg::StateSet,
 		UniformsProxy,
 		TextureAttributesProxy,
-		AttributesProxy
+		AttributesProxy,
+		ModesProxy
 	>;
 }
 

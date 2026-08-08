@@ -178,11 +178,6 @@ void bind_State(py::module_& m) {
 		.def(py::init<const osg::StateSet&>())
 	;
 
-	// This isn't really NECESSARY to have (as it's so unlikely to be used in common cases), but
-	// it's a great DEMO for how this kind of thing is done. NOTE the call to `PYBIND11_MAKE_OPAQUE`
-	// in the toplevel of this file.
-	py::bind_map<osg::StateSet::ModeList>(ss, "ModeList");
-
 	// TODO: So, this call COULD WORK ... with LOTS of caveats. Explain more!
 	// py::bind_vector<std::vector<osg::Node*>>(ss, "ParentList");
 
@@ -209,7 +204,11 @@ void bind_State(py::module_& m) {
 		ss, "_TextureAttributes", "textureAttributes"
 	);
 
-	// Not using pyx::bind_proxy_property here (unlike textureAttributes above) -- uniforms needs
+	pyx::bind_proxy_property<detail::ModesProxy, osg::StateSet, detail::StateSetStorage>(
+		ss, "_Modes", "modes"
+	);
+
+	// Not using pyx::bind_proxy_property here (unlike textureAttributes above) - uniforms needs
 	// its own append()/extend() beyond what MappingProxy provides generically, so it keeps direct
 	// access to the bound proxy class (`up`) to chain those onto.
 	auto up = detail::UniformsProxy::bind(ss, "_Uniforms");
@@ -231,7 +230,7 @@ void bind_State(py::module_& m) {
 		})
 	;
 
-	// Same shape as `uniforms` above -- the attribute's own `getType()` supplies the key, so
+	// Same shape as `uniforms` above - the attribute's own `getType()` supplies the key, so
 	// `append()`/`extend()` work without requiring the type to be named twice.
 	auto ap = detail::AttributesProxy::bind(ss, "_Attributes");
 
@@ -279,26 +278,24 @@ void bind_State(py::module_& m) {
 			&osg::StateSet::getNestRenderBins,
 			&osg::StateSet::setNestRenderBins
 		)
-		.def("setMode", py::overload_cast<
-			osg::StateAttribute::GLMode,
-			osg::StateAttribute::GLModeValue
-		>(&osg::StateSet::setMode))
-		.def("removeMode", &osg::StateSet::removeMode)
-		// No addUniform() -- .uniforms.append()/.uniforms[name]=... (UniformsTag/UniformsProxy
+		// No setMode()/removeMode() - .modes[mode] = value / del .modes[mode] (ModesTag/
+		// ModesProxy above) already covers this, same shape as .attributes[]/.textureAttributes[]
+		// replacing setAttribute()/setAttributeAndModes()/removeAttribute()/setTextureAttribute()/
+		// No addUniform() - .uniforms.append()/.uniforms[name]=... (UniformsTag/UniformsProxy
 		// above) already covers this, same as .attributes[]/.textureAttributes[] replaced
 		// setAttribute()/setAttributeAndModes()/removeAttribute()/setTextureAttribute()/
 		// setTextureAttributeAndModes()/removeTextureAttribute().
 		//
-		// No getUniform() -- .uniforms[name] (a MappingProxy, see UniformsTag above) already
+		// No getUniform() - .uniforms[name] (a MappingProxy, see UniformsTag above) already
 		// covers this with proper dict semantics (__getitem__/__contains__/KeyError), same as
 		// .attributes[] replaced getAttribute()/setAttribute() (see aipython/02-inspect.md).
 		//
-		// No {get,set,remove}TextureMode() either -- GL_TEXTURE_GEN_*/GL_TEXTURE_1D/2D/3D
+		// No {get,set,remove}TextureMode() either - GL_TEXTURE_GEN_*/GL_TEXTURE_1D/2D/3D
 		// per-unit fixed-function-pipeline toggles, same vintage as the rest of the FFP surface
 		// this project deliberately doesn't bind. (setTextureMode/getTextureMode/getUniform were
 		// all pulled at once, so this file's diff also fixes a real bug that lived alongside
 		// them: getTextureMode used to be bound to &osg::StateSet::setTextureMode, a copy-paste
-		// from the line below it -- calling it silently called the SETTER instead of reading
+		// from the line below it - calling it silently called the SETTER instead of reading
 		// anything back.)
 		.def_property_readonly("parents", [](osg::StateSet& self) {
 			// return detail::make_list(self.getParents());
