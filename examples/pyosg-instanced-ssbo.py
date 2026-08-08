@@ -96,8 +96,8 @@ if __name__ == "__main__":
 		osg.Shader(osg.Shader.FRAGMENT, FRAGMENT_SHADER)
 	))
 
-	g.stateSet.setAttributeAndModes(p)
-	g.stateSet.setAttributeAndModes(ssbb)
+	g.stateSet.attributes.append(p)
+	g.stateSet.attributes.append(ssbb)
 
 	v = osgViewer.Viewer(osg.ArgumentParser("pyosg-instanced-ssbo.py", sys.argv))
 

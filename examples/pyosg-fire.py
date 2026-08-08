@@ -334,9 +334,11 @@ def build_shockwave(max_radius=4.0, duration=0.6, ring_width=0.3):
 
 	ss = r.stateSet
 
-	ss.setAttributeAndModes(p)
-	ss.setAttributeAndModes(osg.BlendFunc(GL_ONE, GL_ONE), osg.StateAttribute.ON)
-	ss.setAttributeAndModes(osg.Depth(osg.Depth.LESS, 0.0, 1.0, False), osg.StateAttribute.ON)
+	ss.attributes.append(p)
+	ss.attributes[osg.StateAttribute.BLENDFUNC] = (osg.BlendFunc(GL_ONE, GL_ONE), osg.StateAttribute.ON)
+	ss.attributes[osg.StateAttribute.DEPTH] = (
+		osg.Depth(osg.Depth.LESS, 0.0, 1.0, False), osg.StateAttribute.ON
+	)
 	ss.setMode(GL_CULL_FACE, osg.StateAttribute.OFF)
 	ss.renderingHint = osg.StateSet.TRANSPARENT_BIN
 
@@ -557,9 +559,13 @@ def build_smoke(
 
 	ss = r.stateSet
 
-	ss.setAttributeAndModes(p)
-	ss.setAttributeAndModes(osg.BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA), osg.StateAttribute.ON)
-	ss.setAttributeAndModes(osg.Depth(osg.Depth.LESS, 0.0, 1.0, False), osg.StateAttribute.ON)
+	ss.attributes.append(p)
+	ss.attributes[osg.StateAttribute.BLENDFUNC] = (
+		osg.BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA), osg.StateAttribute.ON
+	)
+	ss.attributes[osg.StateAttribute.DEPTH] = (
+		osg.Depth(osg.Depth.LESS, 0.0, 1.0, False), osg.StateAttribute.ON
+	)
 	ss.setMode(GL_CULL_FACE, osg.StateAttribute.OFF)
 	ss.renderingHint = osg.StateSet.TRANSPARENT_BIN
 
@@ -729,11 +735,13 @@ def build_embers(num_points=220, duration=1.6, launch_speed=4.0, gravity=6.0, ba
 
 	ss = r.stateSet
 
-	ss.setAttributeAndModes(p)
+	ss.attributes.append(p)
 	ss.setMode(GL_PROGRAM_POINT_SIZE, osg.StateAttribute.ON)
 	ss.setMode(GL_VERTEX_PROGRAM_POINT_SIZE, osg.StateAttribute.ON)
-	ss.setAttributeAndModes(osg.BlendFunc(GL_ONE, GL_ONE), osg.StateAttribute.ON)
-	ss.setAttributeAndModes(osg.Depth(osg.Depth.LESS, 0.0, 1.0, False), osg.StateAttribute.ON)
+	ss.attributes[osg.StateAttribute.BLENDFUNC] = (osg.BlendFunc(GL_ONE, GL_ONE), osg.StateAttribute.ON)
+	ss.attributes[osg.StateAttribute.DEPTH] = (
+		osg.Depth(osg.Depth.LESS, 0.0, 1.0, False), osg.StateAttribute.ON
+	)
 	ss.renderingHint = osg.StateSet.TRANSPARENT_BIN
 
 	ss.uniforms["duration"] = duration
@@ -780,9 +788,11 @@ def build_fire(
 
 	ss = r.stateSet
 
-	ss.setAttributeAndModes(p)
-	ss.setAttributeAndModes(osg.BlendFunc(GL_ONE, GL_ONE), osg.StateAttribute.ON)
-	ss.setAttributeAndModes(osg.Depth(osg.Depth.LESS, 0.0, 1.0, False), osg.StateAttribute.ON)
+	ss.attributes.append(p)
+	ss.attributes[osg.StateAttribute.BLENDFUNC] = (osg.BlendFunc(GL_ONE, GL_ONE), osg.StateAttribute.ON)
+	ss.attributes[osg.StateAttribute.DEPTH] = (
+		osg.Depth(osg.Depth.LESS, 0.0, 1.0, False), osg.StateAttribute.ON
+	)
 	ss.setMode(GL_CULL_FACE, osg.StateAttribute.OFF)
 	ss.renderingHint = osg.StateSet.TRANSPARENT_BIN
 
@@ -971,8 +981,10 @@ def build_flash_camera(width, height, duration=0.25):
 
 	ss = cam.stateSet
 
-	ss.setAttributeAndModes(p)
-	ss.setAttributeAndModes(osg.BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA), osg.StateAttribute.ON)
+	ss.attributes.append(p)
+	ss.attributes[osg.StateAttribute.BLENDFUNC] = (
+		osg.BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA), osg.StateAttribute.ON
+	)
 	ss.setMode(GL_DEPTH_TEST, osg.StateAttribute.OFF)
 	ss.uniforms["duration"] = duration
 

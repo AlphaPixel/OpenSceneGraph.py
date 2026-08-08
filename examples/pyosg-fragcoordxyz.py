@@ -466,7 +466,7 @@ if __name__ == "__main__":
 
 	ss = r.stateSet
 
-	ss.setAttributeAndModes(p)
+	ss.attributes.append(p)
 	ss.uniforms["u_resolution"] = osg.Vec2(800.0, 600.0)
 	ss.uniforms["u_time"] = 0.0
 

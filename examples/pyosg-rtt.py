@@ -168,7 +168,7 @@ def create_scene():
 	p.shaders.append(osg.Shader(osg.Shader.VERTEX, SCENE_VERTEX_SHADER))
 	p.shaders.append(osg.Shader(osg.Shader.FRAGMENT, SCENE_FRAGMENT_SHADER))
 
-	g.stateSet.setAttributeAndModes(p)
+	g.stateSet.attributes.append(p)
 
 	return g
 
@@ -253,7 +253,7 @@ def create_hud_camera(cb, db):
 		osg.Shader(osg.Shader.FRAGMENT, HUD_FRAGMENT_SHADER)
 	))
 
-	g.stateSet.setAttributeAndModes(p)
+	g.stateSet.attributes.append(p)
 
 	return cam
 

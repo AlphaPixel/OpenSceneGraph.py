@@ -91,7 +91,7 @@ if __name__ == "__main__":
 
 	ss = root.stateSet
 
-	ss.setAttributeAndModes(p)
+	ss.attributes.append(p)
 
 	# World-space light direction (not required to be unit-length; VS normalizes it).
 	ss.uniforms["lightDir"] = osg.Vec3(0.5, 0.5, 1.0)

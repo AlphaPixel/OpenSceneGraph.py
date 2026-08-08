@@ -176,7 +176,7 @@ def create_scene():
 		osg.ShapeDrawable(osg.Box(osg.Vec3( 2.7, 4, 0), 0.12, 7.0, 0.12)),
 	))
 	root.children.append(geode)
-	root.stateSet.setAttributeAndModes(program("taa_scene", SCENE_VERTEX, GBUFFER_FRAGMENT))
+	root.stateSet.attributes.append(program("taa_scene", SCENE_VERTEX, GBUFFER_FRAGMENT))
 	return root
 
 
@@ -227,7 +227,7 @@ def fullscreen_rtt(name, order, output, inputs, fragment, uniforms=()):
 		cam.stateSet.uniforms[uniform_name] = unit
 	cam.stateSet.uniforms.extend(uniforms)
 	quad = make_quad()
-	quad.stateSet.setAttributeAndModes(program(name, FULLSCREEN_VERTEX, fragment))
+	quad.stateSet.attributes.append(program(name, FULLSCREEN_VERTEX, fragment))
 	cam.children.append(quad)
 	return cam
 
@@ -246,7 +246,7 @@ def display_camera(name, texture):
 	cam.stateSet.textureAttributes[0] = texture
 	cam.stateSet.uniforms["displayTex"] = 0
 	quad = make_quad()
-	quad.stateSet.setAttributeAndModes(program(name, FULLSCREEN_VERTEX, DISPLAY_FRAGMENT))
+	quad.stateSet.attributes.append(program(name, FULLSCREEN_VERTEX, DISPLAY_FRAGMENT))
 	cam.children.append(quad)
 	return cam
 

@@ -195,7 +195,7 @@ if __name__ == "__main__":
 
 	ss = root.stateSet
 
-	ss.setAttributeAndModes(p)
+	ss.attributes.append(p)
 
 	ss.uniforms["baseColorTex"] = 0
 	ss.uniforms["normalTex"] = 1

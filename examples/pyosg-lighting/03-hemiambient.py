@@ -132,7 +132,7 @@ if __name__ == "__main__":
 
 	ss = root.stateSet
 
-	ss.setAttributeAndModes(p)
+	ss.attributes.append(p)
 
 	ss.uniforms["albedo"] = osg.Vec3(0.8, 0.7, 0.6)
 	ss.uniforms["specularColor"] = osg.Vec3(0.5, 0.5, 0.5)

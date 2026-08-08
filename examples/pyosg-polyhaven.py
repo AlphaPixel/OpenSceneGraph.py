@@ -410,7 +410,7 @@ def build_cross_geode(cubemap, mip_uniform):
 	ss.setMode(GL_CULL_FACE, osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE)
 	ss.setMode(GL_DEPTH_TEST, osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE)
 	ss.setMode(GL_TEXTURE_CUBE_MAP_SEAMLESS, osg.StateAttribute.ON)
-	ss.setAttributeAndModes(p)
+	ss.attributes.append(p)
 	ss.textureAttributes[0] = cubemap
 	ss.uniforms["envMap"] = 0
 	ss.uniforms.extend((mip_uniform,))
@@ -489,7 +489,7 @@ def run_texture(args):
 	))
 
 	ss = root.stateSet
-	ss.setAttributeAndModes(p)
+	ss.attributes.append(p)
 
 	ss.uniforms["baseColorTex"] = 0
 	ss.uniforms["normalTex"] = 1

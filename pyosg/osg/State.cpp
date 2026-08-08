@@ -279,84 +279,16 @@ void bind_State(py::module_& m) {
 			&osg::StateSet::getNestRenderBins,
 			&osg::StateSet::setNestRenderBins
 		)
-		.def("setAttribute", [](
-			osg::StateSet& self,
-			osg::StateAttribute* attr,
-			osg::StateAttribute::OverrideValue value
-		) { self.setAttribute(attr, value); },
-			"attr"_a,
-			"value"_a=osg::StateAttribute::OFF
-		)
-		.def("setAttributeAndModes", [](
-			osg::StateSet& self,
-			osg::StateAttribute* attr,
-			osg::StateAttribute::GLModeValue value
-		) { self.setAttributeAndModes(attr, value); },
-			"attr"_a,
-			"value"_a=osg::StateAttribute::ON
-		)
-		.def("removeAttribute", [](
-			osg::StateSet& self,
-			osg::StateAttribute::Type type,
-			unsigned int member
-		) { self.removeAttribute(type, member); },
-			"type"_a,
-			"member"_a=0
-		)
-		.def("removeAttribute", [](
-			osg::StateSet& self,
-			osg::StateAttribute* attr
-		) { self.removeAttribute(attr); },
-			"attr"_a
-		)
 		.def("setMode", py::overload_cast<
 			osg::StateAttribute::GLMode,
 			osg::StateAttribute::GLModeValue
 		>(&osg::StateSet::setMode))
 		.def("removeMode", &osg::StateSet::removeMode)
-		.def("setTextureAttribute", [](osg::StateSet& self,
-			unsigned int unit,
-			osg::StateAttribute* attr,
-			osg::StateAttribute::OverrideValue value
-		) { self.setTextureAttribute(unit, attr, value); },
-			"unit"_a,
-			"attr"_a,
-			"value"_a=osg::StateAttribute::OFF
-		)
-		.def("setTextureAttributeAndModes", [](
-			osg::StateSet& self,
-			unsigned int unit,
-			osg::StateAttribute* attr,
-			osg::StateAttribute::GLModeValue value
-		) { self.setTextureAttributeAndModes(unit, attr, value); },
-			"unit"_a,
-			"attr"_a,
-			"value"_a=osg::StateAttribute::ON
-		)
-		.def("removeTextureAttribute", [](
-			osg::StateSet& self,
-			unsigned int unit,
-			osg::StateAttribute::Type type
-		) { self.removeTextureAttribute(unit, type); },
-			"unit"_a,
-			"type"_a
-		)
-		.def("removeTextureAttribute", [](
-			osg::StateSet& self,
-			unsigned int unit,
-			osg::StateAttribute* attr
-		) { self.removeTextureAttribute(unit, attr); },
-			"unit"_a,
-			"attr"_a
-		)
-		.def("addUniform", [](
-			osg::StateSet& self,
-			osg::Uniform* uniform,
-			osg::StateAttribute::OverrideValue value
-		) { self.addUniform(uniform, value); },
-			"uniform"_a,
-			"value"_a=osg::StateAttribute::ON
-		)
+		// No addUniform() -- .uniforms.append()/.uniforms[name]=... (UniformsTag/UniformsProxy
+		// above) already covers this, same as .attributes[]/.textureAttributes[] replaced
+		// setAttribute()/setAttributeAndModes()/removeAttribute()/setTextureAttribute()/
+		// setTextureAttributeAndModes()/removeTextureAttribute().
+		//
 		// No getUniform() -- .uniforms[name] (a MappingProxy, see UniformsTag above) already
 		// covers this with proper dict semantics (__getitem__/__contains__/KeyError), same as
 		// .attributes[] replaced getAttribute()/setAttribute() (see aipython/02-inspect.md).

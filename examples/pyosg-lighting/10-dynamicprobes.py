@@ -945,7 +945,7 @@ def make_brdf_lut(lut_size=512):
 		viewMatrix=osg.Matrix.identity(),
 	)
 	cam.attach(osg.Camera.COLOR_BUFFER0, lut_tex, 0, 0, False)
-	cam.stateSet.setAttributeAndModes(bake_p)
+	cam.stateSet.attributes.append(bake_p)
 	cam.children.append(quad_geode)
 	bake_group.children.append(cam)
 
@@ -1069,7 +1069,7 @@ if __name__ == "__main__":
 
 	ss = model.stateSet
 
-	ss.setAttributeAndModes(
+	ss.attributes[osg.StateAttribute.PROGRAM] = (
 		p,
 		osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE | osg.StateAttribute.PROTECTED
 	)
@@ -1178,7 +1178,7 @@ if __name__ == "__main__":
 			osg.Shader(osg.Shader.FRAGMENT, FLOOR_FRAGMENT),
 		))
 
-		floor_geode.stateSet.setAttributeAndModes(floor_p)
+		floor_geode.stateSet.attributes.append(floor_p)
 		floor_geode.stateSet.uniforms["shadowMap"] = 4
 
 	# --- Scene graph -------------------------------------------------------- #

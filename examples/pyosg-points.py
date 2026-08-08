@@ -124,16 +124,16 @@ if __name__ == "__main__":
 	# r.stateSet.setMode(GL_POINT_SPRITE, osg.StateAttribute.Values.ON)
 	r.stateSet.setMode(GL_BLEND, osg.StateAttribute.Values.ON)
 	# r.stateSet.setMode(GL_DEPTH_TEST, osg.StateAttribute.Values.OFF)
-	r.stateSet.setAttributeAndModes(osg.Program(name="NumPy Points DEMO", shaders=(
+	r.stateSet.attributes.append(osg.Program(name="NumPy Points DEMO", shaders=(
 		osg.Shader(osg.Shader.VERTEX, VERTEX_SHADER),
 		osg.Shader(osg.Shader.FRAGMENT, FRAGMENT_SHADER)
 	)))
-	r.stateSet.setAttributeAndModes(
+	r.stateSet.attributes[osg.StateAttribute.BLENDFUNC] = (
 		osg.BlendFunc(GL_SRC_ALPHA, GL_ONE),
 		# osg.BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA),
 		osg.StateAttribute.Values.ON
 	)
-	r.stateSet.setAttributeAndModes(
+	r.stateSet.attributes[osg.StateAttribute.DEPTH] = (
 		osg.Depth(osg.Depth.LESS, 0.0, 1.0, False),
 		osg.StateAttribute.Values.ON
 	)

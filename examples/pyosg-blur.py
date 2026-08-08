@@ -202,13 +202,12 @@ def make_fullscreen_rtt_pass(
 
 	prog = make_program(f"{name}_program", FULLSCREEN_VERT, frag_shader)
 
-	cam.stateSet.setAttributeAndModes(
+	cam.stateSet.attributes[osg.StateAttribute.PROGRAM] = (
 		prog,
 		osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE
 	)
 
-	cam.stateSet.setTextureAttributeAndModes(
-		0,
+	cam.stateSet.textureAttributes[0] = (
 		input_tex,
 		osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE
 	)
@@ -260,18 +259,16 @@ def make_composite_hud(scene_tex, blur_tex, w, h):
 
 	prog = make_program("composite_hud_program", FULLSCREEN_VERT, COMPOSITE_FRAG)
 
-	cam.stateSet.setAttributeAndModes(
+	cam.stateSet.attributes[osg.StateAttribute.PROGRAM] = (
 		prog,
 		osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE,
 	)
 
-	cam.stateSet.setTextureAttributeAndModes(
-		0,
+	cam.stateSet.textureAttributes[0] = (
 		scene_tex,
 		osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE,
 	)
-	cam.stateSet.setTextureAttributeAndModes(
-		1,
+	cam.stateSet.textureAttributes[1] = (
 		blur_tex,
 		osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE,
 	)

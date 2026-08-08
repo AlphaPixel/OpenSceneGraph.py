@@ -1302,7 +1302,7 @@ def make_brdf_lut(lut_size=512):
 		viewMatrix=osg.Matrix.identity(),
 	)
 	cam.attach(osg.Camera.COLOR_BUFFER0, lut_tex, 0, 0, False)
-	cam.stateSet.setAttributeAndModes(bake_p)
+	cam.stateSet.attributes.append(bake_p)
 	cam.children.append(quad_geode)
 	bake_group.children.append(cam)
 
@@ -1432,7 +1432,7 @@ def make_fullscreen_rtt_pass(textures, output_tex, frag_shader, w, h, name="Post
 		osg.Shader(osg.Shader.FRAGMENT, frag_shader),
 	))
 
-	ss.setAttributeAndModes(p)
+	ss.attributes.append(p)
 
 	g = osg.Geode()
 	g.drawables.append(osg.createTexturedQuadGeometry(
@@ -1570,7 +1570,7 @@ def create_composite_camera(gbuf, shadow_tex, prefilter_tex, lut_tex, ao_tex, hd
 		osg.Shader(osg.Shader.FRAGMENT, COMPOSITE_FRAGMENT_SHADER),
 	))
 
-	g.stateSet.setAttributeAndModes(p)
+	g.stateSet.attributes.append(p)
 
 	return cam
 
@@ -1674,7 +1674,7 @@ def create_final_camera(hdr_color_tex, bloom_tex, ao_tex, w=W, h=H):
 		osg.Shader(osg.Shader.FRAGMENT, FINAL_FRAGMENT_SHADER),
 	))
 
-	g.stateSet.setAttributeAndModes(p)
+	g.stateSet.attributes.append(p)
 
 	return cam
 
@@ -1713,7 +1713,7 @@ def create_grid_room(bound_center, bound_radius, floor_z, room_size):
 		grid.colorLineStrong = osg.Vec4(0.52, 0.68, 0.90, 1.0)
 		grid.stateSet.uniforms["roomRoughness"] = 0.85
 		grid.stateSet.uniforms["roomMetallic"] = 0.0
-		grid.stateSet.setAttributeAndModes(
+		grid.stateSet.attributes[osg.StateAttribute.PROGRAM] = (
 			grid_program,
 			osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE
 		)
@@ -1782,7 +1782,10 @@ def create_grid_room(bound_center, bound_radius, floor_z, room_size):
 	):
 		frame.drawables.append(osg.ShapeDrawable(osg.Sphere(position, frame_width * 0.75)))
 
-	frame.stateSet.setAttributeAndModes(frame_program, osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE)
+	frame.stateSet.attributes[osg.StateAttribute.PROGRAM] = (
+		frame_program,
+		osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE
+	)
 	frame.stateSet.uniforms["frameColor"] = osg.Vec3(0.55, 0.60, 0.70)
 
 	room = osg.Group()
@@ -1952,7 +1955,7 @@ def create_light_gizmo(bound_center, bound_radius, light_dir_u, light_color_u):
 
 	color_u = osg.Uniform("gizmoColor", osg.Vec3(1.0, 1.0, 1.0))
 	ss = group.stateSet
-	ss.setAttributeAndModes(p)
+	ss.attributes.append(p)
 	ss.uniforms.extend((color_u,))
 
 	group.updateCallback = LightGizmoCallback(
@@ -2154,7 +2157,7 @@ if __name__ == "__main__":
 
 	ss = model.stateSet
 
-	ss.setAttributeAndModes(
+	ss.attributes[osg.StateAttribute.PROGRAM] = (
 		p,
 		osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE | osg.StateAttribute.PROTECTED
 	)

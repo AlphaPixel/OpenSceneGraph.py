@@ -209,9 +209,11 @@ def build_flame(
 		r.drawables.append(g)
 
 		ss = r.stateSet
-		ss.setAttributeAndModes(p)
-		ss.setAttributeAndModes(osg.BlendFunc(GL_ONE, GL_ONE), osg.StateAttribute.ON)
-		ss.setAttributeAndModes(osg.Depth(osg.Depth.LESS, 0.0, 1.0, False), osg.StateAttribute.ON)
+		ss.attributes.append(p)
+		ss.attributes[osg.StateAttribute.BLENDFUNC] = (osg.BlendFunc(GL_ONE, GL_ONE), osg.StateAttribute.ON)
+		ss.attributes[osg.StateAttribute.DEPTH] = (
+			osg.Depth(osg.Depth.LESS, 0.0, 1.0, False), osg.StateAttribute.ON
+		)
 		ss.setMode(GL_CULL_FACE, osg.StateAttribute.OFF)
 		ss.renderingHint = osg.StateSet.TRANSPARENT_BIN
 		ss.uniforms["flameHeight"] = height

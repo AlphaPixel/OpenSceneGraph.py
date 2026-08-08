@@ -338,8 +338,6 @@ class WriteImageCallback(osg.Camera.DrawCallback):
 
 			osgDB.writeImageFile(img, "tmp.png")
 
-			osg.notice("WROTE IMAGE")
-
 			self.write = False
 
 if __name__ == "__main__":
@@ -388,7 +386,7 @@ if __name__ == "__main__":
 	# BoomBox-specific: PBR program, texture samplers, emissive/scanline/hemi uniforms.
 	ss = model.stateSet
 
-	ss.setAttributeAndModes(p)
+	ss.attributes.append(p)
 	ss.uniforms["baseColorTex"] = 0
 	ss.uniforms["normalTex"] = 1
 	ss.uniforms["ormTex"] = 2
@@ -465,8 +463,7 @@ if __name__ == "__main__":
 	shadow_cam.viewMatrix = light_view
 	shadow_cam.projectionMatrix = light_proj
 	shadow_cam.children.append(model)
-	shadow_cam.preDrawCallback = WriteImageCallback(shadow_tex)
-	# shadow_cam.preDrawCallback = lambda *a: osg.notice("HERE")
+	# shadow_cam.preDrawCallback = WriteImageCallback(shadow_tex)
 
 	# Floor -- receives the BoomBox shadow cast by the key light.
 	# OSG world space is Z-up: floor is an XY plane at Z=args.floor_z.
@@ -486,7 +483,7 @@ if __name__ == "__main__":
 			osg.Shader(osg.Shader.VERTEX, FLOOR_VERTEX),
 			osg.Shader(osg.Shader.FRAGMENT, FLOOR_FRAGMENT)
 		))
-		floor_geode.stateSet.setAttributeAndModes(floor_p)
+		floor_geode.stateSet.attributes.append(floor_p)
 		floor_geode.stateSet.uniforms["shadowMap"] = 4 # unit bound by main_group
 
 	# main_group: shadow texture at unit 4 + shared uniforms (lights, shadow matrix).
@@ -494,7 +491,7 @@ if __name__ == "__main__":
 	# shadow_tex is NOT in the shadow camera's state path -> no read-while-write loop.
 	main_group = osg.Group()
 
-	main_group.stateSet.setTextureAttributeAndModes(4, shadow_tex)
+	main_group.stateSet.textureAttributes[4] = shadow_tex
 	main_group.stateSet.uniforms.extend((
 		lightPos, lightColor, lightRadius, shadow_matrix_u, shadow_bias_u, shadow_strength_u
 	))

@@ -304,7 +304,9 @@ def build_voronoi_hud(points, w, h, vband_px=None, fill=False):
 		osg.Shader(osg.Shader.FRAGMENT, frag),
 	))
 
-	cam.stateSet.setAttributeAndModes(prog, osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE)
+	cam.stateSet.attributes[osg.StateAttribute.PROGRAM] = (
+		prog, osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE
+	)
 
 	points_u = osg.Uniform(osg.Uniform.Type.FLOAT_VEC2, "points", tuple(
 		osg.Vec2(x, y) for x, y in points

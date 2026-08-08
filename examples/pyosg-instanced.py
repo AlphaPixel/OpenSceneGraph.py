@@ -84,7 +84,7 @@ if __name__ == "__main__":
 	r = osg.Geode()
 
 	r.drawables.append(g)
-	r.stateSet.setAttributeAndModes(p)
+	r.stateSet.attributes.append(p)
 
 	v = osgViewer.Viewer()
 

@@ -103,7 +103,7 @@ if __name__ == "__main__":
 	))
 
 	ss = root.stateSet
-	ss.setAttributeAndModes(p)
+	ss.attributes.append(p)
 
 	ss.uniforms["lightDir"] = osg.Vec3(0.5, 0.5, 1.0)
 	ss.uniforms["lightColor"] = osg.Vec3(1.0, 1.0, 1.0)

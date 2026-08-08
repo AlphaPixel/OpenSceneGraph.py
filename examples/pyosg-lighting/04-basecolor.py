@@ -126,7 +126,7 @@ if __name__ == "__main__":
 
 	ss = root.stateSet
 
-	ss.setAttributeAndModes(p)
+	ss.attributes.append(p)
 
 	# The texture is on the geometry's stateSet (bound by the GLTF loader).
 	# We just tell the shader which unit to sample -- OSG state inheritance

@@ -162,7 +162,7 @@ if __name__ == "__main__":
 	p.bindAttribLocation["osg_Tangent"] = 7
 
 	ss = root.stateSet
-	ss.setAttributeAndModes(p)
+	ss.attributes.append(p)
 
 	ss.uniforms["baseColorTex"] = 0
 	ss.uniforms["normalTex"] = 1

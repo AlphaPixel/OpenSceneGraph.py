@@ -280,20 +280,13 @@ struct pyx::MappingTraits<osg::StateSet, pyosg::detail::AttributesTag> {
 		auto obj = py::reinterpret_borrow<py::object>(h);
 
 		osg::StateAttribute* attr = nullptr;
-		auto mode = osg::StateAttribute::OverrideValue(osg::StateAttribute::OFF);
-		bool has_mode = false;
+		auto mode = osg::StateAttribute::GLModeValue(osg::StateAttribute::ON);
 
-		if(py::isinstance<osg::StateAttribute>(obj)) {
-			attr = obj.cast<osg::StateAttribute*>();
-		}
+		if(py::isinstance<osg::StateAttribute>(obj)) attr = obj.cast<osg::StateAttribute*>();
 
 		else if(auto vals = pyx::try_unpack_sequence<
-			osg::StateAttribute*, osg::StateAttribute::OverrideValue
-		>(obj)) {
-			std::tie(attr, mode) = *vals;
-
-			has_mode = true;
-		}
+			osg::StateAttribute*, osg::StateAttribute::GLModeValue
+		>(obj)) std::tie(attr, mode) = *vals;
 
 		else throw py::type_error("Expected StateAttribute or (StateAttribute, mode)");
 
@@ -301,9 +294,12 @@ struct pyx::MappingTraits<osg::StateSet, pyosg::detail::AttributesTag> {
 			"Cannot assign StateAttribute with mismatched type; use append() instead."
 		);
 
-		if(has_mode) ss->setAttribute(attr, mode);
-
-		else ss->setAttribute(attr);
+		// setAttributeAndModes() (not plain setAttribute()) so any GL mode the attribute owns
+		// (e.g. BlendFunc -> GL_BLEND) gets enabled too, via StateAttribute::getModeUsage() --
+		// the same mechanism the old setAttributeAndModes() Python binding relied on. A bare
+		// `.attributes.append(attr)` now defaults `value` to ON, matching that old binding's
+		// own default rather than silently doing nothing to the mode.
+		ss->setAttributeAndModes(attr, mode);
 	}
 
 	static void set(osg::StateSet* ss, key_type k, py::handle h) {
