@@ -262,3 +262,38 @@ benefit lost, only the hazard removed. **As of 2026-07-22 this fix exists
 only in a locally rebuilt, uncommitted tree** -- if a fresh checkout hits
 this exact abort, this is the first thing to check/reapply, not a new
 mystery to re-debug from scratch.
+
+## 9. OSG's matrix AND quaternion multiplication order is reversed vs. how you'd naturally write it
+
+Bites something in nearly every session that composes transforms by hand
+(shadow matrices, MVP, procedural rotations) -- see
+[`ai/context-core.md`](../ai/context-core.md)'s "OSG matrix convention"
+section for the full writeup: OSG is row-vector (`v' = v * M`), GLSL is
+column-vector (`v' = M * v`), so a chain that reads naturally left-to-right
+in GLSL (`A * B * C_vec`, apply `C` first) must be written **reversed** in
+Python/OSG (`C_vec_source * B * A`) to produce the same result once uploaded.
+Translation also lives in **row 3**, not column 3.
+
+**`osg.Quat` has the exact same reversed convention -- confirmed empirically
+2026-08-08** while composing `pyosg-dice.py`'s target roll orientation (a
+"which local die face points at world +Z" quat times a "spin around the
+vertical axis" quat): `q1 * q2` applied to a vector applies `q1` **first**,
+then `q2` (`(q1 * q2) * v == q2 * (q1 * v)`) -- the opposite of the standard
+Hamilton quaternion product convention, where the *rightmost* factor applies
+first. Writing the composition in the mathematically "normal" order
+(`spin * face_align`) silently produced a wrong-axis result with no error;
+`face_align * spin` (align first, spin second, written in that
+apply-order) was correct.
+
+**Don't extend the Matrix rule to a new case by analogy and trust it --
+verify empirically**, the same diagnostic habit as
+[`15-shader-hotswap.md`](15-shader-hotswap.md)'s live-GPU-visualization
+preference over hand-reimplemented math:
+
+```python
+# Cheaper than getting composition order wrong live -- apply the combined
+# transform/rotation to a KNOWN vector and check where it actually lands,
+# rather than reasoning about multiplication order "by feel":
+combined = a * b
+print(combined * known_vector)  # does this match "apply a, then b", or the reverse?
+```

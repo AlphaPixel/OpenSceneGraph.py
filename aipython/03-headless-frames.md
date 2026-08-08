@@ -69,6 +69,73 @@ CameraManipulator.home(
 The camera-manipulator regression tests in `test/osgGA_CameraManipulator.py`
 are the reference examples.
 
+## Wall-clock-driven callbacks
+
+Some animation callbacks don't read `nv.frameStamp.simulationTime` at all --
+they track their own elapsed time via `time.time()` directly (e.g.
+`LiveUpdateCallback` in `pyosg-dynamic-verts.py`, `ShrinkCallback`/
+`FallCallback` in `pyosg-match4.py`). `simulate_frame.advance(simulationTime=...)`
+has no effect on these; `time.time` itself needs to be monkeypatched to a
+controllable fake clock instead:
+
+```python
+import time as time_module
+
+class FakeClock:
+	def __init__(self, t=0.0):
+		self.t = t
+
+	def __call__(self):
+		return self.t
+
+clock = FakeClock()
+orig = time_module.time
+time_module.time = clock
+
+# ... build scene, attach callbacks ...
+
+clock.t += 10.0  # jump well past any animation's duration
+simulate_frame.traverseUpdate(root)
+
+time_module.time = orig  # restore -- other tests in the same session need the real clock
+```
+
+Still drive the tick through `simulate_frame.traverseUpdate(root)`, not by
+calling each node's `updateCallback` directly -- that exercises the real
+`accept()`/traversal path (parent -> child, any `traverse()` calls inside the
+callback) instead of just the leaf Python callable in isolation, and stays
+consistent with every other headless test in this project.
+
+## Testing an example script's OSG-dependent helpers
+
+Files under `examples/*.py` mix pure-Python logic, OSG-dependent scene-graph
+helper functions/classes, and an `if __name__ == "__main__":` block that opens
+a real window -- only that last part needs a display. To unit-test the helpers
+(e.g. `pyosg-match4.py`'s `make_piece()` / `rebuild_scene()` / `ShrinkCallback`)
+without ever constructing a `Viewer`, `exec()` the file's source up to (not
+including) that guard, with `__name__` set to anything else:
+
+```python
+src = open("examples/pyosg-match4.py").read()
+end = src.index('if __name__ == "__main__":')
+
+ns = {"osg": osg, "osgGA": osgGA, "osgViewer": osgViewer, "__name__": "match4_headless"}
+
+exec(src[:end], ns)
+
+make_piece = ns["make_piece"]
+ShrinkCallback = ns["ShrinkCallback"]
+```
+
+This works because constructing scene-graph objects (`osg.Sphere`,
+`osg.Geode`, `osg.MatrixTransform`, `osg.Uniform`, ...) needs no GL context --
+only `viewer.frame()` does. Combined with the wall-clock fake-clock trick
+above, this is enough to headlessly drive a whole multi-frame animation
+sequence (shrink -> gravity fall -> cascade) end to end against real OSG
+objects and catch real bugs -- e.g. a `live_nodes` dict key collision in
+`pyosg-match4.py`'s gravity-fall code only surfaced once tested this way,
+never from reading the code.
+
 ## Raw building blocks
 
 The bindings intentionally expose the underlying OSG pieces too:
