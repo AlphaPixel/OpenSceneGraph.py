@@ -56,7 +56,7 @@ import cv2
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
-import osgDebug
+import osgx
 
 # --------------------------------------------------------------------------- #
 # Configuration
@@ -213,6 +213,7 @@ GBUFFER_VERTEX_SHADER = """
 
 in vec4 osg_Vertex;
 in vec3 osg_Normal;
+in vec4 osg_Tangent;
 in vec2 osg_MultiTexCoord0;
 
 uniform mat4 osg_ModelViewProjectionMatrix;
@@ -221,6 +222,7 @@ uniform mat3 osg_NormalMatrix;
 
 out vec3 vNGeom;
 out vec3 vPosition;
+out vec4 vTangent;
 out vec2 vUV;
 
 void main() {
@@ -228,6 +230,7 @@ void main() {
 	vPosition = eyePos.xyz;
 	vUV = osg_MultiTexCoord0;
 	vNGeom = normalize(osg_NormalMatrix * osg_Normal);
+	vTangent = vec4(osg_NormalMatrix * osg_Tangent.xyz, osg_Tangent.w);
 
 	gl_Position = osg_ModelViewProjectionMatrix * osg_Vertex;
 }
@@ -243,12 +246,13 @@ GBUFFER_FRAGMENT_SHADER = """
 
 in vec3 vNGeom;
 in vec3 vPosition;
+in vec4 vTangent;
 in vec2 vUV;
 
 // ---- osgGLTF material inputs ------------------------------------------------ //
 // See 09-ibl.py for the full rationale on the UBO/sampler-struct split (GLSL disallows
 // opaque/sampler types inside a std140 uniform block).
-layout(std140, binding = 0) uniform osgGLTF_Material {
+layout(std140, binding = 0) uniform osgx_gltf_Material {
 	vec4 baseColorFactor;
 	float roughnessFactor;
 	float metallicFactor;
@@ -256,7 +260,7 @@ layout(std140, binding = 0) uniform osgGLTF_Material {
 	float hasMetallicRoughnessMap;
 	float hasOcclusion;
 	float hasNormalMap;
-} osgGLTF_material;
+} osgx_gltf_material;
 
 struct GLTFTextures {
 	sampler2D baseColor; // unit 0
@@ -265,7 +269,13 @@ struct GLTFTextures {
 	sampler2D emissive; // unit 3
 };
 
-uniform GLTFTextures osgGLTF_textures;
+uniform GLTFTextures osgx_gltf_textures;
+
+// MASK is handled in the G-buffer pass: discarded texels write neither depth
+// nor material data. BLEND needs a later forward-transparent pass because
+// blending G-buffer attributes themselves is not meaningful.
+uniform float osgx_gltf_alphaMode;
+uniform float osgx_gltf_alphaCutoff;
 
 uniform vec3 emissiveFactor;
 uniform float scanlineFreq;
@@ -295,17 +305,22 @@ vec3 getShadingNormal() {
 	// true and this branch never fires.
 	if (!gl_FrontFacing) Nb = -Nb;
 
-	if (!bool(osgGLTF_material.hasNormalMap)) return Nb;
+	if (!bool(osgx_gltf_material.hasNormalMap)) return Nb;
 
-	vec3 tangentNormal = texture(osgGLTF_textures.normal, vUV).rgb * 2.0 - 1.0;
+	vec3 tangentNormal = texture(osgx_gltf_textures.normal, vUV).rgb * 2.0 - 1.0;
 
-	vec3 q1 = dFdx(vPosition);
-	vec3 q2 = dFdy(vPosition);
-	vec2 st1 = dFdx(vUV);
-	vec2 st2 = dFdy(vUV);
-
-	vec3 T = normalize(q1 * st2.t - q2 * st1.t);
-	vec3 B = -normalize(cross(Nb, T));
+	vec3 T, B;
+	if (dot(vTangent.xyz, vTangent.xyz) > 1e-10) {
+		T = normalize(vTangent.xyz);
+		B = normalize(cross(Nb, T)) * vTangent.w;
+	} else {
+		vec3 q1 = dFdx(vPosition);
+		vec3 q2 = dFdy(vPosition);
+		vec2 st1 = dFdx(vUV);
+		vec2 st2 = dFdy(vUV);
+		T = normalize(q1 * st2.t - q2 * st1.t);
+		B = -normalize(cross(Nb, T));
+	}
 	mat3 TBN = mat3(T, B, Nb);
 
 	return normalize(TBN * tangentNormal);
@@ -329,21 +344,21 @@ Material getMaterial(vec3 N) {
 	// A factor-only material (no baseColorTexture, e.g. most of the glTF-Sample-Models
 	// *Test conformance set) would otherwise read an unbound unit 0 as black instead of
 	// its authored flat color.
-	mat.albedo = bool(osgGLTF_material.hasBaseColorMap)
-		? texture(osgGLTF_textures.baseColor, vUV).rgb
-		: osgGLTF_material.baseColorFactor.rgb;
+	mat.albedo = bool(osgx_gltf_material.hasBaseColorMap)
+		? texture(osgx_gltf_textures.baseColor, vUV).rgb
+		: osgx_gltf_material.baseColorFactor.rgb;
 	// The R channel of a glTF metallicRoughnessTexture is spec-unused unless the
 	// material also declares an occlusionTexture pointing at the same (or merged) image.
-	mat.ao = bool(osgGLTF_material.hasOcclusion) ? texture(osgGLTF_textures.orm, vUV).r : 1.0;
+	mat.ao = bool(osgx_gltf_material.hasOcclusion) ? texture(osgx_gltf_textures.orm, vUV).r : 1.0;
 	// A material can be entirely factor-driven with no metallicRoughnessTexture at all
 	// (e.g. Fox: roughnessFactor=0.58, no texture) -- trusting an unbound unit 2's zero
 	// read unconditionally would force roughness/metallic to 0 (mirror-smooth).
-	mat.roughness = bool(osgGLTF_material.hasMetallicRoughnessMap)
-		? texture(osgGLTF_textures.orm, vUV).g * osgGLTF_material.roughnessFactor
-		: osgGLTF_material.roughnessFactor;
-	mat.metallic = bool(osgGLTF_material.hasMetallicRoughnessMap)
-		? texture(osgGLTF_textures.orm, vUV).b * osgGLTF_material.metallicFactor
-		: osgGLTF_material.metallicFactor;
+	mat.roughness = bool(osgx_gltf_material.hasMetallicRoughnessMap)
+		? texture(osgx_gltf_textures.orm, vUV).g * osgx_gltf_material.roughnessFactor
+		: osgx_gltf_material.roughnessFactor;
+	mat.metallic = bool(osgx_gltf_material.hasMetallicRoughnessMap)
+		? texture(osgx_gltf_textures.orm, vUV).b * osgx_gltf_material.metallicFactor
+		: osgx_gltf_material.metallicFactor;
 
 	// Specular AA: clamp roughness by how fast the shading normal rotates per pixel.
 	// Must happen HERE, in the geometry pass -- it needs dFdx/dFdy of N in UV/triangle
@@ -360,12 +375,21 @@ Material getMaterial(vec3 N) {
 
 // ---- Emissive ---------------------------------------------------------------- //
 vec3 getEmissive() {
-	vec3 emissive = texture(osgGLTF_textures.emissive, vUV).rgb * emissiveFactor;
+	vec3 emissive = texture(osgx_gltf_textures.emissive, vUV).rgb * emissiveFactor;
 	float scanline = 0.5 + 0.5 * sin(vUV.y * scanlineFreq - osg_SimulationTime * 10.0);
 	return emissive * mix(1.0, scanline, scanlineStrength);
 }
 
+float getAlphaCoverage() {
+	float alpha = bool(osgx_gltf_material.hasBaseColorMap)
+		? texture(osgx_gltf_textures.baseColor, vUV).a
+		: 1.0;
+	return alpha * osgx_gltf_material.baseColorFactor.a;
+}
+
 void main() {
+	if (osgx_gltf_alphaMode == 1.0 && getAlphaCoverage() < osgx_gltf_alphaCutoff) discard;
+
 	vec3 N = getShadingNormal();
 	Material mat = getMaterial(N);
 
@@ -1679,7 +1703,7 @@ def create_grid_room(bound_center, bound_radius, floor_z, room_size):
 	))
 
 	def make_grid(corner, width, height):
-		grid = osgDebug.Grid(corner, width, height)
+		grid = osgx.Grid(corner, width, height)
 		grid.canvasSize = osg.Vec2(500.0, 500.0)
 		grid.gridInterval = 50.0
 		grid.gridIntervalStrong = 250.0
@@ -1704,7 +1728,7 @@ def create_grid_room(bound_center, bound_radius, floor_z, room_size):
 		return grid
 
 	# The floor is XY at floor_z; rear/right walls make the same open, Z-up room
-	# as osgdebug-grid.cpp. The model stays centered horizontally in the room.
+	# as osgx-grid.cpp. The model stays centered horizontally in the room.
 	floor = make_grid(
 		osg.Vec3(center_x - half_width, center_y - half_width, floor_z),
 		osg.Vec3(room_size, 0.0, 0.0),
@@ -1717,8 +1741,8 @@ def create_grid_room(bound_center, bound_radius, floor_z, room_size):
 	)
 	right_wall = make_grid(
 		osg.Vec3(center_x + half_width, center_y - half_width, floor_z),
-		osg.Vec3(0.0, room_size, 0.0),
-		osg.Vec3(0.0, 0.0, room_height)
+		osg.Vec3(0.0, 0.0, room_height),
+		osg.Vec3(0.0, room_size, 0.0)
 	)
 
 	panels = osg.Geode()
@@ -2058,7 +2082,7 @@ if __name__ == "__main__":
 		dest="gui",
 		action="store_false",
 		default=True,
-		help="Disable the osgDebug ImGui panel. All interactive controls (IBL, "
+		help="Disable the osgx ImGui panel. All interactive controls (IBL, "
 			"exposure, tonemap, light position, shadow, post FX) live only in this "
 			"panel now, so disabling it leaves no way to adjust them at runtime."
 	)
@@ -2135,10 +2159,10 @@ if __name__ == "__main__":
 		osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE | osg.StateAttribute.PROTECTED
 	)
 
-	ss.uniforms["osgGLTF_textures.baseColor"] = 0
-	ss.uniforms["osgGLTF_textures.normal"] = 1
-	ss.uniforms["osgGLTF_textures.orm"] = 2
-	ss.uniforms["osgGLTF_textures.emissive"] = 3
+	ss.uniforms["osgx_gltf_textures.baseColor"] = 0
+	ss.uniforms["osgx_gltf_textures.normal"] = 1
+	ss.uniforms["osgx_gltf_textures.orm"] = 2
+	ss.uniforms["osgx_gltf_textures.emissive"] = 3
 	ss.uniforms["emissiveFactor"] = osg.Vec3(1.0, 1.0, 1.0)
 	ss.uniforms["scanlineFreq"] = 1000.0
 	ss.uniforms["scanlineStrength"] = 0.5
@@ -2254,12 +2278,17 @@ if __name__ == "__main__":
 	# --- through the G-buffer for correct depth against the model. ---------------- #
 	if args.floor:
 		grid_room, grid_panels = create_grid_room(
-			bound_center, bound_radius, args.floor_z, args.floor_size
+			bound_center,
+			bound_radius,
+			args.floor_z,
+			args.floor_size
 		)
 
 	# --- G-buffer -------------------------------------------------------------- #
 	gbuffer_cam, albedo_tex, normal_tex, material_tex, emissive_tex, position_tex, depth_tex = create_gbuffer_camera(
-		W, H, msaa_samples=args.msaa
+		W,
+		H,
+		msaa_samples=args.msaa
 	)
 
 	gbuffer_cam.children.append(model)
@@ -2476,7 +2505,7 @@ if __name__ == "__main__":
 	light_orbit_handler = LightOrbit(light_dir_u, bound_radius)
 
 	# --- ImGui panel: all interactive controls live here now -- no keyboard ---
-	# --- shortcuts (osgDebug.imgui.Widget -- see osgdebug's TODO.md's "Knobs, ---
+	# --- shortcuts (osgx.imgui.Widget -- see osgx's TODO.md's "Knobs, ---
 	# --- not frameworks" section). ------------------------------------------ #
 	if args.gui:
 		# gizmo_cam is the final POST_RENDER camera (it follows final_cam), so it
@@ -2485,19 +2514,19 @@ if __name__ == "__main__":
 		# composite and the subsequent gizmo draw -- ImGui would render then be
 		# overwritten,
 		# while its mouse-capture bookkeeping stayed live (an invisible rectangle
-		# eating mouse input). See osgDebug.hpp's Widget constructor comment.
-		# Pinned to the left edge -- see osgDebug.hpp's Dock enum comment: the
+		# eating mouse input). See osgx/ImGui.hpp's Widget constructor comment.
+		# Pinned to the left edge -- see osgx/ImGui.hpp's Dock enum comment: the
 		# system imgui package isn't built from the docking branch, so this is a
 		# fixed sidebar (no drag-to-dock like osgEarth's ImGuiEventHandler), just
 		# enough to keep the panel out of the way of the model.
 		#
 		# TODO: Convert this to kwargs!
-		gui_opts = osgDebug.imgui.Options()
-		gui_opts.dock = osgDebug.imgui.Dock.LEFT
+		gui_opts = osgx.imgui.Options()
+		gui_opts.dock = osgx.imgui.Dock.LEFT
 		gui_opts.dock_width = 320.0
 
-		gui = osgDebug.imgui.Widget(v, gizmo_cam, gui_opts)
-		closed_section = osgDebug.imgui.SectionOptions(default_open=False)
+		gui = osgx.imgui.Widget(v, gizmo_cam, gui_opts)
+		closed_section = osgx.imgui.SectionOptions(default_open=False)
 
 		def draw_visualize_mode(ri):
 			mode_labels = [
@@ -2505,7 +2534,7 @@ if __name__ == "__main__":
 				"5: Direct", "6: IBL", "7: Emissive", "8: Shadow", "9: AO"
 			]
 
-			changed, value = osgDebug.imgui.radio_group(
+			changed, value = osgx.imgui.radio_group(
 				int(visualize_mode_u.value), mode_labels, False
 			)
 
@@ -2514,17 +2543,17 @@ if __name__ == "__main__":
 		gui.addSection(
 			"Visualize Mode",
 			draw_visualize_mode,
-			osgDebug.imgui.SectionOptions(default_open=True)
+			osgx.imgui.SectionOptions(default_open=True)
 		)
 
 		def draw_ibl_knobs(ri):
-			changed, value = osgDebug.imgui.slider_float_nudge(
+			changed, value = osgx.imgui.slider_float_nudge(
 				"IBL Diffuse", ibl_diffuse_intensity_u.value, 0.0, 2.0
 			)
 
 			if changed: ibl_diffuse_intensity_u.value = value
 
-			changed, value = osgDebug.imgui.slider_float_nudge(
+			changed, value = osgx.imgui.slider_float_nudge(
 				"IBL Specular", ibl_specular_intensity_u.value, 0.0, 2.0
 			)
 
@@ -2541,7 +2570,7 @@ if __name__ == "__main__":
 			# section avoids this by naming its controls differently from the header
 			# (e.g. "Shadow" header / "Shadow Strength" slider); this is the only one
 			# where they matched.
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Exposure##slider", exposure_u.value, -8.0, 8.0, "%.2f EV"
 			)
 
@@ -2552,7 +2581,7 @@ if __name__ == "__main__":
 		def draw_tonemap_knobs(ri):
 			mode_labels = ["0: PBR Neutral", "1: ACES", "2: Reinhard", "3: None (clamped)"]
 
-			changed, value = osgDebug.imgui.radio_group(
+			changed, value = osgx.imgui.radio_group(
 				int(tonemap_mode_u.value), mode_labels, False
 			)
 
@@ -2572,7 +2601,7 @@ if __name__ == "__main__":
 					grid.stateSet.uniforms["roomMetallic"] = metallic
 
 			def draw_grid_room_knobs(ri):
-				changed, reflective = osgDebug.imgui.checkbox(
+				changed, reflective = osgx.imgui.checkbox(
 					"Reflective metal", room_material["reflective"]
 				)
 
@@ -2585,7 +2614,7 @@ if __name__ == "__main__":
 		def draw_light_position_knobs(ri):
 			h = light_orbit_handler
 
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Light Azimuth", math.degrees(h.azimuth), -180.0, 180.0, "%.1f deg"
 			)
 
@@ -2593,7 +2622,7 @@ if __name__ == "__main__":
 				h.azimuth = math.radians(value)
 				h._sync()
 
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Light Orbit Radius", h.orbit_radius, h.min_radius, bound_radius * 3.0
 			)
 
@@ -2601,7 +2630,7 @@ if __name__ == "__main__":
 				h.orbit_radius = value
 				h._sync()
 
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Light Height", h.height, -bound_radius * 3.0, bound_radius * 3.0
 			)
 
@@ -2612,13 +2641,13 @@ if __name__ == "__main__":
 		gui.addSection("Light Position", draw_light_position_knobs, closed_section)
 
 		def draw_shadow_knobs(ri):
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Shadow Strength", shadow_strength_u.value, 0.0, 1.0
 			)
 
 			if changed: shadow_strength_u.value = value
 
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Shadow Bias", shadow_bias_u.value, 0.0, 0.02, "%.4f"
 			)
 
@@ -2628,7 +2657,7 @@ if __name__ == "__main__":
 			# lets shadowStrength/bias be tuned against the ACTUAL composite (mode 0)
 			# rather than mode 8 alone, since ambient/emissive riding on top of Lo
 			# otherwise hides how strong the shadow's contribution really is.
-			changed, value = osgDebug.imgui.checkbox(
+			changed, value = osgx.imgui.checkbox(
 				"Debug Tint (red)", bool(shadow_debug_tint_u.value)
 			)
 
@@ -2640,73 +2669,73 @@ if __name__ == "__main__":
 			# Sketchfab's own "No Post-Processing" toggle -- gates CA/sharpen/vignette/
 			# grain/color-balance in FINAL_FRAGMENT_SHADER (exposure and tonemap stay
 			# on regardless; see FINAL_FRAGMENT_SHADER's postEnabled comment).
-			changed, value = osgDebug.imgui.checkbox(
+			changed, value = osgx.imgui.checkbox(
 				"Post Processing", bool(post_enabled_u.value)
 			)
 
 			if changed: post_enabled_u.value = value
 
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Bloom Strength", bloom_strength_u.value, 0.0, 2.0
 			)
 
 			if changed: bloom_strength_u.value = value
 
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Chromatic Aberration", ca_strength_u.value, 0.0, 0.02, "%.4f"
 			)
 
 			if changed: ca_strength_u.value = value
 
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Sharpen", sharpen_strength_u.value, -0.5, 1.5
 			)
 
 			if changed: sharpen_strength_u.value = value
 
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Vignette", vignette_strength_u.value, 0.0, 1.0
 			)
 
 			if changed: vignette_strength_u.value = value
 
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Grain", grain_strength_u.value, 0.0, 0.2, "%.4f"
 			)
 
 			if changed: grain_strength_u.value = value
 
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Grain Size", grain_size_u.value, 1.0, 8.0, "%.1f px"
 			)
 
 			if changed: grain_size_u.value = value
 
-			changed, value = osgDebug.imgui.checkbox(
+			changed, value = osgx.imgui.checkbox(
 				"Grain Animated", bool(grain_animated_u.value)
 			)
 
 			if changed: grain_animated_u.value = value
 
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Grain AO Boost", grain_ao_boost_u.value, 0.0, 1.0
 			)
 
 			if changed: grain_ao_boost_u.value = value
 
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Color Lift", color_lift_u.value, -0.5, 0.5, "%.3f"
 			)
 
 			if changed: color_lift_u.value = value
 
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Color Gamma", color_gamma_u.value, 0.1, 3.0
 			)
 
 			if changed: color_gamma_u.value = value
 
-			changed, value = osgDebug.imgui.slider_float(
+			changed, value = osgx.imgui.slider_float(
 				"Color Gain", color_gain_u.value, 0.0, 3.0
 			)
 

@@ -6,8 +6,7 @@
 # Step 9 (09-ibl.py) loads a pre-baked GGX-prefiltered cubemap once, from a
 # static .ktx2 file, at startup. This step instead bakes the specular
 # environment cubemap LIVE, from Python, using the GPU prefilter pipeline
-# proven in C++ (osgGLTF's IBLBaker.hpp / createIBLBakeScene()+finishIBLBake())
-# and now exposed to Python via osgGLTF's pybind11 module (ext/osgGLTF-python.cpp).
+# proven in C++ (osgx/GGXPrefilter.hpp) and exposed to Python through osgx.ibl.
 #
 # Rather than a full analytic sky model, this demonstrates the "dynamic" part
 # the simplest way that still proves the point: press 'r' to replace the
@@ -16,7 +15,7 @@
 # rebake the specular cubemap from it live, swapping the result onto texture
 # unit 5. There's no photographic content left at all after a repaint, so
 # there's zero ambiguity about what's changing frame-to-frame: the whole
-# reflection environment. This is sync/stalling (per IBLBakeOptions.
+# reflection environment. This is sync/stalling (per GGXPrefilterOptions.
 # syncReadback, still the only mode implemented), not the (unstarted) ASYNC
 # capture-from-live-scene mode noted in ai/context-todo-lighting-class.md's
 # "Planned: Dynamic Probes" -- that's explicitly out of scope here, per the
@@ -54,7 +53,7 @@ import cv2
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
-import osgGLTF
+import osgx
 
 # --------------------------------------------------------------------------- #
 # Configuration
@@ -152,7 +151,7 @@ async def task_compute_sh(queue, hdr_path):
 # Dynamic probe: random cube-face repaint + live rebake
 # --------------------------------------------------------------------------- #
 
-# Order matches IBLBaker.cpp's faceIndex convention exactly (+X, -X, +Y, -Y,
+# Order matches GGXPrefilter.cpp's faceIndex convention exactly (+X, -X, +Y, -Y,
 # +Z, -Z) -- see _equirect_face_uv() below.
 FACE_NAMES = ("+X", "-X", "+Y", "-Y", "+Z", "-Z")
 
@@ -169,8 +168,8 @@ FACE_GRID_SIZE = 6 # checkerboard cells per side, per face
 def _equirect_face_uv(w, h):
 	"""
 	For every pixel of a (h, w) equirect image, compute which of the 6 cube
-	faces (matching IBLBaker.cpp's faceIndex convention) the corresponding
-	view direction belongs to, by inverting IBLBaker.cpp's
+	faces (matching GGXPrefilter.cpp's faceIndex convention) the corresponding
+	view direction belongs to, by inverting GGXPrefilter.cpp's
 	equirect_uv(dir_gl_to_zup(L)) mapping and then classifying by dominant
 	axis -- the same "biggest axis wins" test any cubemap face lookup uses.
 	Also returns face-local (s, t) in roughly [-1, 1], the standard gnomonic
@@ -309,13 +308,13 @@ def do_rebake(v, root, mg_ss, base_image, color_source, prefilter_size, bake_sta
 	baked_image = paint_random_faces(base_image, color_source)
 
 	if bake_state["scene"] is None:
-		options = osgGLTF.IBLBakeOptions()
+		options = osgx.ibl.GGXPrefilterOptions()
 		options.prefilterSize = prefilter_size
 		options.maxFrames = 8
 		options.readbackFrame = 2
 		bake_state["options"] = options
 
-		bake_scene = osgGLTF.createIBLBakeScene(baked_image, options)
+		bake_scene = osgx.ibl.createGGXPrefilterScene(baked_image, options)
 		bake_scene.root.nodeMask = 0
 		root.children.append(bake_scene.root)
 		bake_state["scene"] = bake_scene
@@ -323,7 +322,7 @@ def do_rebake(v, root, mg_ss, base_image, color_source, prefilter_size, bake_sta
 		bake_scene = bake_state["scene"]
 		options = bake_state["options"]
 
-		if not osgGLTF.rebakeIBLBakeScene(bake_scene, baked_image):
+		if not osgx.ibl.rebakeGGXPrefilterScene(bake_scene, baked_image):
 			print("[dynamicprobes] failed to reset bake scene, keeping previous environment", flush=True)
 
 			return
@@ -333,21 +332,21 @@ def do_rebake(v, root, mg_ss, base_image, color_source, prefilter_size, bake_sta
 
 	frame = 0
 
-	while frame < options.maxFrames and not bake_scene.readback.isDone():
+	while frame < options.maxFrames and not bake_scene.readback.done:
 		v.frame()
 		frame += 1
 
 	v.camera.postDrawCallback = None
 	bake_scene.root.nodeMask = 0
 
-	if not bake_scene.readback.isDone():
+	if not bake_scene.readback.done:
 		print("[dynamicprobes] bake did not complete, keeping previous environment", flush=True)
 
 		return
 
-	cubemap = osgGLTF.finishIBLBake(bake_scene.readback)
+	cubemap = osgx.ibl.finishGGXPrefilter(bake_scene.readback)
 
-	# GPU-baked mips are already embedded per-face (see IBLBaker.hpp) --
+	# GPU-baked mips are already embedded per-face (see GGXPrefilter.hpp) --
 	# don't let OSG regenerate them, same as the static .ktx2 path in 09-ibl.py.
 	cubemap.useHardwareMipMapGeneration = False
 
@@ -364,6 +363,7 @@ VERTEX_SHADER = """
 
 in vec4 osg_Vertex;
 in vec3 osg_Normal;
+in vec4 osg_Tangent;
 in vec2 osg_MultiTexCoord0;
 
 uniform mat4 osg_ModelViewProjectionMatrix;
@@ -372,6 +372,7 @@ uniform mat3 osg_NormalMatrix;
 
 out vec3 vNGeom;
 out vec3 vPosition;
+out vec4 vTangent;
 out vec2 vUV;
 
 void main() {
@@ -379,6 +380,7 @@ void main() {
 	vPosition = eyePos.xyz;
 	vUV = osg_MultiTexCoord0;
 	vNGeom = normalize(osg_NormalMatrix * osg_Normal);
+	vTangent = vec4(osg_NormalMatrix * osg_Tangent.xyz, osg_Tangent.w);
 
 	gl_Position = osg_ModelViewProjectionMatrix * osg_Vertex;
 }
@@ -392,6 +394,7 @@ const float PI = 3.14159265359;
 
 in vec3 vNGeom;
 in vec3 vPosition;
+in vec4 vTangent;
 in vec2 vUV;
 
 uniform sampler2D shadowMap; // unit 4
@@ -402,12 +405,12 @@ uniform vec3 emissiveFactor;
 
 // ---- osgGLTF material inputs ------------------------------------------------ //
 // Everything below comes from osgGLTF's ReaderWriterGLTF (applyMaterial() in GLTFReader.hpp),
-// grouped here as the two osgGLTF_* declarations rather than scattered loose uniforms. Scalars/
+// grouped here as the two osgx_gltf_* declarations rather than scattered loose uniforms. Scalars/
 // flags arrive as a single UBO; textures can't join them there (GLSL disallows opaque/sampler
 // types inside a uniform block), so they're a parallel struct-of-samplers uniform instead -- as
 // close to "one place" as GLSL allows. Layout must match the std140 packing built in
 // GLTFReader.hpp exactly.
-layout(std140, binding = 0) uniform osgGLTF_Material {
+layout(std140, binding = 0) uniform osgx_gltf_Material {
 	vec4 baseColorFactor;
 	float roughnessFactor;
 	float metallicFactor;
@@ -415,7 +418,7 @@ layout(std140, binding = 0) uniform osgGLTF_Material {
 	float hasMetallicRoughnessMap;
 	float hasOcclusion;
 	float hasNormalMap;
-} osgGLTF_material;
+} osgx_gltf_material;
 
 struct GLTFTextures {
 	sampler2D baseColor; // unit 0
@@ -424,7 +427,10 @@ struct GLTFTextures {
 	sampler2D emissive; // unit 3
 };
 
-uniform GLTFTextures osgGLTF_textures;
+uniform GLTFTextures osgx_gltf_textures;
+
+uniform float osgx_gltf_alphaMode;
+uniform float osgx_gltf_alphaCutoff;
 
 uniform float scanlineFreq;
 uniform float scanlineStrength;
@@ -514,17 +520,22 @@ vec3 sh_irradiance(vec3 N) {
 // osg_Tangent-based basis).
 vec3 getShadingNormal() {
 	vec3 Nb = normalize(vNGeom);
-	if (!bool(osgGLTF_material.hasNormalMap)) return Nb;
+	if (!bool(osgx_gltf_material.hasNormalMap)) return Nb;
 
-	vec3 tangentNormal = texture(osgGLTF_textures.normal, vUV).rgb * 2.0 - 1.0;
+	vec3 tangentNormal = texture(osgx_gltf_textures.normal, vUV).rgb * 2.0 - 1.0;
 
-	vec3 q1 = dFdx(vPosition);
-	vec3 q2 = dFdy(vPosition);
-	vec2 st1 = dFdx(vUV);
-	vec2 st2 = dFdy(vUV);
-
-	vec3 T = normalize(q1 * st2.t - q2 * st1.t);
-	vec3 B = -normalize(cross(Nb, T));
+	vec3 T, B;
+	if (dot(vTangent.xyz, vTangent.xyz) > 1e-10) {
+		T = normalize(vTangent.xyz);
+		B = normalize(cross(Nb, T)) * vTangent.w;
+	} else {
+		vec3 q1 = dFdx(vPosition);
+		vec3 q2 = dFdy(vPosition);
+		vec2 st1 = dFdx(vUV);
+		vec2 st2 = dFdy(vUV);
+		T = normalize(q1 * st2.t - q2 * st1.t);
+		B = -normalize(cross(Nb, T));
+	}
 	mat3 TBN = mat3(T, B, Nb);
 
 	return normalize(TBN * tangentNormal);
@@ -544,16 +555,16 @@ struct Material {
 Material getMaterial(vec3 N) {
 	Material mat;
 
-	mat.albedo = bool(osgGLTF_material.hasBaseColorMap)
-		? texture(osgGLTF_textures.baseColor, vUV).rgb
-		: osgGLTF_material.baseColorFactor.rgb;
-	mat.ao = bool(osgGLTF_material.hasOcclusion) ? texture(osgGLTF_textures.orm, vUV).r : 1.0;
-	mat.roughness = bool(osgGLTF_material.hasMetallicRoughnessMap)
-		? texture(osgGLTF_textures.orm, vUV).g * osgGLTF_material.roughnessFactor
-		: osgGLTF_material.roughnessFactor;
-	mat.metallic = bool(osgGLTF_material.hasMetallicRoughnessMap)
-		? texture(osgGLTF_textures.orm, vUV).b * osgGLTF_material.metallicFactor
-		: osgGLTF_material.metallicFactor;
+	mat.albedo = bool(osgx_gltf_material.hasBaseColorMap)
+		? texture(osgx_gltf_textures.baseColor, vUV).rgb
+		: osgx_gltf_material.baseColorFactor.rgb;
+	mat.ao = bool(osgx_gltf_material.hasOcclusion) ? texture(osgx_gltf_textures.orm, vUV).r : 1.0;
+	mat.roughness = bool(osgx_gltf_material.hasMetallicRoughnessMap)
+		? texture(osgx_gltf_textures.orm, vUV).g * osgx_gltf_material.roughnessFactor
+		: osgx_gltf_material.roughnessFactor;
+	mat.metallic = bool(osgx_gltf_material.hasMetallicRoughnessMap)
+		? texture(osgx_gltf_textures.orm, vUV).b * osgx_gltf_material.metallicFactor
+		: osgx_gltf_material.metallicFactor;
 
 	// Specular AA: clamp roughness by how fast the shading normal (including
 	// normal map) rotates per pixel. Using N (post-normal-map) rather than
@@ -652,9 +663,16 @@ vec3 evaluateIBL(Material mat, vec3 N, vec3 V, float NdotV) {
 // ---- Emissive ---------------------------------------------------------------- //
 
 vec3 getEmissive() {
-	vec3 emissive = texture(osgGLTF_textures.emissive, vUV).rgb * emissiveFactor;
+	vec3 emissive = texture(osgx_gltf_textures.emissive, vUV).rgb * emissiveFactor;
 	float scanline = 0.5 + 0.5 * sin(vUV.y * scanlineFreq - osg_SimulationTime * 10.0);
 	return emissive * mix(1.0, scanline, scanlineStrength);
+}
+
+float getAlphaCoverage() {
+	float alpha = bool(osgx_gltf_material.hasBaseColorMap)
+		? texture(osgx_gltf_textures.baseColor, vUV).a
+		: 1.0;
+	return alpha * osgx_gltf_material.baseColorFactor.a;
 }
 
 // ---- Tonemap ------------------------------------------------------------------ //
@@ -680,6 +698,9 @@ vec3 tonemapPBRNeutral(vec3 color) {
 // ---- Main ----------------------------------------------------------------- //
 
 void main() {
+	float alpha = getAlphaCoverage();
+	if (osgx_gltf_alphaMode == 1.0 && alpha < osgx_gltf_alphaCutoff) discard;
+
 	vec3 N = getShadingNormal();
 	vec3 V = normalize(-vPosition);
 	Material mat = getMaterial(N);
@@ -693,7 +714,7 @@ void main() {
 	color = tonemapPBRNeutral(color);
 	color = pow(color, vec3(1.0 / 2.2));
 
-	fragColor = vec4(color, 1.0);
+	fragColor = vec4(color, alpha);
 }
 """
 
@@ -1053,10 +1074,10 @@ if __name__ == "__main__":
 		osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE | osg.StateAttribute.PROTECTED
 	)
 
-	ss.uniforms["osgGLTF_textures.baseColor"] = 0
-	ss.uniforms["osgGLTF_textures.normal"] = 1
-	ss.uniforms["osgGLTF_textures.orm"] = 2
-	ss.uniforms["osgGLTF_textures.emissive"] = 3
+	ss.uniforms["osgx_gltf_textures.baseColor"] = 0
+	ss.uniforms["osgx_gltf_textures.normal"] = 1
+	ss.uniforms["osgx_gltf_textures.orm"] = 2
+	ss.uniforms["osgx_gltf_textures.emissive"] = 3
 	ss.uniforms["shadowMap"] = 4
 	ss.uniforms["envMap"] = 5
 	ss.uniforms["brdfLUT"] = 6

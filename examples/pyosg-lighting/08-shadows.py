@@ -68,6 +68,7 @@ out vec3 vT;
 out vec3 vB;
 out vec3 vNGeom;
 out vec3 vPosition;
+out vec4 vTangent;
 out vec2 vUV;
 
 void main() {
@@ -76,8 +77,10 @@ void main() {
 	vUV = osg_MultiTexCoord0;
 
 	vec3 N = normalize(osg_NormalMatrix * osg_Normal);
-	vec3 T = normalize(osg_NormalMatrix * osg_Tangent.xyz);
-	T = normalize(T - dot(T, N) * N);
+	vec3 tangent = osg_NormalMatrix * osg_Tangent.xyz;
+	vTangent = vec4(tangent, osg_Tangent.w);
+	vec3 T = dot(tangent, tangent) > 1e-10 ? normalize(tangent) : vec3(0.0);
+	T = dot(tangent, tangent) > 1e-10 ? normalize(T - dot(T, N) * N) : T;
 	vec3 B = cross(N, T) * osg_Tangent.w;
 
 	vNGeom = N;
@@ -98,6 +101,7 @@ in vec3 vT;
 in vec3 vB;
 in vec3 vNGeom;
 in vec3 vPosition;
+in vec4 vTangent;
 in vec2 vUV;
 
 uniform sampler2D baseColorTex;
@@ -105,6 +109,11 @@ uniform sampler2D normalTex;
 uniform sampler2D ormTex;
 uniform sampler2D emissiveTex;
 uniform sampler2D shadowMap; // unit 4: depth from shadow camera
+
+// Exported by osgGLTF per material. This older forward example does not use
+// its full material UBO yet, but it can still honor texture alpha coverage.
+uniform float osgx_gltf_alphaMode;
+uniform float osgx_gltf_alphaCutoff;
 
 uniform vec3 emissiveFactor;
 uniform float scanlineFreq;
@@ -161,12 +170,29 @@ float shadowFactor(vec3 eyePos) {
 }
 
 void main() {
-	mat3 TBN = mat3(normalize(vT), normalize(vB), normalize(vNGeom));
+	vec4 baseColor = texture(baseColorTex, vUV);
+	float alpha = baseColor.a;
+	if (osgx_gltf_alphaMode == 1.0 && alpha < osgx_gltf_alphaCutoff) discard;
+
+	vec3 NGeom = normalize(vNGeom);
+	vec3 T, B;
+	if (dot(vTangent.xyz, vTangent.xyz) > 1e-10) {
+		T = normalize(vT);
+		B = normalize(vB);
+	} else {
+		vec3 q1 = dFdx(vPosition);
+		vec3 q2 = dFdy(vPosition);
+		vec2 st1 = dFdx(vUV);
+		vec2 st2 = dFdy(vUV);
+		T = normalize(q1 * st2.t - q2 * st1.t);
+		B = -normalize(cross(NGeom, T));
+	}
+	mat3 TBN = mat3(T, B, NGeom);
 	vec3 nMap = texture(normalTex, vUV).rgb * 2.0 - 1.0;
 	vec3 N = normalize(TBN * nMap);
 	vec3 V = normalize(-vPosition);
 
-	vec3 albedo = texture(baseColorTex, vUV).rgb;
+	vec3 albedo = baseColor.rgb;
 	float ao = texture(ormTex, vUV).r;
 	float roughness = texture(ormTex, vUV).g;
 	float metallic = texture(ormTex, vUV).b;
@@ -211,7 +237,7 @@ void main() {
 	float scanline = 0.5 + 0.5 * sin(gl_FragCoord.y * scanlineFreq);
 	emissive *= mix(1.0, scanline, scanlineStrength);
 
-	fragColor = vec4(ambient + Lo + emissive, 1.0);
+	fragColor = vec4(ambient + Lo + emissive, alpha);
 }
 """
 

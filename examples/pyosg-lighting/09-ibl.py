@@ -154,6 +154,7 @@ VERTEX_SHADER = """
 
 in vec4 osg_Vertex;
 in vec3 osg_Normal;
+in vec4 osg_Tangent;
 in vec2 osg_MultiTexCoord0;
 
 uniform mat4 osg_ModelViewProjectionMatrix;
@@ -162,6 +163,7 @@ uniform mat3 osg_NormalMatrix;
 
 out vec3 vNGeom;
 out vec3 vPosition;
+out vec4 vTangent;
 out vec2 vUV;
 
 void main() {
@@ -169,6 +171,7 @@ void main() {
 	vPosition = eyePos.xyz;
 	vUV = osg_MultiTexCoord0;
 	vNGeom = normalize(osg_NormalMatrix * osg_Normal);
+	vTangent = vec4(osg_NormalMatrix * osg_Tangent.xyz, osg_Tangent.w);
 
 	gl_Position = osg_ModelViewProjectionMatrix * osg_Vertex;
 }
@@ -182,6 +185,7 @@ const float PI = 3.14159265359;
 
 in vec3 vNGeom;
 in vec3 vPosition;
+in vec4 vTangent;
 in vec2 vUV;
 
 uniform sampler2D shadowMap; // unit 4
@@ -194,12 +198,12 @@ uniform vec3 emissiveFactor;
 
 // ---- osgGLTF material inputs ------------------------------------------------ //
 // Everything below comes from osgGLTF's ReaderWriterGLTF (applyMaterial() in GLTFReader.hpp),
-// grouped here as the two osgGLTF_* declarations rather than scattered loose uniforms. Scalars/
+// grouped here as the two osgx_gltf_* declarations rather than scattered loose uniforms. Scalars/
 // flags arrive as a single UBO; textures can't join them there (GLSL disallows opaque/sampler
 // types inside a uniform block), so they're a parallel struct-of-samplers uniform instead -- as
 // close to "one place" as GLSL allows. Layout must match the std140 packing built in
 // GLTFReader.hpp exactly.
-layout(std140, binding = 0) uniform osgGLTF_Material {
+layout(std140, binding = 0) uniform osgx_gltf_Material {
 	vec4 baseColorFactor;
 	float roughnessFactor;
 	float metallicFactor;
@@ -207,7 +211,7 @@ layout(std140, binding = 0) uniform osgGLTF_Material {
 	float hasMetallicRoughnessMap;
 	float hasOcclusion;
 	float hasNormalMap;
-} osgGLTF_material;
+} osgx_gltf_material;
 
 struct GLTFTextures {
 	sampler2D baseColor; // unit 0
@@ -216,7 +220,13 @@ struct GLTFTextures {
 	sampler2D emissive; // unit 3
 };
 
-uniform GLTFTextures osgGLTF_textures;
+uniform GLTFTextures osgx_gltf_textures;
+
+// Core glTF alpha coverage, exported per-material by osgGLTF.  MASK keeps
+// normal opaque rendering and discards transparent texels; BLEND writes this
+// alpha for osgGLTF's source-over transparent StateSet.
+uniform float osgx_gltf_alphaMode;
+uniform float osgx_gltf_alphaCutoff;
 
 uniform float scanlineFreq;
 uniform float scanlineStrength;
@@ -311,17 +321,22 @@ vec3 sh_irradiance(vec3 N) {
 // mode entirely rather than requiring GLTFReader.hpp to synthesize tangents.
 vec3 getShadingNormal() {
 	vec3 Nb = normalize(vNGeom);
-	if (!bool(osgGLTF_material.hasNormalMap)) return Nb;
+	if (!bool(osgx_gltf_material.hasNormalMap)) return Nb;
 
-	vec3 tangentNormal = texture(osgGLTF_textures.normal, vUV).rgb * 2.0 - 1.0;
+	vec3 tangentNormal = texture(osgx_gltf_textures.normal, vUV).rgb * 2.0 - 1.0;
 
-	vec3 q1 = dFdx(vPosition);
-	vec3 q2 = dFdy(vPosition);
-	vec2 st1 = dFdx(vUV);
-	vec2 st2 = dFdy(vUV);
-
-	vec3 T = normalize(q1 * st2.t - q2 * st1.t);
-	vec3 B = -normalize(cross(Nb, T));
+	vec3 T, B;
+	if (dot(vTangent.xyz, vTangent.xyz) > 1e-10) {
+		T = normalize(vTangent.xyz);
+		B = normalize(cross(Nb, T)) * vTangent.w;
+	} else {
+		vec3 q1 = dFdx(vPosition);
+		vec3 q2 = dFdy(vPosition);
+		vec2 st1 = dFdx(vUV);
+		vec2 st2 = dFdy(vUV);
+		T = normalize(q1 * st2.t - q2 * st1.t);
+		B = -normalize(cross(Nb, T));
+	}
 	mat3 TBN = mat3(T, B, Nb);
 
 	return normalize(TBN * tangentNormal);
@@ -348,27 +363,27 @@ Material getMaterial(vec3 N) {
 	// but for baseColor - a factor-only material (no baseColorTexture, e.g.
 	// most of the glTF-Sample-Models *Test conformance set) would otherwise
 	// read an unbound unit 0 as black instead of its authored flat color.
-	mat.albedo = bool(osgGLTF_material.hasBaseColorMap)
-		? texture(osgGLTF_textures.baseColor, vUV).rgb
-		: osgGLTF_material.baseColorFactor.rgb;
+	mat.albedo = bool(osgx_gltf_material.hasBaseColorMap)
+		? texture(osgx_gltf_textures.baseColor, vUV).rgb
+		: osgx_gltf_material.baseColorFactor.rgb;
 	// The R channel of a glTF metallicRoughnessTexture is spec-unused unless
 	// the material also declares an occlusionTexture pointing at the same
 	// (or a merged) image - hasOcclusion reflects that, set by
 	// GLTFReader.hpp per-material. Trusting R unconditionally silently
 	// zeroes the entire ambient/IBL term below on any material that never
 	// authored real AO data.
-	mat.ao = bool(osgGLTF_material.hasOcclusion) ? texture(osgGLTF_textures.orm, vUV).r : 1.0;
+	mat.ao = bool(osgx_gltf_material.hasOcclusion) ? texture(osgx_gltf_textures.orm, vUV).r : 1.0;
 	// Same story for roughness/metallic: a material can be entirely
 	// factor-driven with no metallicRoughnessTexture at all (e.g. Fox:
 	// roughnessFactor=0.58, no texture) - multiplying an unbound unit 2's
 	// zero read by the factor silently discarded it, forcing roughness/
 	// metallic to 0 (mirror-smooth) regardless of what was authored.
-	mat.roughness = bool(osgGLTF_material.hasMetallicRoughnessMap)
-		? texture(osgGLTF_textures.orm, vUV).g * osgGLTF_material.roughnessFactor
-		: osgGLTF_material.roughnessFactor;
-	mat.metallic = bool(osgGLTF_material.hasMetallicRoughnessMap)
-		? texture(osgGLTF_textures.orm, vUV).b * osgGLTF_material.metallicFactor
-		: osgGLTF_material.metallicFactor;
+	mat.roughness = bool(osgx_gltf_material.hasMetallicRoughnessMap)
+		? texture(osgx_gltf_textures.orm, vUV).g * osgx_gltf_material.roughnessFactor
+		: osgx_gltf_material.roughnessFactor;
+	mat.metallic = bool(osgx_gltf_material.hasMetallicRoughnessMap)
+		? texture(osgx_gltf_textures.orm, vUV).b * osgx_gltf_material.metallicFactor
+		: osgx_gltf_material.metallicFactor;
 
 	// Specular AA: clamp roughness by how fast the shading normal (including
 	// normal map) rotates per pixel. Using N (post-normal-map) rather than
@@ -467,9 +482,16 @@ vec3 evaluateIBL(Material mat, vec3 N, vec3 V, float NdotV) {
 // ---- Emissive ---------------------------------------------------------------- //
 
 vec3 getEmissive() {
-	vec3 emissive = texture(osgGLTF_textures.emissive, vUV).rgb * emissiveFactor;
+	vec3 emissive = texture(osgx_gltf_textures.emissive, vUV).rgb * emissiveFactor;
 	float scanline = 0.5 + 0.5 * sin(vUV.y * scanlineFreq - osg_SimulationTime * 10.0);
 	return emissive * mix(1.0, scanline, scanlineStrength);
+}
+
+float getAlphaCoverage() {
+	float alpha = bool(osgx_gltf_material.hasBaseColorMap)
+		? texture(osgx_gltf_textures.baseColor, vUV).a
+		: 1.0;
+	return alpha * osgx_gltf_material.baseColorFactor.a;
 }
 
 // ---- Tonemap ------------------------------------------------------------------ //
@@ -495,6 +517,9 @@ vec3 tonemapPBRNeutral(vec3 color) {
 // ---- Main ----------------------------------------------------------------- //
 
 void main() {
+	float alpha = getAlphaCoverage();
+	if (osgx_gltf_alphaMode == 1.0 && alpha < osgx_gltf_alphaCutoff) discard;
+
 	vec3 N = getShadingNormal();
 	vec3 V = normalize(-vPosition);
 	Material mat = getMaterial(N);
@@ -508,7 +533,7 @@ void main() {
 	color = tonemapPBRNeutral(color);
 	color = pow(color, vec3(1.0 / 2.2));
 
-	fragColor = vec4(color, 1.0);
+	fragColor = vec4(color, alpha);
 }
 """
 
@@ -881,10 +906,10 @@ if __name__ == "__main__":
 		osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE | osg.StateAttribute.PROTECTED
 	)
 
-	ss.uniforms["osgGLTF_textures.baseColor"] = 0
-	ss.uniforms["osgGLTF_textures.normal"] = 1
-	ss.uniforms["osgGLTF_textures.orm"] = 2
-	ss.uniforms["osgGLTF_textures.emissive"] = 3
+	ss.uniforms["osgx_gltf_textures.baseColor"] = 0
+	ss.uniforms["osgx_gltf_textures.normal"] = 1
+	ss.uniforms["osgx_gltf_textures.orm"] = 2
+	ss.uniforms["osgx_gltf_textures.emissive"] = 3
 	ss.uniforms["shadowMap"] = 4
 	ss.uniforms["envMap"] = 5
 	ss.uniforms["brdfLUT"] = 6
