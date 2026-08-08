@@ -1114,25 +1114,60 @@ if __name__ == "__main__":
 
 	v.eventHandlers.append(ExplosionKeyHandler(bindings, v))
 
-	# --- ImGui panel: --gui exposes every build_fire()/build_shockwave()/ -- #
-	# --- build_smoke()/build_embers() kwarg as a live slider on key 5's -- #
-	# --- full explosion_smoke_embers, plus buttons that fire the exact -- #
-	# --- same bindings as the number keys (osgx.imgui -- "knobs, not -- #
-	# --- frameworks", see aipython/17-particles.md). ------------------- #
-	if "--gui" in sys.argv:
+	# --- Docked ImGui panel: enabled by default; --no-gui removes it. The -- #
+	# --- panel exposes every build_fire()/build_shockwave()/build_smoke()/ -- #
+	# --- build_embers() kwarg as a live slider, written to -- #
+	# --- every key (1-5) that carries that layer at once, so tuning a -- #
+	# --- knob and pressing plain "1" shows that layer alone with no -- #
+	# --- shockwave/smoke/ember "noise" mixed in. Key 6 (multiburst) is -- #
+	# --- deliberately excluded -- it randomizes each burst's params for -- #
+	# --- variety (see build_multiburst()'s docstring), and forcing the -- #
+	# --- shared sliders onto it would erase that. Buttons still fire the -- #
+	# --- exact same bindings as the number keys (osgx.imgui -- "knobs, -- #
+	# --- not frameworks", see aipython/17-particles.md). --------------- #
+	if "--no-gui" not in sys.argv:
 		# No deferred/compositing pipeline in this file (unlike 11-sketchfab.py) --
 		# flash_cam is POST_RENDER but discard()s every pixel except during its brief
 		# 0.25s flash, so the default master-camera draw hook is fine; no drawCamera
 		# override needed (contrast [[project_osgdebug_imgui_python]]'s final_cam fix).
-		gui = osgx.imgui.Widget(v)
+		# Pinned to the left edge like 11-sketchfab.py: osgx's ImGui build does not
+		# include interactive docking, so this fixed sidebar keeps the controls out
+		# of the explosion's way.
+		gui_opts = osgx.imgui.Options()
+		gui_opts.dock = osgx.imgui.Dock.LEFT
+		gui_opts.dock_width = 320.0
+		gui = osgx.imgui.Widget(v, v.camera, gui_opts)
 
-		fire_geode, shockwave_geode, smoke_geode, embers_geode = explosion_smoke_embers.children
+		# Each key binding below (1/2/3/4/5) holds its OWN build_fire()/build_shockwave()/
+		# etc. instances -- they can't share a single node across keys, since every preset
+		# sits permanently in the scene graph and OSG draws a multi-parented node once per
+		# parent path, which would double/triple/quadruple-render the same particles the
+		# instant one got triggered. So instead these lists collect every same-layer node
+		# across keys 1-5, and the sliders below write each change to all of them at once.
+		fire_nodes = [
+			fire_only,
+			explosion.children[0],
+			explosion_smoke.children[0],
+			explosion_smoke_embers.children[0],
+		]
+		shockwave_nodes = [
+			explosion.children[1],
+			explosion_smoke.children[1],
+			explosion_smoke_embers.children[1],
+		]
+		smoke_nodes = [explosion_smoke.children[2], explosion_smoke_embers.children[2]]
+		embers_nodes = [explosion_smoke_embers.children[3]] # only key 5 carries embers
 
-		def add_uniform_sliders(section_label, node, sliders, default_open=False):
+		def add_uniform_sliders(section_label, nodes, sliders, default_open=False):
 			"""Add one ImGui section with a slider_float_nudge per (uniform_name,
 			label, min, max, default) in `sliders`, reading/writing straight through
-			node.stateSet.uniforms -- no rebuild needed, matches
-			[[feedback_uniform_value_property]] (.value, not .getFloat()/[0]).
+			each node in `nodes` (every same-layer instance across keys 1-5) --
+			no rebuild needed, matches [[feedback_uniform_value_property]] (.value,
+			not .getFloat()/[0]).
+
+			The slider's displayed value is read from nodes[0] alone; every change
+			is then written to ALL of them, which is what keeps every key's copy
+			of this layer in lockstep with the panel instead of only key 5's.
 
 			Every uniform is (re-)seeded to its listed default right here, once,
 			before the section is added -- covers the fragment-shader-only uniforms
@@ -1143,25 +1178,27 @@ if __name__ == "__main__":
 			-- see [[feedback_imgui_section_label_collision]].
 			"""
 
-			ss = node.stateSet
+			stateSets = [n.stateSet for n in nodes]
 
 			for name, label, lo, hi, default in sliders:
-				ss.uniforms[name] = default
+				for ss in stateSets:
+					ss.uniforms[name] = default
 
 			def draw(ri):
 				for name, label, lo, hi, _ in sliders:
 					changed, value = osgx.imgui.slider_float_nudge(
-						label, ss.uniforms[name].value, lo, hi
+						label, stateSets[0].uniforms[name].value, lo, hi
 					)
 
 					if changed:
-						ss.uniforms[name] = value
+						for ss in stateSets:
+							ss.uniforms[name] = value
 
 			gui.addSection(
 				section_label, draw, osgx.imgui.SectionOptions(default_open=default_open)
 			)
 
-		add_uniform_sliders("Fire", fire_geode, [
+		add_uniform_sliders("Fire", fire_nodes, [
 			("duration", "Fire Duration", 0.3, 3.0, 1.2),
 			("burstRadius", "Fire Burst Radius", 0.5, 6.0, 2.2),
 			("riseHeight", "Fire Rise Height", 0.0, 4.0, 1.2),
@@ -1172,29 +1209,31 @@ if __name__ == "__main__":
 		], default_open=True)
 
 		def draw_fire_colors(ri):
-			fire_ss = fire_geode.stateSet
-
-			mid = fire_ss.uniforms["midColor"].value
+			# Same read-nodes[0]/write-all pattern as add_uniform_sliders() above,
+			# just inlined here since color_edit3() isn't a plain float slider.
+			mid = fire_nodes[0].stateSet.uniforms["midColor"].value
 			changed, r, g, b = osgx.imgui.color_edit3("Fire Mid Color", mid.x, mid.y, mid.z)
 
 			if changed:
-				fire_ss.uniforms["midColor"] = osg.Vec3(r, g, b)
+				for n in fire_nodes:
+					n.stateSet.uniforms["midColor"] = osg.Vec3(r, g, b)
 
-			core = fire_ss.uniforms["coreColor"].value
+			core = fire_nodes[0].stateSet.uniforms["coreColor"].value
 			changed, r, g, b = osgx.imgui.color_edit3("Fire Core Color", core.x, core.y, core.z)
 
 			if changed:
-				fire_ss.uniforms["coreColor"] = osg.Vec3(r, g, b)
+				for n in fire_nodes:
+					n.stateSet.uniforms["coreColor"] = osg.Vec3(r, g, b)
 
 		gui.addSection("Fire Color", draw_fire_colors, osgx.imgui.SectionOptions(default_open=True))
 
-		add_uniform_sliders("Shockwave", shockwave_geode, [
+		add_uniform_sliders("Shockwave", shockwave_nodes, [
 			("duration", "Shockwave Duration", 0.1, 2.0, 0.6),
 			("maxRadius", "Shockwave Max Radius", 1.0, 8.0, 4.0),
 			("ringWidth", "Shockwave Ring Width", 0.05, 1.0, 0.3),
 		])
 
-		add_uniform_sliders("Smoke", smoke_geode, [
+		add_uniform_sliders("Smoke", smoke_nodes, [
 			("startDelay", "Smoke Start Delay", 0.0, 1.0, 0.15),
 			("duration", "Smoke Duration", 0.5, 8.0, 3.0),
 			("spreadRadius", "Smoke Spread Radius", 0.5, 8.0, 3.2),
@@ -1207,7 +1246,7 @@ if __name__ == "__main__":
 			("maxAlpha", "Smoke Max Alpha", 0.0, 1.0, 0.35),
 		])
 
-		add_uniform_sliders("Embers", embers_geode, [
+		add_uniform_sliders("Embers", embers_nodes, [
 			("duration", "Ember Duration", 0.3, 4.0, 1.6),
 			("launchSpeed", "Ember Launch Speed", 0.5, 10.0, 4.0),
 			("gravity", "Ember Gravity", 0.0, 15.0, 6.0),
