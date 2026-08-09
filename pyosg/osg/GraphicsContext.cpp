@@ -40,6 +40,16 @@ void bind_GraphicsContext(py::module_& m) {
 		.def("resized", &osg::GraphicsContext::resized)
 		.def("runOperations", &osg::GraphicsContext::runOperations)
 		.def("valid", &osg::GraphicsContext::valid)
+		// Needed for embedding under a widget toolkit (Qt's QOpenGLWidget, etc.) that owns its
+		// own non-zero "default" FBO: RenderStage rebinds framebuffer 0 by default after every
+		// FBO-camera pass (RenderStage.cpp reads getDefaultFboId(), which starts at 0), so a
+		// final pass with no renderTargetImplementation silently ends up drawing into the REAL
+		// GL default framebuffer -- invisible to a compositor that only reads its own FBO --
+		// unless this is set to match e.g. QOpenGLWidget.defaultFramebufferObject().
+		.def_property("defaultFboId",
+			&osg::GraphicsContext::getDefaultFboId,
+			&osg::GraphicsContext::setDefaultFboId
+		)
 		// State (and thus .state.contextID) is only valid once the context has been realized --
 		// this is how a BufferObject/Texture's compiled GL object id can be reached from plain
 		// script code, outside of a draw callback's RenderInfo.
