@@ -37,6 +37,8 @@ os.environ.update({
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
+from pyosg_visitor import GatherVisitor
+
 W, H = 800, 600
 
 # --------------------------------------------------------------------------- #
@@ -267,7 +269,8 @@ def create_scene():
 		osg.Shader(osg.Shader.FRAGMENT, GBUFFER_FRAGMENT_SHADER)
 	))
 
-	g.stateSet.setAttributeAndModes(p)
+	# g.stateSet.setAttributeAndModes(p)
+	g.stateSet.attributes.append(p)
 
 	return g
 
@@ -352,19 +355,20 @@ def create_hud_camera(color_tex, normal_tex, depth_tex):
 		osg.Shader(osg.Shader.FRAGMENT, COMPOSITE_FRAGMENT_SHADER)
 	))
 
-	g.stateSet.setAttributeAndModes(p)
+	# g.stateSet.setAttributeAndModes(p)
+	g.stateSet.attributes.append(p)
 
 	return cam
 
 # --------------------------------------------------------------------------- #
 # Input
 # --------------------------------------------------------------------------- #
-
 class VisualizeModeHandler(osgGA.GUIEventHandler):
 	"""Press 1/2/3 to visualize the raw color/depth/normal G-buffer channels; 0 for the lit composite."""
 
 	def __init__(self, mode_uniform):
 		super().__init__()
+
 		self.mode_uniform = mode_uniform
 
 	def handle(self, ea, aa):
@@ -373,12 +377,16 @@ class VisualizeModeHandler(osgGA.GUIEventHandler):
 
 		if ea.key == ord("0"):
 			self.mode_uniform.value = 0
+
 		elif ea.key == ord("1"):
 			self.mode_uniform.value = 1
+
 		elif ea.key == ord("2"):
 			self.mode_uniform.value = 2
+
 		elif ea.key == ord("3"):
 			self.mode_uniform.value = 3
+
 		else:
 			return False
 
@@ -420,6 +428,19 @@ if __name__ == "__main__":
 	v.cameraManipulator = osgGA.TrackballManipulator()
 	v.camera.preDrawCallback = update_uniforms
 	v.eventHandlers.append(VisualizeModeHandler(visualize_mode_u))
+
+	# GatherVisitor bound as a default arg -- this file doesn't drive its loop
+	# through aipython/pyosg_repl today, but a callback's free variables resolve
+	# unpredictably the moment it IS invoked from that bridge (confirmed live in
+	# 11-sketchfab.py's --repl session). See aipython/01-core.md rule 2.
+	def gather(ea, aa, GatherVisitor=GatherVisitor, v=v):
+		if ea.handled or ea.type != osgGA.GUIEventAdapter.KEYUP:
+			return False
+
+		if ea.key == ord("g"):
+			v.sceneData.accept(GatherVisitor(namespace=globals()))
+
+	v.eventHandlers.append(gather)
 
 	print("Press 1=color 2=depth 3=normal 0=lit composite (default)", flush=True)
 

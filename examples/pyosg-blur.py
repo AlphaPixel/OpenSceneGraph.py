@@ -283,17 +283,22 @@ def make_composite_hud(scene_tex, blur_tex, w, h):
 
 # Make this do WHATEVER YOU WANT. :) It'll work just fine...
 def create_scene():
-	return osgDB.readNodeFile(len(sys.argv) >= 1 and sys.argv[1] or "glsl_simple.osgt")
+	return osgDB.readNodeFile(len(sys.argv) >= 2 and sys.argv[1] or "glsl_simple.osgt")
 
-if __name__ == "__main__":
+# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side
+# effects. This is what external tooling (e.g. etc/pyside6-glsl.py's shader-editor scaffold)
+# imports and calls directly, so it MUST stay side-effect-free w.r.t. any global viewer state.
+# Takes (w, h) explicitly -- e.g. the real widget size at the caller's GL-context-current
+# point -- rather than reading the module-level W/H globals, which only __main__ below uses.
+def build_scene(w, h):
 	# Pass outputs:
 	#
 	# sceneColor: original osgSlug scene
 	# blurA: horizontal blur of sceneColor
 	# blurB: vertical blur of blurA
-	sceneColor = make_color_texture(W, H)
-	blurA = make_color_texture(W, H)
-	blurB = make_color_texture(W, H)
+	sceneColor = make_color_texture(w, h)
+	blurA = make_color_texture(w, h)
+	blurB = make_color_texture(w, h)
 
 	sceneColor.dataVariance = osg.Object.DYNAMIC
 	blurA.dataVariance = osg.Object.DYNAMIC
@@ -304,8 +309,8 @@ if __name__ == "__main__":
 	scene_pass = make_scene_rtt_pass(
 		output_tex=sceneColor,
 		scene=create_scene(),
-		w=W,
-		h=H,
+		w=w,
+		h=h,
 		name="Scene RTT"
 	)
 
@@ -314,8 +319,8 @@ if __name__ == "__main__":
 	blur_h_pass = make_blur_pass(
 		input_tex=sceneColor,
 		output_tex=blurA,
-		w=W,
-		h=H,
+		w=w,
+		h=h,
 		direction="horizontal",
 		name="Blur Horizontal RTT",
 		order=1
@@ -326,8 +331,8 @@ if __name__ == "__main__":
 	blur_v_pass = make_blur_pass(
 		input_tex=blurA,
 		output_tex=blurB,
-		w=W,
-		h=H,
+		w=w,
+		h=h,
 		direction="vertical",
 		name="Blur Vertical RTT",
 		order=2
@@ -338,8 +343,8 @@ if __name__ == "__main__":
 	hud = make_composite_hud(
 		scene_tex=sceneColor,
 		blur_tex=blurB,
-		w=W,
-		h=H
+		w=w,
+		h=h
 	)
 
 	root = osg.Group()
@@ -350,8 +355,11 @@ if __name__ == "__main__":
 		hud
 	))
 
+	return root
+
+if __name__ == "__main__":
 	viewer = osgViewer.Viewer()
-	viewer.sceneData = root
+	viewer.sceneData = build_scene(W, H)
 	viewer.cameraManipulator = osgGA.TrackballManipulator()
 
 	# Should not be visible if HUD composite is covering the whole screen.

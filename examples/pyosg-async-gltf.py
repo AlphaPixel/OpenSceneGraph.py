@@ -2,13 +2,13 @@
 #vimrun! ../examples/pyosg-async-gltf.py
 
 # Proves the "viewer pops up immediately, model pops in a few seconds later"
-# idea: osgGLTF.readNodeFileAsync() runs GLTFReader off the GIL on a
+# idea: osgx.gltf.readNodeFileAsync() runs the glTF reader off the GIL on a
 # background thread (asyncio.to_thread), reporting real per-stage progress
 # through the same loop/queue call_soon_threadsafe bridge as
 # examples/pyosg-async.py's pyosg_async_task_example. The render loop keeps
 # pumping viewer.frame() the whole time - nothing blocks.
 #
-# Progress stages mirror GLTFReader::Stage (see GLTFReader.hpp): PARSING ->
+# Progress stages mirror osgx::gltf::Reader::Stage: PARSING ->
 # LOADING_TEXTURES -> BUILDING_NODES, strictly sequential, current
 # non-decreasing within a stage, every stage ends at current==total before
 # the next stage's first event. total is always a real known count - a
@@ -36,7 +36,7 @@ from enum import Enum
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
-import osgGLTF
+import osgx
 
 PATH = sys.argv[1] if len(sys.argv) >= 2 else os.path.expanduser(
 	"~/tmp/3dmodels/deadspace00/scene.gltf"
@@ -64,7 +64,7 @@ def run(viewer, path):
 	t0 = time.time()
 
 	load_task = loop.create_task(asyncio.to_thread(
-		osgGLTF.readNodeFileAsync,
+		osgx.gltf.readNodeFileAsync,
 		path,
 		stop,
 		loop,

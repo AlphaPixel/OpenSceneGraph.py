@@ -221,7 +221,7 @@ def fullscreen_rtt(name, order, output, inputs, fragment, uniforms=()):
 		allowEventFocus=False,
 	)
 	cam.attach(osg.Camera.COLOR_BUFFER0, output)
-	cam.stateSet.setMode(GL_DEPTH_TEST, osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE)
+	cam.stateSet.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
 	for unit, (texture, uniform_name) in enumerate(inputs):
 		cam.stateSet.textureAttributes[unit] = texture
 		cam.stateSet.uniforms[uniform_name] = unit
@@ -242,7 +242,7 @@ def display_camera(name, texture):
 		viewMatrix=osg.Matrix.identity(),
 		allowEventFocus=False,
 	)
-	cam.stateSet.setMode(GL_DEPTH_TEST, osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE)
+	cam.stateSet.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
 	cam.stateSet.textureAttributes[0] = texture
 	cam.stateSet.uniforms["displayTex"] = 0
 	quad = make_quad()

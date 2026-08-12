@@ -1414,10 +1414,7 @@ def make_fullscreen_rtt_pass(textures, output_tex, frag_shader, w, h, name="Post
 	# Fullscreen passes have no depth relationship. OSG gives this FBO an implicit
 	# depth renderbuffer; if depth testing is inherited while only color is cleared,
 	# frame 0 writes depth and identical frame-1 fragments all fail GL_LESS.
-	ss.setMode(
-		GL_DEPTH_TEST,
-		osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
-	)
+	ss.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
 
 	for unit, (tex, uniform_name) in textures.items():
 		ss.textureAttributes[unit] = tex
@@ -1539,10 +1536,7 @@ def create_composite_camera(gbuf, shadow_tex, prefilter_tex, lut_tex, ao_tex, hd
 	ss = cam.stateSet
 	# See make_fullscreen_rtt_pass(): prevent the implicit FBO depth buffer from
 	# rejecting this same fullscreen quad on frame 1 and every frame thereafter.
-	ss.setMode(
-		GL_DEPTH_TEST,
-		osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
-	)
+	ss.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
 	ss.textureAttributes[0] = albedo_tex
 	ss.textureAttributes[1] = normal_tex
 	ss.textureAttributes[2] = material_tex
@@ -1658,10 +1652,7 @@ def create_final_camera(hdr_color_tex, bloom_tex, ao_tex, w=W, h=H):
 	ss = cam.stateSet
 	# The final fullscreen pass does not use depth either. Keep its state explicit
 	# instead of inheriting GL_DEPTH_TEST from the viewer's real-geometry pass.
-	ss.setMode(
-		GL_DEPTH_TEST,
-		osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
-	)
+	ss.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
 	ss.textureAttributes[0] = hdr_color_tex
 	ss.textureAttributes[1] = bloom_tex
 	ss.textureAttributes[2] = ao_tex
@@ -1723,7 +1714,7 @@ def create_grid_room(bound_center, bound_radius, floor_z, room_size):
 		# composite then mistakes an actual grid line for sky. Discard handles the
 		# transparent parts here, so deferred rendering must write every attachment
 		# without blending.
-		grid.stateSet.setMode(GL_BLEND, osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE)
+		grid.stateSet.modes[GL_BLEND] = osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
 
 		return grid
 
@@ -1969,7 +1960,7 @@ def create_light_gizmo(bound_center, bound_radius, light_dir_u, light_color_u):
 		allowEventFocus=False,
 		cullingActive=False,
 	)
-	cam.stateSet.setMode(GL_DEPTH_TEST, osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE)
+	cam.stateSet.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
 	cam.children.append(group)
 
 	return cam
@@ -2401,7 +2392,7 @@ if __name__ == "__main__":
 		gizmo_cam,
 	))
 
-	root.stateSet.setMode(GL_TEXTURE_CUBE_MAP_SEAMLESS, osg.StateAttribute.ON)
+	root.stateSet.modes[GL_TEXTURE_CUBE_MAP_SEAMLESS] = osg.StateAttribute.ON
 	root.stateSet.uniforms.extend((
 		znear_u,
 		zfar_u,

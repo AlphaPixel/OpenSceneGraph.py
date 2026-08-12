@@ -214,7 +214,7 @@ def build_flame(
 		ss.attributes[osg.StateAttribute.DEPTH] = (
 			osg.Depth(osg.Depth.LESS, 0.0, 1.0, False), osg.StateAttribute.ON
 		)
-		ss.setMode(GL_CULL_FACE, osg.StateAttribute.OFF)
+		ss.modes[GL_CULL_FACE] = osg.StateAttribute.OFF
 		ss.renderingHint = osg.StateSet.TRANSPARENT_BIN
 		ss.uniforms["flameHeight"] = height
 		ss.uniforms["shellScale"] = shell_scale

@@ -14,13 +14,19 @@ os.environ.update({
 
 from OpenSceneGraph import *
 
+import osgx
+
 # A minimal demo of the two custom osgViewer::GraphicsWindow implementations in
-# OpenSceneGraph.linux: createEGLWindow() (an ordinary X11 window, but driven by
-# EGL instead of GLX) and createGBMWindow() (no X11 at all - direct DRM/KMS
-# scanout). Both are skeleton/proof-of-concept implementations; see the
-# docstrings on each for caveats - createGBMWindow() in particular requires
-# exclusive DRM master access, so it will fail if an X server already owns the
-# GPU (run it from a bare TTY instead).
+# osgx.platform (moved there from this repo's own `linux` submodule -- it was never actually
+# OSG.py-specific): createEGLWindow() (an ordinary X11 window, but driven by EGL instead of GLX)
+# and createGBMWindow() (no X11 at all - direct DRM/KMS scanout). Both are skeleton/proof-of-
+# concept implementations; see osgx/GraphicsWindowEGL.hpp / osgx/GraphicsWindowGBM.hpp for
+# caveats - createGBMWindow() in particular requires exclusive DRM master access, so it will fail
+# if an X server already owns the GPU (run it from a bare TTY instead).
+#
+# osgx.platform also has X11 window helpers that don't need a custom GraphicsWindow at all --
+# alwaysOnTop(), listMonitors(), moveWindow() -- see examples/osgx-platform.cpp in the osgx repo
+# for those.
 #
 # OSG_WINDOW is deliberately left unset: setting it would trigger OSG's normal
 # windowing path, which is exactly what we're replacing here by assigning our
@@ -43,7 +49,7 @@ if __name__ == "__main__":
 	traits.width = 800
 	traits.height = 600
 
-	gc = linux.createGBMWindow(traits) if gbm else linux.createEGLWindow(traits)
+	gc = osgx.platform.createGBMWindow(traits) if gbm else osgx.platform.createEGLWindow(traits)
 
 	if not gc or not gc.valid():
 		sys.exit(f"Failed to create {'GBM' if gbm else 'EGL'} window")

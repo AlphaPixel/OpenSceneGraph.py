@@ -119,10 +119,10 @@ if __name__ == "__main__":
 	r = osg.Geode()
 
 	r.drawables.append(g)
-	r.stateSet.setMode(GL_PROGRAM_POINT_SIZE, osg.StateAttribute.Values.ON)
-	r.stateSet.setMode(GL_VERTEX_PROGRAM_POINT_SIZE, osg.StateAttribute.Values.ON)
+	r.stateSet.modes[GL_PROGRAM_POINT_SIZE] = osg.StateAttribute.Values.ON
+	r.stateSet.modes[GL_VERTEX_PROGRAM_POINT_SIZE] = osg.StateAttribute.Values.ON
 	# r.stateSet.setMode(GL_POINT_SPRITE, osg.StateAttribute.Values.ON)
-	r.stateSet.setMode(GL_BLEND, osg.StateAttribute.Values.ON)
+	r.stateSet.modes[GL_BLEND] = osg.StateAttribute.Values.ON
 	# r.stateSet.setMode(GL_DEPTH_TEST, osg.StateAttribute.Values.OFF)
 	r.stateSet.attributes.append(osg.Program(name="NumPy Points DEMO", shaders=(
 		osg.Shader(osg.Shader.VERTEX, VERTEX_SHADER),

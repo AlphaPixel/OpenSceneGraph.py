@@ -339,7 +339,7 @@ def build_shockwave(max_radius=4.0, duration=0.6, ring_width=0.3):
 	ss.attributes[osg.StateAttribute.DEPTH] = (
 		osg.Depth(osg.Depth.LESS, 0.0, 1.0, False), osg.StateAttribute.ON
 	)
-	ss.setMode(GL_CULL_FACE, osg.StateAttribute.OFF)
+	ss.modes[GL_CULL_FACE] = osg.StateAttribute.OFF
 	ss.renderingHint = osg.StateSet.TRANSPARENT_BIN
 
 	ss.uniforms["quadSize"] = quad_size
@@ -566,7 +566,7 @@ def build_smoke(
 	ss.attributes[osg.StateAttribute.DEPTH] = (
 		osg.Depth(osg.Depth.LESS, 0.0, 1.0, False), osg.StateAttribute.ON
 	)
-	ss.setMode(GL_CULL_FACE, osg.StateAttribute.OFF)
+	ss.modes[GL_CULL_FACE] = osg.StateAttribute.OFF
 	ss.renderingHint = osg.StateSet.TRANSPARENT_BIN
 
 	ss.uniforms["startDelay"] = start_delay
@@ -736,8 +736,8 @@ def build_embers(num_points=220, duration=1.6, launch_speed=4.0, gravity=6.0, ba
 	ss = r.stateSet
 
 	ss.attributes.append(p)
-	ss.setMode(GL_PROGRAM_POINT_SIZE, osg.StateAttribute.ON)
-	ss.setMode(GL_VERTEX_PROGRAM_POINT_SIZE, osg.StateAttribute.ON)
+	ss.modes[GL_PROGRAM_POINT_SIZE] = osg.StateAttribute.ON
+	ss.modes[GL_VERTEX_PROGRAM_POINT_SIZE] = osg.StateAttribute.ON
 	ss.attributes[osg.StateAttribute.BLENDFUNC] = (osg.BlendFunc(GL_ONE, GL_ONE), osg.StateAttribute.ON)
 	ss.attributes[osg.StateAttribute.DEPTH] = (
 		osg.Depth(osg.Depth.LESS, 0.0, 1.0, False), osg.StateAttribute.ON
@@ -793,7 +793,7 @@ def build_fire(
 	ss.attributes[osg.StateAttribute.DEPTH] = (
 		osg.Depth(osg.Depth.LESS, 0.0, 1.0, False), osg.StateAttribute.ON
 	)
-	ss.setMode(GL_CULL_FACE, osg.StateAttribute.OFF)
+	ss.modes[GL_CULL_FACE] = osg.StateAttribute.OFF
 	ss.renderingHint = osg.StateSet.TRANSPARENT_BIN
 
 	ss.uniforms["duration"] = duration
@@ -985,7 +985,7 @@ def build_flash_camera(width, height, duration=0.25):
 	ss.attributes[osg.StateAttribute.BLENDFUNC] = (
 		osg.BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA), osg.StateAttribute.ON
 	)
-	ss.setMode(GL_DEPTH_TEST, osg.StateAttribute.OFF)
+	ss.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF
 	ss.uniforms["duration"] = duration
 
 	cam.children.append(g)

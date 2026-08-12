@@ -1207,7 +1207,7 @@ if __name__ == "__main__":
 
 	GL_TEXTURE_CUBE_MAP_SEAMLESS = 0x884F
 
-	root.stateSet.setMode(GL_TEXTURE_CUBE_MAP_SEAMLESS, osg.StateAttribute.ON)
+	root.stateSet.modes[GL_TEXTURE_CUBE_MAP_SEAMLESS] = osg.StateAttribute.ON
 
 	# --- Viewer ------------------------------------------------------------- #
 	v = osgViewer.Viewer()

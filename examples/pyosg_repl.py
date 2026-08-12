@@ -42,6 +42,7 @@ os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
 os.environ.setdefault("OSG_THREADING", "SingleThreaded")
 
 import asyncio
+import contextlib
 import math
 import time
 import traceback
@@ -58,6 +59,61 @@ class DebugHandler(osgGA.GUIEventHandler):
 		if self.debug:
 			if not ea.type == osgGA.GUIEventAdapter.FRAME:
 				print(f"DebugHandler.handle(self={self}, ea={ea}, aa={aa}) type={ea.type}")
+
+class AgentInputLock(osgGA.GUIEventHandler):
+	"""Swallows user input (mouse/keyboard) while locked, so an agent driving a live viewer
+	from the REPL can do deterministic work -- read/write uniforms, pose the camera, queue a
+	capture -- without racing the user's own mouse/keyboard on the same window.
+
+	The race this exists for: a user keypress handled by some other GUIEventHandler (e.g. a
+	"retrigger the effect" key) landing on the same frame as the agent independently reading
+	or writing state through the REPL -- two uncoordinated control sources on one live viewer,
+	each individually correct, racing each other.
+
+	FRAME/RESIZE/CLOSE_WINDOW/etc. always pass through even while locked, so continuous
+	rendering and any handler that steps its own animation off FRAME keep working -- only
+	events a human could have generated at the keyboard/mouse are swallowed.
+
+	IMPORTANT: this is COOPERATIVE, not enforced -- OSG's own eventHandlers dispatch loop
+	(Viewer::eventTraversal()) calls every handler for every event regardless of what
+	earlier handlers returned; there is no "stop propagation" mechanism at that level.
+	What actually gates things is `osgGA::Event.handled`: `GUIEventHandler::handle()`'s C++
+	wrapper (the one OSG's loop actually calls) sets `ea.handled = True` whenever your
+	Python `handle(ea, aa)` override returns `True`, and every WELL-BEHAVED handler after
+	it is expected to check `ea.handled` at the top of its own `handle()` and bail out if
+	it's already set -- exactly how OSG's own `StandardManipulator` (the base of
+	`TrackballManipulator` and friends) already does it, which is why camera-manipulator
+	input is blocked automatically with zero extra code. A handler that doesn't check
+	`ea.handled` (an old example script's own custom handler, say) will keep firing
+	regardless of this lock -- there's no way to force it from here, only to follow the
+	same convention it should already be following. `insert()`-installed at
+	`eventHandlers[0]` only guarantees this handler runs, and therefore sets `ea.handled`,
+	BEFORE any other handler in the list sees the event -- it doesn't make later handlers
+	respect that flag if they were never written to check it.
+
+	`ViewerREPLController` installs one of these at `eventHandlers[0]` (first refusal, ahead
+	of whatever handlers the caller already appended) and exposes it via `.lock_input()`/
+	`.unlock_input()`/`.locked_input()` rather than needing to be constructed directly.
+	"""
+
+	_INPUT_EVENTS = frozenset((
+		osgGA.GUIEventAdapter.PUSH,
+		osgGA.GUIEventAdapter.RELEASE,
+		osgGA.GUIEventAdapter.DOUBLECLICK,
+		osgGA.GUIEventAdapter.DRAG,
+		osgGA.GUIEventAdapter.MOVE,
+		osgGA.GUIEventAdapter.SCROLL,
+		osgGA.GUIEventAdapter.KEYDOWN,
+		osgGA.GUIEventAdapter.KEYUP,
+	))
+
+	def __init__(self):
+		super().__init__()
+
+		self.locked = False
+
+	def handle(self, ea, aa):
+		return self.locked and ea.type in self._INPUT_EVENTS
 
 class REPLCameraManipulator(osgGA.CameraManipulator):
 	def __init__(self):
@@ -323,9 +379,63 @@ class ViewerREPLController(MainLoopController):
 		self._capture_callback = CaptureQueueCallback(self)
 		self.viewer.camera.finalDrawCallback = self._capture_callback
 
+		# insert(0, ...), not append() -- first refusal ahead of whatever handlers the caller
+		# already appended (e.g. pyosg-praxis.py's PraxisKeyHandler) before calling repl().
+		self.input_lock = AgentInputLock()
+		self.viewer.eventHandlers.insert(0, self.input_lock)
+
 	@property
 	def steps(self):
 		return self.state["steps"]
+
+	@property
+	def input_locked(self):
+		return self.input_lock.locked
+
+	def lock_input(self, title="LockedByAgent"):
+		"""Start swallowing user mouse/keyboard input -- call before deterministic work
+		(uniform reads/writes, camera posing, queued captures) that shouldn't race the user
+		touching the same live window. See AgentInputLock above for exactly what's swallowed.
+		"""
+
+		self.input_lock.locked = True
+		self._set_window_title(title)
+
+	def unlock_input(self, title="Ready"):
+		"""Stop swallowing user input -- call once the deterministic work is done."""
+
+		self.input_lock.locked = False
+		self._set_window_title(title)
+
+	@contextlib.contextmanager
+	def locked_input(self, locked_title="LockedByAgent", ready_title="Ready"):
+		"""`with controller.locked_input(): ...` -- lock, run the block, always unlock after,
+		even on exception. A plain (non-async) context manager is enough here: locking itself
+		is synchronous, and `with` around `await`-ing code inside is already valid Python, so
+		REPL blocks needing both (e.g. `with controller.locked_input(): await
+		controller.capture_framebuffer(...)`) work without an async variant.
+		"""
+
+		self.lock_input(locked_title)
+
+		try:
+			yield
+
+		finally:
+			self.unlock_input(ready_title)
+
+	def _set_window_title(self, title):
+		# osgx is a sibling project (not every environment running this module has it built),
+		# and window retitling is cosmetic status, not core lock behavior -- so this is soft,
+		# best-effort: a missing osgx, a non-X11 backend, or any other failure here must never
+		# prevent lock_input()/unlock_input() from doing the part that actually matters.
+		try:
+			import osgx
+
+			osgx.platform.setWindowTitle(self.viewer, title)
+
+		except Exception:
+			pass
 
 	def _osg_step(self):
 		self.viewer.frame()

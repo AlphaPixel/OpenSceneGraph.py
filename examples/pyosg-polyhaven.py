@@ -407,9 +407,9 @@ def build_cross_geode(cubemap, mip_uniform):
 
 	ss = geode.stateSet
 
-	ss.setMode(GL_CULL_FACE, osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE)
-	ss.setMode(GL_DEPTH_TEST, osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE)
-	ss.setMode(GL_TEXTURE_CUBE_MAP_SEAMLESS, osg.StateAttribute.ON)
+	ss.modes[GL_CULL_FACE] = osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
+	ss.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
+	ss.modes[GL_TEXTURE_CUBE_MAP_SEAMLESS] = osg.StateAttribute.ON
 	ss.attributes.append(p)
 	ss.textureAttributes[0] = cubemap
 	ss.uniforms["envMap"] = 0
