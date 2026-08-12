@@ -297,3 +297,40 @@ preference over hand-reimplemented math:
 combined = a * b
 print(combined * known_vector)  # does this match "apply a, then b", or the reverse?
 ```
+
+## 10. `MatrixTransform.matrix` is a live C++ alias, not a Python snapshot
+
+`osg::MatrixTransform::getMatrix()` returns `const osg::Matrix&`. pyosg
+intentionally preserves that low-copy C++ contract: reading `.matrix` gives a
+live reference to the transform's native matrix, tied to the transform's
+lifetime. It is useful when inspecting current state, but it is **not** safe
+as a saved baseline for later transform composition:
+
+```python
+live = transform.matrix                 # aliases the native matrix
+snapshot = osg.Matrix(transform.matrix) # independent value copy
+```
+
+This matters in any callback that rebuilds a pose from rest each frame. This
+looks reasonable but compounds the rotation on every update because `rest`
+aliases the matrix being assigned:
+
+```python
+rest = transform.matrix
+transform.matrix = osg.Matrix.rotate(angle, axis) * rest  # WRONG as a repeated update
+```
+
+Take the explicit `osg.Matrix(...)` copy once instead:
+
+```python
+rest = osg.Matrix(transform.matrix)
+
+def update(node, nv):
+	transform.matrix = osg.Matrix.rotate(angle, axis) * rest
+	return True
+```
+
+This was found while driving a glTF G1 skeleton from MotionBricks: a fixed
+0.5-radian knee bend visibly accumulated into a rapid 360-degree windmill.
+`test/osg_Transform.py::test_matrixtransform_matrix_is_a_live_reference`
+locks down both the alias and explicit-snapshot behavior.

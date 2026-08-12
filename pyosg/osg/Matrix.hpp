@@ -57,7 +57,11 @@ namespace detail {
 			.def(py::self == py::self)
 			.def(py::self != py::self)
 			.def(py::self * py::self)
-			.def(py::self *= py::self)
+			.def("__imul__", [](T& self, const T& other) -> T& {
+				self *= other;
+
+				return self;
+			}, py::return_value_policy::reference_internal)
 
 			/* .def("preMult", py::overload_cast<const osg::Vec3f&>(&T::preMult))
 			.def("preMult", py::overload_cast<const osg::Vec3d&>(&T::preMult))
@@ -75,7 +79,7 @@ namespace detail {
 			})
 
 			// A far more Pythonic interface where 2 indices are always specified.
-			.def("__getitem__", [](const T& self, std::pair<size_t, size_t> rc) {
+			.def("__getitem__", [](const T& self, std::pair<py::ssize_t, py::ssize_t> rc) {
 				auto [row, col] = n_indices<int>(4, rc.first, rc.second);
 
 				return self(row, col);
@@ -105,7 +109,7 @@ namespace detail {
 				throw py::type_error("Index must be int or (row, col)");
 			}) */
 
-			.def("__setitem__", [](T& self, std::pair<size_t, size_t> rc, value_type value) {
+			.def("__setitem__", [](T& self, std::pair<py::ssize_t, py::ssize_t> rc, value_type value) {
 				auto [row, col] = n_indices<int>(4, rc.first, rc.second);
 
 				return self(row, col) = value;
@@ -235,13 +239,13 @@ namespace detail {
 
 				return py::make_tuple(fovy, ar, near, far);
 			})
-			.def("getLookAt", [](const T& self, value_type distance=static_cast<value_type>(1.0)) {
+			.def("getLookAt", [](const T& self, value_type distance) {
 				typename MatrixTraits<T>::Vec3 eye, center, up;
 
 				self.getLookAt(eye, center, up, distance);
 
 				return py::make_tuple(eye, center, up);
-			})
+			}, "distance"_a=static_cast<value_type>(1.0))
 
 			.def_static("identity", &T::identity)
 			.def_static("scale", py::overload_cast<const osg::Vec3f&>(&T::scale))

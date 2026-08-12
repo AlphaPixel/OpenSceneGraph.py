@@ -40,6 +40,27 @@ def test_matrixtransform_construction():
 	assert mt.matrix == m
 	assert refcmp(mt, 1, 1)
 
+def test_matrixtransform_matrix_is_a_live_reference():
+	initial = Matrix.translate(1, 2, 3)
+	updated = Matrix.translate(4, 5, 6)
+	mt = MatrixTransform(initial)
+
+	live = mt.matrix
+	snapshot = Matrix(mt.matrix)
+
+	mt.matrix = updated
+
+	# MatrixTransform::getMatrix() returns const osg::Matrix&, deliberately
+	# exposed as a low-copy live alias rather than an implicit value copy.
+	assert live == updated
+	assert snapshot == initial
+
+	# A snapshot is independent of later native transform assignments.
+	mt.matrix = Matrix.translate(7, 8, 9)
+
+	assert live == mt.matrix
+	assert snapshot == initial
+
 def test_positionattitudetransform_construction_kwargs():
 	pat = PositionAttitudeTransform(
 		position=Vec3d(1, 2, 3),

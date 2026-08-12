@@ -60,8 +60,13 @@ void bind_Transform(py::module_& m) {
 		.def(py::init(pyx::kwargs_ctor<osg::MatrixTransform, const osg::Matrix&>()))
 		.def_property(
 			"matrix",
-			&osg::MatrixTransform::getMatrix,
-			&osg::MatrixTransform::setMatrix
+			py::cpp_function(
+				&osg::MatrixTransform::getMatrix,
+				py::return_value_policy::reference_internal
+			),
+			&osg::MatrixTransform::setMatrix,
+			"Live reference to the transform's native matrix. "
+			"Use osg.Matrix(transform.matrix) when retaining a value snapshot."
 		)
 	;
 
