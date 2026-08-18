@@ -139,13 +139,11 @@ void bind_Uniform(py::module_& m) {
 	;
 
 #if 0
-        /** Get the number of elements required for the internal data array.
-          * Returns 0 if the osg::Uniform is not properly configured.  */
-        unsigned int getInternalArrayNumElements() const;
+			unsigned int getInternalArrayNumElements() const;
 
-        bool operator <  (const Uniform& rhs) const { return compare(rhs)<0; }
-        bool operator == (const Uniform& rhs) const { return compare(rhs)==0; }
-        bool operator != (const Uniform& rhs) const { return compare(rhs)!=0; }
+			bool operator < (const Uniform& rhs) const { return compare(rhs)<0; }
+			bool operator == (const Uniform& rhs) const { return compare(rhs)==0; }
+			bool operator != (const Uniform& rhs) const { return compare(rhs)!=0; }
 #endif
 
 	py::class_<detail::UniformIterator>(uniform, "_UniformIterator", py::module_local())
@@ -253,7 +251,7 @@ void bind_Uniform(py::module_& m) {
 
 		.def_property("type", &osg::Uniform::getType, &osg::Uniform::setType)
 		.def_property("numElements", &osg::Uniform::getNumElements, &osg::Uniform::setNumElements)
-		.def_property_readonly("nameID", py::overload_cast<>(&osg::Uniform::getNameID, py::const_))
+		// .def_property_readonly("nameID", py::overload_cast<>(&osg::Uniform::getNameID, py::const_))
 
 		.def_property(
 			"value",
