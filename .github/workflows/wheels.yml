@@ -1,0 +1,48 @@
+name: Build Linux wheel
+
+on:
+  workflow_dispatch:
+
+# The workflow only needs to read the repository and upload its wheel artifact.
+permissions:
+  contents: read
+
+jobs:
+  linux-x86_64-cp312:
+    name: Linux x86-64 / CPython 3.12 / manylinux_2_28
+    runs-on: [self-hosted, linux, x64]
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # osgx is part of the pinned wheel dependency graph.
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Build and test repaired wheel
+        uses: pypa/cibuildwheel@v3
+        env:
+          CIBW_BUILD: cp312-manylinux_x86_64
+          CIBW_ARCHS_LINUX: x86_64
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+          # cibuildwheel installs the repaired wheel into an isolated test
+          # environment before executing this command.
+          CIBW_TEST_COMMAND: >-
+            python -c "import OpenSceneGraph; import osgx;
+            registry = OpenSceneGraph.osgDB.Registry.instance();
+            assert registry.getReaderWriterForExtension('gltf');
+            assert registry.getReaderWriterForExtension('ktx2')"
+
+      - name: Inspect repaired wheel dependencies
+        run: >-
+          docker run --rm
+          --volume "${{ github.workspace }}/wheelhouse:/wheelhouse:ro"
+          quay.io/pypa/manylinux_2_28_x86_64
+          auditwheel show /wheelhouse/*.whl
+
+      - name: Upload repaired wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenSceneGraph-cp312-manylinux_2_28-x86_64
+          path: wheelhouse/*.whl
+          if-no-files-found: error
