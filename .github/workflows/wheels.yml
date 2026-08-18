@@ -1,6 +1,11 @@
 name: Build Linux wheel
 
+# on:
+#  workflow_dispatch:
+
 on:
+  push:
+    branches: [cubicool-wip]
   workflow_dispatch:
 
 # The workflow only needs to read the repository and upload its wheel artifact.
