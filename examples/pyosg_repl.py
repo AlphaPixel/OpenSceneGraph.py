@@ -24,6 +24,8 @@
 #   n = _osg_repl_state["frames"]
 #   await asyncio.sleep(1); _osg_repl_state["frames"] - n
 #   await _osg_repl_controller.capture_framebuffer("frame.png")  # raw framebuffer PNG
+#   _osg_repl_controls.input.locked = True  # temporarily block mouse/keyboard input
+#   _osg_repl_controls.frames.target_fps = 30  # best-effort viewer pacing
 #
 # Type `exit` or Ctrl-D to leave the REPL and close the viewer.
 
@@ -285,10 +287,11 @@ class CinematicOrbitManipulator(osgGA.CameraManipulator):
 class CaptureRequest:
 	"""Awaitable result of a capture queued for the next rendered frame."""
 
-	def __init__(self, kind, filename, label=None):
+	def __init__(self, kind, filename=None, label=None, include_image=False):
 		self.kind = kind
 		self.filename = filename
 		self.label = label
+		self.include_image = include_image
 		self._future = asyncio.get_event_loop().create_future()
 
 	def __await__(self):
@@ -324,16 +327,21 @@ class CaptureQueueCallback(osg.Camera.DrawCallback):
 				else:
 					image = self._read_texture(ri, texture, data_type)
 
-				if not osgDB.writeImageFile(image, request.filename):
-					raise RuntimeError(f"failed to write capture {request.filename!r}")
+				if request.filename is not None:
+					if not osgDB.writeImageFile(image, request.filename):
+						raise RuntimeError(f"failed to write capture {request.filename!r}")
 
 				result = self.controller._capture_metadata(
 					request, image, data_type,
 				)
 
+				if request.include_image:
+					result["image"] = image
+
 				request._future.set_result(result)
 
-				print(f"Wrote {request.kind}: {request.filename}", flush=True)
+				if request.filename is not None:
+					print(f"Wrote {request.kind}: {request.filename}", flush=True)
 
 			except Exception as exc:
 				request._future.set_exception(exc)
@@ -362,6 +370,154 @@ class CaptureQueueCallback(osg.Camera.DrawCallback):
 		image.readImageFromCurrentTexture(ri.contextID, False, data_type)
 
 		return image
+
+
+class AgentInputControls:
+	"""Model-facing ownership controls for human mouse/keyboard input."""
+
+	def __init__(self, controller):
+		self._controller = controller
+
+	@property
+	def locked(self):
+		return self._controller.input_locked
+
+	@locked.setter
+	def locked(self, value):
+		if not isinstance(value, bool):
+			raise TypeError("input.locked must be a bool")
+
+		if value:
+			self._controller.lock_input()
+
+		else:
+			self._controller.unlock_input()
+
+	def lock(self, title="LockedByAgent"):
+		self._controller.lock_input(title)
+
+	def unlock(self, title="Ready"):
+		self._controller.unlock_input(title)
+
+	def locked_input(self, locked_title="LockedByAgent", ready_title="Ready"):
+		return self._controller.locked_input(locked_title, ready_title)
+
+
+class AgentFrameControls:
+	"""Model-facing viewer-frame pump controls."""
+
+	def __init__(self, controller):
+		self._controller = controller
+
+	@property
+	def target_fps(self):
+		return self._controller.target_fps
+
+	@target_fps.setter
+	def target_fps(self, value):
+		if value is not None and (
+			not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0
+		):
+			raise ValueError("frames.target_fps must be positive or None")
+
+		self._controller.target_fps = value
+
+	@property
+	def paused(self):
+		return not self._controller.running
+
+	@paused.setter
+	def paused(self, value):
+		if not isinstance(value, bool):
+			raise TypeError("frames.paused must be a bool")
+
+		if value:
+			self._controller.pause()
+
+		else:
+			self._controller.resume()
+
+	def step(self, count=1):
+		return self._controller.step(count)
+
+
+class AgentWindowControls:
+	"""Model-facing best-effort controls for the viewer's native window."""
+
+	def __init__(self, controller):
+		self._controller = controller
+		self._always_on_top = None
+		self._title = None
+
+	@property
+	def always_on_top(self):
+		return self._always_on_top
+
+	@always_on_top.setter
+	def always_on_top(self, value):
+		if not isinstance(value, bool):
+			raise TypeError("window.always_on_top must be a bool")
+
+		try:
+			import osgx
+
+			osgx.platform.alwaysOnTop(self._controller.viewer, value)
+
+		except Exception as exc:
+			raise RuntimeError("always-on-top is unavailable for this viewer") from exc
+
+		self._always_on_top = value
+
+	@property
+	def title(self):
+		return self._title
+
+	@title.setter
+	def title(self, value):
+		if not isinstance(value, str):
+			raise TypeError("window.title must be a str")
+
+		self._controller._set_window_title(value)
+		self._title = value
+
+
+class AgentCaptureControls:
+	"""Model-facing aliases for the controller's GL-safe capture requests."""
+
+	def __init__(self, controller):
+		self._controller = controller
+
+	def framebuffer(self, filename="frame.png", label=None):
+		return self._controller.capture_framebuffer(filename, label)
+
+	def framebuffer_image(self, label=None):
+		return self._controller.capture_framebuffer_image(label)
+
+	def texture(self, texture, filename="texture.png", data_type=GL_UNSIGNED_BYTE, label=None):
+		return self._controller.capture_texture(texture, filename, data_type, label)
+
+
+class AgentControls:
+	"""Central, model-facing controls for a live :class:`ViewerREPLController`."""
+
+	def __init__(self, controller):
+		self._controller = controller
+		self.input = AgentInputControls(controller)
+		self.frames = AgentFrameControls(controller)
+		self.window = AgentWindowControls(controller)
+		self.capture = AgentCaptureControls(controller)
+
+	@property
+	def status(self):
+		return {
+			"input_locked": self.input.locked,
+			"target_fps": self.frames.target_fps,
+			"frames_paused": self.frames.paused,
+			"always_on_top": self.window.always_on_top,
+			"window_title": self.window.title,
+			"frames": self._controller.state["frames"],
+			"errors": self._controller.state["errors"],
+		}
 
 
 class ViewerREPLController(MainLoopController):
@@ -457,6 +613,14 @@ class ViewerREPLController(MainLoopController):
 
 		return request
 
+	def capture_framebuffer_image(self, label=None):
+		"""Capture the next framebuffer in RAM; the result contains an ``image`` key."""
+		request = CaptureRequest("framebuffer", label=label, include_image=True)
+
+		self._capture_queue.append((request, None, GL_UNSIGNED_BYTE))
+
+		return request
+
 	def capture_texture(
 		self,
 		texture,
@@ -505,6 +669,7 @@ def repl(viewer, namespace=None, frame_callback=None):
 	controller = ViewerREPLController(viewer, frame_callback)
 	namespace["_osg_repl_controller"] = controller
 	namespace["_osg_repl_state"] = controller.state
+	namespace["_osg_repl_controls"] = AgentControls(controller)
 
 	return drive(controller=controller, namespace=namespace)
 
