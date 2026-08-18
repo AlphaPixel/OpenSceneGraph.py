@@ -13,4 +13,10 @@ license = "MIT"
 [tool.scikit-build]
 # Distribution builds always use the project-pinned OSG rather than inheriting
 # an arbitrary system installation.
-cmake.args = ["-DPYOSG_FETCH_OSG=ON"]
+# OpenSceneGraph 3.6.5 still declares pre-3.5 policy compatibility. CMake 4
+# requires this explicit compatibility floor while configuring that pinned
+# third-party source.
+cmake.args = [
+    "-DPYOSG_FETCH_OSG=ON",
+    "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+]
