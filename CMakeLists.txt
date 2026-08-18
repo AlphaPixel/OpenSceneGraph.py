@@ -1,8 +1,11 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.18)
 
 project(OpenSceneGraph-python LANGUAGES C CXX)
 
-find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+# An extension module needs Python headers but must not link to libpython on
+# Unix. manylinux deliberately omits that embedding library, so request the
+# module-development component rather than the aggregate Development one.
+find_package(Python3 COMPONENTS Interpreter Development.Module REQUIRED)
 # find_package(pybind11 REQUIRED)
 add_subdirectory("etc/pybind11")
 
@@ -220,7 +223,7 @@ set(PYOSG_SOURCES
 add_library(OpenSceneGraph_python STATIC ${PYOSG_SOURCES})
 
 target_link_libraries(OpenSceneGraph_python PRIVATE
-	Python3::Python
+	Python3::Module
 	pybind11::module
 	${PYOSG_OSG_LIBRARIES}
 )
@@ -302,13 +305,16 @@ if(NOT PYOSG_EMBEDDED)
 	endif()
 
 else()
+	# This optional executable embeds the interpreter, unlike the extension
+	# module above, so it genuinely needs the embedding library.
+	find_package(Python3 COMPONENTS Development.Embed REQUIRED)
 	add_executable(embed
 		"pyosg/OpenSceneGraph-python.cpp"
 		"etc/embed.cpp"
 	)
 
 	target_compile_definitions(embed PRIVATE PYOSG_EMBEDDED=1)
-	target_link_libraries(embed PRIVATE pybind11::embed OpenSceneGraph_python)
+	target_link_libraries(embed PRIVATE Python3::Python pybind11::embed OpenSceneGraph_python)
 	target_include_directories(embed PRIVATE "${CMAKE_SOURCE_DIR}/pyosg")
 endif()
 
