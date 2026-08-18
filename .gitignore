@@ -3,6 +3,7 @@ etc/__pycache__
 examples/__pycache__
 examples/pyosg-lighting/__pycache__
 BUILD-*
+dist
 
 # Prerequisites
 *.d

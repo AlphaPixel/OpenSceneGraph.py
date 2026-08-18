@@ -1,0 +1,16 @@
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "OpenSceneGraph"
+version = "0.1.0"
+description = "Modern Python bindings for OpenSceneGraph"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+
+[tool.scikit-build]
+# Distribution builds always use the project-pinned OSG rather than inheriting
+# an arbitrary system installation.
+cmake.args = ["-DPYOSG_FETCH_OSG=ON"]

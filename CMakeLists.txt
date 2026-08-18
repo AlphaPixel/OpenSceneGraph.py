@@ -21,6 +21,8 @@ set(PYOSG_OSGX_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/etc/osgx"
     CACHE PATH "Path to the osgx source checkout")
 set(PYOSG_OSG_GIT_TAG "a827840baf0786d72e11ac16d5338a4ee25779db"
     CACHE STRING "OpenSceneGraph revision (OpenSceneGraph-3.6.5)")
+set(PYOSG_OSG_PLUGIN_DIR "osgPlugins-3.6.5"
+    CACHE STRING "Private OSG plugin directory for the pinned OpenSceneGraph release")
 
 if(PYOSG_FETCH_OSG)
     include(FetchContent)
@@ -53,7 +55,14 @@ if(PYOSG_FETCH_OSG)
         GIT_SHALLOW TRUE
         GIT_PROGRESS TRUE
     )
-    FetchContent_MakeAvailable(OpenSceneGraph)
+    FetchContent_GetProperties(OpenSceneGraph)
+    if(NOT openscenegraph_POPULATED)
+        FetchContent_Populate(OpenSceneGraph)
+    endif()
+
+    # The parent owns the wheel layout. Exclude OSG's normal headers,
+    # pkg-config files, and broad library installation from this install.
+    add_subdirectory("${openscenegraph_SOURCE_DIR}" "${openscenegraph_BINARY_DIR}" EXCLUDE_FROM_ALL)
 
     set(PYOSG_OSG_LIBRARIES
         OpenThreads
@@ -61,6 +70,9 @@ if(PYOSG_FETCH_OSG)
         osgAnimation
         osgDB
         osgGA
+        # osgViewer and osgAnimation depend on osgText at runtime. Keep this
+        # explicit so the first wheel contains its complete OSG runtime.
+        osgText
         osgUtil
         osgViewer
     )
@@ -85,13 +97,15 @@ if(PYOSG_FETCH_OSG OR PYOSG_BUILD_OSGX)
             "Initialize etc/osgx or pass -DPYOSG_OSGX_SOURCE_DIR=/path/to/osgx.")
     endif()
 
-    # This project owns the dependency graph for the pinned path. Keep osgx's
-    # optional products out of the initial build; only osgx::osgx is required.
+    # The wheel owns this complete dependency graph. Build osgx's Python
+    # module and its deliberately supported osgDB plugins, but no examples or
+    # standalone installation rules.
     set(OSGX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(OSGX_BUILD_UTILS OFF CACHE BOOL "" FORCE)
-    set(OSGX_BUILD_PYTHON OFF CACHE BOOL "" FORCE)
-    set(OSGX_BUILD_KTX2 OFF CACHE BOOL "" FORCE)
-    set(OSGX_BUILD_GLTF OFF CACHE BOOL "" FORCE)
+    set(OSGX_BUILD_PYTHON ON CACHE BOOL "" FORCE)
+    set(OSGX_BUILD_KTX2 ON CACHE BOOL "" FORCE)
+    set(OSGX_BUILD_GLTF ON CACHE BOOL "" FORCE)
+    set(OSGX_OPENSCENEGRAPH_PY_DIR "${CMAKE_CURRENT_SOURCE_DIR}" CACHE PATH "" FORCE)
     set(OSGX_INSTALL OFF CACHE BOOL "" FORCE)
     add_subdirectory("${PYOSG_OSGX_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/_deps/osgx-build" EXCLUDE_FROM_ALL)
 endif()
@@ -213,9 +227,9 @@ target_link_libraries(OpenSceneGraph_python PRIVATE
 
 
 if(PYOSG_FETCH_OSG OR PYOSG_BUILD_OSGX)
-	# osgx is EXCLUDE_FROM_ALL so ordinary OpenSceneGraph.py builds stay focused,
-	# but building the extension also produces the core osgx shared library.
-	add_dependencies(OpenSceneGraph_python osgx)
+	# osgx is EXCLUDE_FROM_ALL, so make all wheel runtime products dependencies
+	# of the extension target.
+	add_dependencies(OpenSceneGraph_python osgx osgx_python osgdb_gltf osgdb_ktx2)
 endif()
 target_compile_options(OpenSceneGraph_python PRIVATE ${PYOSG_COMPILE_OPTIONS})
 	target_compile_features(OpenSceneGraph_python PUBLIC cxx_std_20)
@@ -249,6 +263,43 @@ if(NOT PYOSG_EMBEDDED)
 	pybind11_add_module(OpenSceneGraph "pyosg/OpenSceneGraph-python.cpp")
 
 	target_link_libraries(OpenSceneGraph PRIVATE OpenSceneGraph_python)
+
+	# Keep the extension and project-built OSG libraries together in the wheel.
+	# $ORIGIN makes the installed extension independent of the CMake build tree
+	# and avoids relying on LD_LIBRARY_PATH at import time.
+	if(PYOSG_FETCH_OSG)
+		set_target_properties(OpenSceneGraph ${PYOSG_OSG_LIBRARIES} PROPERTIES
+			BUILD_RPATH "$ORIGIN"
+			INSTALL_RPATH "$ORIGIN"
+		)
+	endif()
+
+	install(TARGETS OpenSceneGraph
+		LIBRARY DESTINATION "."
+		RUNTIME DESTINATION "."
+		ARCHIVE DESTINATION "."
+	)
+
+	if(PYOSG_FETCH_OSG)
+		set_target_properties(osgx osgx_python ktx PROPERTIES
+			BUILD_RPATH "$ORIGIN"
+			INSTALL_RPATH "$ORIGIN"
+		)
+		set_target_properties(osgdb_gltf osgdb_ktx2 PROPERTIES
+			BUILD_RPATH "$ORIGIN/.."
+			INSTALL_RPATH "$ORIGIN/.."
+		)
+
+		install(TARGETS ${PYOSG_OSG_LIBRARIES} osgx osgx_python ktx
+			LIBRARY DESTINATION "."
+			RUNTIME DESTINATION "."
+			ARCHIVE DESTINATION "."
+		)
+		install(TARGETS osgdb_gltf osgdb_ktx2
+			LIBRARY DESTINATION "${PYOSG_OSG_PLUGIN_DIR}"
+			RUNTIME DESTINATION "${PYOSG_OSG_PLUGIN_DIR}"
+		)
+	endif()
 
 else()
 	add_executable(embed
