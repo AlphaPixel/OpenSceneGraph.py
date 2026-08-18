@@ -214,6 +214,50 @@ started` on the next call) on the exact same `await capture_framebuffer(...)`
 call in one session -- not yet root-caused, but treat kernel-backend
 screenshot capture as unproven until it's retested.
 
+### Model controls and video capture
+
+New sessions expose `_osg_repl_controls`, a model-facing facade over the
+controller. It deliberately keeps input ownership, viewer pacing, and video
+sampling as separate controls:
+
+```python
+controls = _osg_repl_controls
+
+controls.input.locked = True       # swallow human mouse/keyboard input
+controls.frames.target_fps = None  # uncapped viewer frame pump
+controls.frames.target_fps = 30    # best-effort viewer pacing
+controls.frames.paused = True      # stop the frame pump
+print(controls.status)
+```
+
+`target_fps=None` means **uncapped**, never "lock the user out." Use
+`controls.input.locked` (or `controls.input.locked_input()`) for explicit,
+cooperative input ownership. FRAME/resize/close events still pass through, so
+rendering continues while input is locked. `controls.window.always_on_top`
+uses `osgx.platform.alwaysOnTop()` when the native X11 window supports it.
+
+For a short MP4 with no intermediate image files, start the callback-driven
+recorder and let the viewer continue running:
+
+```python
+controls.capture.video("/tmp/take.mp4", fps=24, duration=5)
+print(controls.capture.video_status)
+```
+
+The recorder samples in the final-draw callback with a monotonic wall-clock
+schedule, streams RGB bytes directly to FFmpeg, and returns immediately so a
+user can keep manipulating the viewer. Confirmed live at 800x600: a 120-frame
+five-second H.264 take completed at about 23 real-time fps. Pass
+`lock_input=True` only when the capture must be deterministic; otherwise it
+would block the user's manipulator. A resize during a take changes the
+framebuffer dimensions and currently fails that capture rather than producing
+a malformed stream.
+
+The GPU readback is still **synchronous**: `osg.Image.readPixels()` runs in
+the draw callback, then the result is written to FFmpeg. The facade's
+asynchronous-looking behavior only means the video continues after the REPL
+call returns; it is not a PBO/fence-backed async GPU transfer yet.
+
 ## 7. Backend choice: tmux vs. kernel
 
 - **tmux**: visible, attachable (`tmux attach -t <name>`), and the flavor

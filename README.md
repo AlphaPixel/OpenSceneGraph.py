@@ -200,7 +200,7 @@ complete, runnable example in [`examples/pyosg-lighting`](examples/pyosg-lightin
 that builds directly on the one before it.
 
 > [!NOTE]
-> You will need our [osgGLTF](https://github.com/XenonOfArcticus/osgGLTF)
+> You will need our [osgx](https://github.com/cubicool/osgx)
 > to load GLTF 2.0 models. It is included as a submodule (see
 > [Building](#Building) for more information).
 
@@ -395,7 +395,7 @@ computed spherical-harmonics diffuse irradiance from an HDR environment.
 **10 - Dynamic IBL Probes** &middot; [`10-dynamicprobes.py`](examples/pyosg-lighting/10-dynamicprobes.py)
 
 Instead of loading a static `.ktx2` once, the specular environment cubemap
-is baked *live* on the GPU using `osgGLTF`'s C++ prefilter pipeline exposed
+is baked *live* on the GPU using `osgx`'s C++ prefilter pipeline exposed
 to Python. Press `r` to repaint the entire environment and watch the
 reflection rebake in real time.
 
@@ -476,16 +476,15 @@ defense:
 projects, each with Python bindings that are regularly tested against this
 library, cover more specialized functionality:
 
-- **[osgGLTF](https://github.com/XenonOfArcticus/osgGLTF)** - glTF 2.0
-  mesh/texture loading with full PBR/IBL support: base color, normal, ORM,
-  and emissive textures, plus specular/diffuse IBL prefiltering, live GPU
-  cubemap baking and (**very**) rudimentary GPU-based skeletal animation.
 - **[osgx](https://github.com/cubicool/osgx)** - modernized C++20 OpenSceneGraph
-  utility layer, plus two opt-in subsystems: `osgx::debug` (GL debug-extension
-  integration -- driver message callbacks, KHR debug groups, GPU timestamp
-  profiling for tools like Nsight/APITrace) and `osgx::imgui` (the ImGui-based
-  live-tuning widget system used for on-screen controls throughout the
-  Lighting Series examples).
+  utility layer, plus various opt-in subsystems: `osgx::debug` (GL
+  debug-extension integration -- driver message callbacks, KHR debug groups, GPU
+  timestamp profiling for tools like Nsight/APITrace) and `osgx::imgui` (the
+  ImGui-based live-tuning widget system used for on-screen controls throughout
+  the Lighting Series examples). `osgx::gltf` exposes glTF 2.0 mesh/texture
+  loading with full PBR/IBL support: base color, normal, ORM, and emissive
+  textures, plus specular/diffuse IBL prefiltering, live GPU cubemap baking and
+  (**very**) rudimentary GPU-based skeletal animation.
 - **[osgSlug](https://github.com/AlphaPixel/osgSlug)** - an OpenSceneGraph
   frontend for [slughorn](https://github.com/AlphaPixel/slughorn), bringing
   Eric Lengyel's GPU vector-text rendering technique

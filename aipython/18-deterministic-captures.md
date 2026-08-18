@@ -124,6 +124,40 @@ composite effect, every visible time-driven layer must implement the same
 clock contract; hide or freeze unrelated animated scenery, UI, camera shake,
 and particle layers before comparing capture bytes.
 
+## Short realtime video captures
+
+For a short MP4 rather than a one-off PNG, use the model-controls facade's
+callback-driven recorder:
+
+```python
+_osg_repl_controls.capture.video("/tmp/take.mp4", fps=24, duration=5)
+```
+
+It samples in the final-draw callback on a monotonic wall-clock schedule and
+streams raw RGB frames directly to FFmpeg. It is the right tool for recording
+a user's live camera manipulation because the call returns immediately and
+leaves input unlocked by default. Pass `lock_input=True` when a script is
+posing the camera or updating uniforms and a human must not race it:
+
+```python
+_osg_repl_controls.capture.video(
+	"/tmp/deterministic-take.mp4",
+	fps=24,
+	duration=5,
+	lock_input=True,
+)
+```
+
+For a reproducible video, first set every time-driven visible effect to its
+explicit age (and keep unrelated animation frozen) before starting the
+recorder. The video sampler controls *which wall-clock moments are captured*;
+it does not make shader time deterministic by itself.
+
+Current implementation note: video readback still uses synchronous
+`osg.Image.readPixels()` in the final-draw callback. It avoids the terminal
+IPython `asyncio.sleep()` scheduling granularity, but it is not yet a
+PBO/fence-backed asynchronous GPU transfer.
+
 ## Realtime handoff
 
 After inspecting an age, either resume the existing effect with

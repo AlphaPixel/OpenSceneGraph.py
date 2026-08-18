@@ -46,6 +46,7 @@ os.environ.setdefault("OSG_THREADING", "SingleThreaded")
 import asyncio
 import contextlib
 import math
+import subprocess
 import time
 import traceback
 
@@ -347,6 +348,11 @@ class CaptureQueueCallback(osg.Camera.DrawCallback):
 				request._future.set_exception(exc)
 				traceback.print_exc()
 
+		video = self.controller._video_capture
+
+		if video is not None:
+			video.capture(self)
+
 	def _read_framebuffer(self):
 		vp = self.controller.viewer.camera.viewport
 		if vp is None or not vp.valid:
@@ -370,6 +376,131 @@ class CaptureQueueCallback(osg.Camera.DrawCallback):
 		image.readImageFromCurrentTexture(ri.contextID, False, data_type)
 
 		return image
+
+
+class VideoCapture:
+	"""Stream timed framebuffer captures directly to an FFmpeg process."""
+
+	def __init__(self, controller, filename, fps=24, duration=5, lock_input=False):
+		if not isinstance(filename, str) or not filename:
+			raise ValueError("video filename must be a non-empty str")
+
+		if not isinstance(fps, (int, float)) or isinstance(fps, bool) or fps <= 0:
+			raise ValueError("video fps must be positive")
+
+		if not isinstance(duration, (int, float)) or isinstance(duration, bool) or duration <= 0:
+			raise ValueError("video duration must be positive")
+
+		if not isinstance(lock_input, bool):
+			raise TypeError("video lock_input must be a bool")
+
+		viewport = controller.viewer.camera.viewport
+
+		if viewport is None or not viewport.valid:
+			raise RuntimeError("video capture camera has no valid viewport")
+
+		self.controller = controller
+		self.filename = filename
+		self.fps = float(fps)
+		self.duration = float(duration)
+		self.width = int(viewport.width)
+		self.height = int(viewport.height)
+		self.frame_count = int(round(self.fps * self.duration))
+		self.captured_frames = 0
+		self.started_at = time.monotonic()
+		self.next_frame_at = self.started_at
+		self._input_was_locked = controller.input_locked
+		self._lock_input = lock_input
+		self._finished = False
+		self._error = None
+		self.process = subprocess.Popen([
+			"ffmpeg", "-y",
+			"-f", "rawvideo",
+			"-pixel_format", "rgb24",
+			"-video_size", f"{self.width}x{self.height}",
+			"-framerate", str(self.fps),
+			"-i", "pipe:0",
+			"-vf", "vflip",
+			"-c:v", "libx264",
+			"-pix_fmt", "yuv420p",
+			filename,
+		], stdin=subprocess.PIPE, bufsize=0)
+
+		if lock_input:
+			controller.lock_input("Recording video")
+
+	@property
+	def active(self):
+		return not self._finished
+
+	@property
+	def status(self):
+		return {
+			"filename": self.filename,
+			"fps": self.fps,
+			"duration": self.duration,
+			"size": (self.width, self.height),
+			"captured_frames": self.captured_frames,
+			"frame_count": self.frame_count,
+			"active": self.active,
+			"error": self._error,
+		}
+
+	def capture(self, callback):
+		if self._finished or time.monotonic() < self.next_frame_at:
+			return
+
+		try:
+			image = callback._read_framebuffer()
+			frame = memoryview(image).tobytes()
+
+			if len(frame) != self.width * self.height * 3:
+				raise RuntimeError(
+					f"expected {self.width * self.height * 3} RGB bytes, got {len(frame)}"
+				)
+
+			self.process.stdin.write(frame)
+			self.captured_frames += 1
+			self.next_frame_at += 1.0 / self.fps
+
+			if self.captured_frames == self.frame_count:
+				self.finish()
+
+		except Exception as exc:
+			self.fail(exc)
+			traceback.print_exc()
+
+	def finish(self):
+		if self._finished:
+			return
+
+		self._finished = True
+		self.process.stdin.close()
+
+		if self.process.wait() != 0:
+			self._error = "FFmpeg encoding failed"
+
+		if self._lock_input and not self._input_was_locked:
+			self.controller.unlock_input()
+
+		if self._error is None:
+			print(
+				f"Saved {self.captured_frames} frames at {self.fps:g} fps to {self.filename}",
+				flush=True,
+			)
+
+	def fail(self, exc):
+		if self._finished:
+			return
+
+		self._error = str(exc)
+		self._finished = True
+		self.process.stdin.close()
+		self.process.terminate()
+		self.process.wait()
+
+		if self._lock_input and not self._input_was_locked:
+			self.controller.unlock_input()
 
 
 class AgentInputControls:
@@ -496,6 +627,16 @@ class AgentCaptureControls:
 	def texture(self, texture, filename="texture.png", data_type=GL_UNSIGNED_BYTE, label=None):
 		return self._controller.capture_texture(texture, filename, data_type, label)
 
+	def video(self, filename, fps=24, duration=5, lock_input=False):
+		return self._controller.start_video_capture(filename, fps, duration, lock_input)
+
+	@property
+	def video_status(self):
+		if self._controller._video_capture is None:
+			return None
+
+		return self._controller._video_capture.status
+
 
 class AgentControls:
 	"""Central, model-facing controls for a live :class:`ViewerREPLController`."""
@@ -517,6 +658,7 @@ class AgentControls:
 			"window_title": self.window.title,
 			"frames": self._controller.state["frames"],
 			"errors": self._controller.state["errors"],
+			"video": self.capture.video_status,
 		}
 
 
@@ -532,6 +674,7 @@ class ViewerREPLController(MainLoopController):
 		# Keep the original diagnostic spelling available to existing examples.
 		self.state["frames"] = 0
 		self._capture_queue = []
+		self._video_capture = None
 		self._capture_callback = CaptureQueueCallback(self)
 		self.viewer.camera.finalDrawCallback = self._capture_callback
 
@@ -620,6 +763,14 @@ class ViewerREPLController(MainLoopController):
 		self._capture_queue.append((request, None, GL_UNSIGNED_BYTE))
 
 		return request
+
+	def start_video_capture(self, filename, fps=24, duration=5, lock_input=False):
+		if self._video_capture is not None and self._video_capture.active:
+			raise RuntimeError("a video capture is already running")
+
+		self._video_capture = VideoCapture(self, filename, fps, duration, lock_input)
+
+		return self._video_capture
 
 	def capture_texture(
 		self,

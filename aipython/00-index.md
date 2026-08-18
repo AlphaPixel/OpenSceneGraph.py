@@ -28,6 +28,7 @@ Read the others situationally:
 | [`18-deterministic-captures.md`](18-deterministic-captures.md) | Capturing a precise, repeatable animation state by freezing an effect-local elapsed-time uniform instead of racing the realtime frame loop. |
 | [`20-object-lifetime.md`](20-object-lifetime.md) | Investigating a leak, a "removed but still alive" object, or verifying true C++ destruction vs. just scene-graph detachment. |
 | [`30-pbribl.md`](30-pbribl.md) | Applying `osgx.gltf.pbribl`'s full reflective PBR/IBL renderer to ordinary OSG geometry such as `ShapeDrawable`. |
+| [`40-typed-lights-gizmos.md`](40-typed-lights-gizmos.md) | Adding typed direct/punctual lights (`osgx.pbr.LightSet` -- Point/Directional/Spot/Sphere) and their depth-tested/overlay debug gizmos (`osgx.gizmo`) to a live scene; also documents the `osgx_DirectLighting()` hook contract every direct-lit shader should call into. |
 
 ## Why this exists as `aipython/*.md` and not a Claude Code skill
 
