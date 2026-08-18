@@ -1,3 +1,6 @@
 [submodule "etc/pybind11"]
 	path = etc/pybind11
 	url = https://github.com/pybind/pybind11.git
+[submodule "etc/osgx"]
+	path = etc/osgx
+	url = git@github.com:cubicool/osgx.git

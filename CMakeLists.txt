@@ -6,6 +6,96 @@ find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 # find_package(pybind11 REQUIRED)
 add_subdirectory("etc/pybind11")
 
+# The packaged build must not inherit an arbitrary distro OSG ABI or feature
+# set. Keep this opt-in while the wheel work is still being established, but
+# make the source and revision used by this path explicit and reproducible.
+option(PYOSG_FETCH_OSG
+    "Fetch and build the project-pinned OpenSceneGraph dependency" OFF)
+
+
+# Defaults to the project-pinned OSG path, but accepts any osgx source checkout
+# so contributors can keep developing the two projects side by side.
+option(PYOSG_BUILD_OSGX
+    "Build osgx alongside a manually supplied OpenSceneGraph" OFF)
+set(PYOSG_OSGX_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/etc/osgx"
+    CACHE PATH "Path to the osgx source checkout")
+set(PYOSG_OSG_GIT_TAG "a827840baf0786d72e11ac16d5338a4ee25779db"
+    CACHE STRING "OpenSceneGraph revision (OpenSceneGraph-3.6.5)")
+
+if(PYOSG_FETCH_OSG)
+    include(FetchContent)
+
+    # Build only the libraries needed by the bindings. In particular, plugins
+    # are intentionally excluded: the first distributable wheel must not imply
+    # support for arbitrary osgDB file formats.
+    set(BUILD_OSG_APPLICATIONS OFF CACHE BOOL "" FORCE)
+    set(BUILD_OSG_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(BUILD_OSG_PLUGINS OFF CACHE BOOL "" FORCE)
+    set(BUILD_DOCUMENTATION OFF CACHE BOOL "" FORCE)
+
+    # This project requires a modern core-profile OSG build.  Set every
+    # derived capability explicitly as well, so a reused CMake cache cannot
+    # re-enable fixed-function support.
+    set(OPENGL_PROFILE GLCORE CACHE STRING "" FORCE)
+    set(OSG_GL1_AVAILABLE OFF CACHE BOOL "" FORCE)
+    set(OSG_GL2_AVAILABLE OFF CACHE BOOL "" FORCE)
+    set(OSG_GL3_AVAILABLE ON CACHE BOOL "" FORCE)
+    set(OSG_GL_DISPLAYLISTS_AVAILABLE OFF CACHE BOOL "" FORCE)
+    set(OSG_GL_MATRICES_AVAILABLE OFF CACHE BOOL "" FORCE)
+    set(OSG_GL_VERTEX_FUNCS_AVAILABLE OFF CACHE BOOL "" FORCE)
+    set(OSG_GL_VERTEX_ARRAY_FUNCS_AVAILABLE OFF CACHE BOOL "" FORCE)
+    set(OSG_GL_FIXED_FUNCTION_AVAILABLE OFF CACHE BOOL "" FORCE)
+    set(OSG_GL_CONTEXT_VERSION "4.3" CACHE STRING "" FORCE)
+
+    FetchContent_Declare(OpenSceneGraph
+        GIT_REPOSITORY https://github.com/openscenegraph/OpenSceneGraph.git
+        GIT_TAG "${PYOSG_OSG_GIT_TAG}"
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+    )
+    FetchContent_MakeAvailable(OpenSceneGraph)
+
+    set(PYOSG_OSG_LIBRARIES
+        OpenThreads
+        osg
+        osgAnimation
+        osgDB
+        osgGA
+        osgUtil
+        osgViewer
+    )
+else()
+    find_package(OpenSceneGraph REQUIRED
+        osg
+        osgAnimation
+        osgUtil
+
+        osgDB
+        osgGA
+        osgViewer
+    )
+
+    set(PYOSG_OSG_LIBRARIES ${OPENSCENEGRAPH_LIBRARIES})
+endif()
+
+if(PYOSG_FETCH_OSG OR PYOSG_BUILD_OSGX)
+    if(NOT EXISTS "${PYOSG_OSGX_SOURCE_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR
+            "PYOSG_BUILD_OSGX is ON, but PYOSG_OSGX_SOURCE_DIR "
+            "Initialize etc/osgx or pass -DPYOSG_OSGX_SOURCE_DIR=/path/to/osgx.")
+    endif()
+
+    # This project owns the dependency graph for the pinned path. Keep osgx's
+    # optional products out of the initial build; only osgx::osgx is required.
+    set(OSGX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(OSGX_BUILD_UTILS OFF CACHE BOOL "" FORCE)
+    set(OSGX_BUILD_PYTHON OFF CACHE BOOL "" FORCE)
+    set(OSGX_BUILD_KTX2 OFF CACHE BOOL "" FORCE)
+    set(OSGX_BUILD_GLTF OFF CACHE BOOL "" FORCE)
+    set(OSGX_INSTALL OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${PYOSG_OSGX_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/_deps/osgx-build" EXCLUDE_FROM_ALL)
+endif()
+
 # # Step A -> generate C++ from Cython
 # set(CYTHON_SRC ${CMAKE_CURRENT_SOURCE_DIR}/cython_part.pyx)
 # set(CYTHON_CPP ${CMAKE_CURRENT_BINARY_DIR}/cython_part.cpp)
@@ -73,17 +163,6 @@ else(WIN32)
 	endif()
 endif()
 
-find_package(OpenSceneGraph REQUIRED
-	osg
-	osgAnimation
-	osgUtil
-	osgDB
-	osgGA
-	osgViewer
-	# osgUtil
-	# osgText
-)
-
 option(PYOSG_EMBEDDED "Build OpenSceneGraph bindings for embedding" OFF)
 
 set(PYOSG_SOURCES
@@ -129,17 +208,33 @@ add_library(OpenSceneGraph_python STATIC ${PYOSG_SOURCES})
 target_link_libraries(OpenSceneGraph_python PRIVATE
 	Python3::Python
 	pybind11::module
-	${OPENSCENEGRAPH_LIBRARIES}
+	${PYOSG_OSG_LIBRARIES}
 )
 
-target_compile_features(OpenSceneGraph_python PUBLIC cxx_std_20)
+
+if(PYOSG_FETCH_OSG OR PYOSG_BUILD_OSGX)
+	# osgx is EXCLUDE_FROM_ALL so ordinary OpenSceneGraph.py builds stay focused,
+	# but building the extension also produces the core osgx shared library.
+	add_dependencies(OpenSceneGraph_python osgx)
+endif()
 target_compile_options(OpenSceneGraph_python PRIVATE ${PYOSG_COMPILE_OPTIONS})
+	target_compile_features(OpenSceneGraph_python PUBLIC cxx_std_20)
 target_include_directories(OpenSceneGraph_python PUBLIC
 	# TODO: This is currently a hack to ensure `pybind11x.hpp` is found! In the
 	# future, it will come in as another submodule!
 	"${CMAKE_SOURCE_DIR}/etc"
-	${OPENSCENEGRAPH_INCLUDE_DIRS}
 )
+
+if(PYOSG_FETCH_OSG)
+	target_include_directories(OpenSceneGraph_python PUBLIC
+		"${OpenSceneGraph_SOURCE_DIR}/include"
+		"${OpenSceneGraph_BINARY_DIR}/include"
+	)
+else()
+	target_include_directories(OpenSceneGraph_python PUBLIC
+		${OPENSCENEGRAPH_INCLUDE_DIRS}
+	)
+endif()
 # TODO: PCH didn't help much, but the "unity" build made the project go from
 # taking 3 full minutes to 30s or less. That's pretty incredible.
 # target_precompile_headers(OpenSceneGraph_python PRIVATE "pyosg/pyosg_pch.hpp")
