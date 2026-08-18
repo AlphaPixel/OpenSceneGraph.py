@@ -6,17 +6,15 @@ separately -- see ai/context-todo-dice.md. Not a standalone example (no
 `__main__`); imported by the per-die scripts, same relationship
 `pyosg_repl.py` has to the examples that `from pyosg_repl import repl`.
 
-Point of this module: D4/D6/D8/D10/D12/D20 all reduce to the SAME mesh
-construction (flat-shaded, per-face-unique vertices, fan-triangulated) and
-the SAME decal mechanism (a small number of atlas-sampled digit decals per
-face, placed via a per-fragment "which anchor is this pixel nearest, what's
-my local position within its box" test) -- see `pyosg-d4.py`'s module
-docstring for the derivation. The only real difference between die types is
-DATA: which base vertices/faces define the shape, what each face's canonical
-(fixed, shared-across-all-its-faces) UV layout looks like, and whether a
-face shows one CENTERED digit (every die except D4) or up to three CORNER
-digits, one per vertex (D4 only, because a d4's rolled value is read from
-the top vertex, not the top face).
+Point of this module: D4/D6/D8/D10/D12/D20 all reduce to the same
+``osgx.Polyhedron`` mesh construction (flat-shaded, face-unique vertices,
+fan-triangulated) and the same decal mechanism (a small number of
+atlas-sampled digit decals per face, placed via a per-fragment "which anchor
+is this pixel nearest, what's my local position within its box" test). The
+named ``osgx`` shapes own topology and UVs; this module supplies only die
+numbering, decals, and roll presentation. A face shows one centered digit
+except D4, which uses up to three corner digits because its rolled value is
+read from the top vertex rather than the top face.
 
 Vertex attribute layout, identical for every die built through this module:
   osg_Vertex (location 0)          -- position, via .vertexArray
@@ -25,7 +23,8 @@ Vertex attribute layout, identical for every die built through this module:
                                        (texcoord unit 0's generic-attrib alias,
                                        confirmed against OSG source -- see
                                        pyosg-dice.py's own docstring)
-  decalValues (location 13, vec3)  -- 0-based digit per decal slot, -1 = unused
+  decalValues (location 13, vec3)  -- 0-based digit plus packed face ID per
+                                       decal slot, -1 = unused
   anchorU/anchorV (locations 14/15, vec3 each) -- each slot's UV anchor point
 
 MAX_DECALS is 3 -- enough for every die needed here (D4's 3 corners are the
@@ -33,16 +32,19 @@ upper bound; every other die uses exactly 1, its face center).
 """
 
 import math
+import pathlib
 import time
 
 from OpenSceneGraph import osg, osgAnimation, osgGA
 from OpenSceneGraph.GL import GL_RGBA, GL_UNSIGNED_BYTE
+import osgx
 
 DECAL_VALUES_LOCATION = 13
 ANCHOR_U_LOCATION = 14
 ANCHOR_V_LOCATION = 15
 MAX_DECALS = 3
 UNUSED_DECAL = -1.0
+DECAL_FACE_STRIDE = 32.0
 
 VERTEX_SHADER = f"""
 #version 330 core
@@ -101,6 +103,7 @@ out vec4 fragColor;
 
 void main() {
 	const vec3 L = vec3(0.4, 0.6, 0.7);
+	const float DECAL_FACE_STRIDE = 32.0;
 
 	float diffuse = max(dot(normalize(vNormal), normalize(L)), 0.0);
 	float light = 0.35 + 0.65 * diffuse;
@@ -121,6 +124,7 @@ void main() {
 	for (int i = 0; i < 3; i++) {
 		if (vDecalValues[i] < 0.0) continue;
 
+		float decalValue = mod(vDecalValues[i], DECAL_FACE_STRIDE);
 		vec2 anchor = vec2(vAnchorU[i], vAnchorV[i]);
 		vec2 up = count > 1 ? normalize(anchor - avgAnchor) : vec2(0.0, 1.0);
 		vec2 right = vec2(up.y, -up.x);
@@ -131,7 +135,7 @@ void main() {
 
 		if (abs(lu) <= 1.0 && abs(lv) <= 1.0) {
 			vec2 atlasUV = vec2(
-				(vDecalValues[i] + (lu * 0.5 + 0.5)) / float(digitCount),
+				(decalValue + (lu * 0.5 + 0.5)) / float(digitCount),
 				lv * 0.5 + 0.5
 			);
 			vec4 glyph = texture(numberAtlas, atlasUV);
@@ -143,6 +147,259 @@ void main() {
 	fragColor = vec4(color * light, 1.0);
 }
 """
+
+# IBL counterpart to FRAGMENT_SHADER above: same decal-atlas logic, lit via osgx's
+# PBR/IBL substrate instead of the fixed N.L term. No highlight uniforms
+# (activeFaceMask/activeDecalValue) -- consumers that need those (pyosg-dice.py) fork
+# their own copy the same way they already fork FRAGMENT_SHADER; consumers that just
+# need picking (pyosg-match4-dice.py) add pickID the same way they already do for
+# FRAGMENT_SHADER.
+FRAGMENT_SHADER_IBL = """
+#version 460 core
+
+const float PI = 3.14159265359;
+
+#pragma osgx::pbr F_MULTISCATTER, MATERIAL_STRUCT, DIRECT_LIGHTING_DECL
+
+in vec3 vNormal;
+in vec3 vViewDir;
+in vec2 vUV;
+flat in vec3 vDecalValues;
+flat in vec3 vAnchorU;
+flat in vec3 vAnchorV;
+
+uniform mat4 osg_ViewMatrix;
+uniform mat4 osg_ViewMatrixInverse;
+uniform sampler2D numberAtlas;
+uniform int digitCount;
+uniform float decalHalf;
+uniform vec3 bodyColor;
+
+uniform samplerCube envMap;
+uniform sampler2D brdfLUT;
+uniform samplerCube diffuseEnv;
+
+// Same cubemap lookup basis osgx.gltf.pbribl.createPBRIBLScene() reads off
+// PBRIBLEnvironment.iblAxis -- rotating that (in Python, on the SAME environment object)
+// rotates a --scene backdrop lit through that renderer and these dice identically, since
+// both end up sampling through this same remap.
+uniform vec3 iblAxis[3];
+
+// Whole-die material knobs -- no per-face roughness/metallic data yet, just a uniform
+// scalar pair so the PBR/IBL response is at least visibly tunable from the CLI.
+uniform float roughness;
+uniform float metallic;
+
+// Independent diffuse-irradiance/specular-reflection intensity, matching the SAME uniform names
+// osgx::gltf::pbribl::createPBRIBLScene()'s backdrop shader reads -- e.g. --ibl-diffuse/
+// --ibl-specular dial these down on both the dice AND a --scene backdrop identically, so
+// LIGHT_UNIFORMS' punctual lights (a torch) can be made to read more clearly against IBL.
+uniform float iblDiffuseIntensity;
+uniform float iblSpecularIntensity;
+
+out vec4 fragColor;
+
+// Ported from osgx::gltf::pbribl's own PBRIBL.cpp shader -- Z-up world direction to the
+// baked cubemap's Y-up convention, then onto the (possibly rotated) lookup basis.
+vec3 osgx_ZUpToGLTF(vec3 d) { return vec3(d.x, d.z, -d.y); }
+vec3 osgx_OrientIBL(vec3 d) {
+	return vec3(dot(d, iblAxis[0]), dot(d, iblAxis[1]), dot(d, iblAxis[2]));
+}
+
+void main() {
+	const float DECAL_FACE_STRIDE = 32.0;
+
+	vec2 anchorSum = vec2(0.0);
+	int count = 0;
+
+	for (int i = 0; i < 3; i++) {
+		if (vDecalValues[i] >= 0.0) {
+			anchorSum += vec2(vAnchorU[i], vAnchorV[i]);
+			count++;
+		}
+	}
+
+	vec2 avgAnchor = count > 0 ? anchorSum / float(count) : vec2(0.0);
+	vec3 albedo = bodyColor;
+
+	for (int i = 0; i < 3; i++) {
+		if (vDecalValues[i] < 0.0) continue;
+
+		float decalValue = mod(vDecalValues[i], DECAL_FACE_STRIDE);
+		vec2 anchor = vec2(vAnchorU[i], vAnchorV[i]);
+		vec2 up = count > 1 ? normalize(anchor - avgAnchor) : vec2(0.0, 1.0);
+		vec2 right = vec2(up.y, -up.x);
+
+		vec2 local = vUV - anchor;
+		float lu = dot(local, right) / decalHalf;
+		float lv = dot(local, up) / decalHalf;
+
+		if (abs(lu) <= 1.0 && abs(lv) <= 1.0) {
+			vec2 atlasUV = vec2(
+				(decalValue + (lu * 0.5 + 0.5)) / float(digitCount),
+				lv * 0.5 + 0.5
+			);
+			vec4 glyph = texture(numberAtlas, atlasUV);
+
+			albedo = mix(albedo, glyph.rgb, glyph.a);
+		}
+	}
+
+	// Eye-space N/V, rotated into world space the same way pyosg-khronos-viewer.py's
+	// underlying shader does -- transpose(mat3(osg_ViewMatrix)) is the view rotation's
+	// inverse, since it's orthonormal.
+	mat3 invView = transpose(mat3(osg_ViewMatrix));
+	vec3 N = invView * normalize(vNormal);
+	vec3 V = invView * normalize(vViewDir);
+	vec3 F0 = mix(vec3(0.04), albedo, metallic);
+
+	vec3 diffuseIrradiance = texture(diffuseEnv, osgx_OrientIBL(osgx_ZUpToGLTF(N))).rgb;
+	vec3 R = reflect(-V, N);
+	float maxMip = float(max(textureQueryLevels(envMap) - 2, 0));
+	vec3 prefiltered = textureLod(envMap, osgx_OrientIBL(osgx_ZUpToGLTF(R)), roughness * maxMip).rgb;
+	vec3 Fd = osgx_F_MultiScatter(N, V, roughness, F0, brdfLUT);
+	vec3 color = diffuseIrradiance * albedo * (1.0 - Fd) * (1.0 - metallic) * iblDiffuseIntensity
+		+ prefiltered * Fd * iblSpecularIntensity;
+
+	// Direct/punctual lights, via the osgx_DirectLighting() CONTRACT (DIRECT_LIGHTING_DECL/
+	// DIRECT_LIGHTING_HOOK_DEFAULT in PBR.hpp) -- worldPos comes from vViewDir's own unnormalized
+	// eye-space encoding (-eyePos.xyz, see VERTEX_SHADER_IBL), so no extra varying is needed. Same
+	// hook backdrop scenes use via osgx::gltf::pbribl::createPBRIBLScene() -- share the SAME
+	// osgx::pbr.LightSet (e.g. set on a common ancestor StateSet) to light dice and a --scene
+	// backdrop identically. The per-light dispatch loop itself lives ONCE in
+	// DIRECT_LIGHTING_HOOK_DEFAULT (added as a second FRAGMENT shader object -- see where this shader
+	// is compiled into a Program), not hand-copied here, so this shader can never drift out of sync
+	// with it the way it used to.
+	osgx_Material mat = osgx_Material(albedo, 1.0, roughness, metallic, F0);
+	vec3 worldPos = (osg_ViewMatrixInverse * vec4(-vViewDir, 1.0)).xyz;
+	vec3 direct = osgx_DirectLighting(N, V, worldPos, mat);
+
+	color += direct;
+
+	fragColor = vec4(pow(color, vec3(1.0 / 2.2)), 1.0);
+}
+"""
+
+# Vertex counterpart to VERTEX_SHADER above, adding the eye-space view direction
+# FRAGMENT_SHADER_IBL needs for its N/V world-space rotation.
+VERTEX_SHADER_IBL = f"""
+#version 460 core
+
+in vec4 osg_Vertex;
+in vec3 osg_Normal;
+in vec2 osg_MultiTexCoord0;
+layout(location = {DECAL_VALUES_LOCATION}) in vec3 decalValues;
+layout(location = {ANCHOR_U_LOCATION}) in vec3 anchorU;
+layout(location = {ANCHOR_V_LOCATION}) in vec3 anchorV;
+
+uniform mat4 osg_ModelViewProjectionMatrix;
+uniform mat4 osg_ModelViewMatrix;
+uniform mat3 osg_NormalMatrix;
+
+out vec3 vNormal;
+out vec3 vViewDir;
+out vec2 vUV;
+flat out vec3 vDecalValues;
+flat out vec3 vAnchorU;
+flat out vec3 vAnchorV;
+
+void main() {{
+	vec4 eyePos = osg_ModelViewMatrix * osg_Vertex;
+
+	vNormal = normalize(osg_NormalMatrix * osg_Normal);
+	vViewDir = -eyePos.xyz;
+	vUV = osg_MultiTexCoord0;
+	vDecalValues = decalValues;
+	vAnchorU = anchorU;
+	vAnchorV = anchorV;
+
+	gl_Position = osg_ModelViewProjectionMatrix * osg_Vertex;
+}}
+"""
+
+# --hdr/--env resolution shared by every consumer that binds FRAGMENT_SHADER_IBL --
+# pyosg-dice.py's dice, pyosg-match4-dice.py's dice AND (already, separately) its
+# --scene backdrop. Same contract/candidate paths as pyosg-khronos-viewer.py's own
+# resolve_asset()/resolve_environment_manifest(), just generalized off of a single model
+# file's directory since this module has no one asset directory of its own.
+def resolve_hdr(value):
+	path = pathlib.Path(value).expanduser()
+
+	if path.is_file():
+		return path
+
+	resolved = osgx.findDataFile(value, ("glTF-Sample-Environments/{}",), "hdr")
+
+	if resolved:
+		return pathlib.Path(resolved)
+
+	raise FileNotFoundError(f"Cannot find HDR environment {value!r}")
+
+def resolve_environment_manifest(value):
+	path = pathlib.Path(value).expanduser()
+
+	if path.is_file():
+		return path
+
+	resolved = osgx.findDataFile(value, ("env/{}.gltf",))
+
+	if resolved:
+		return pathlib.Path(resolved)
+
+	raise FileNotFoundError(f"Cannot find environment manifest {value!r}")
+
+def rotate_ibl_environment(environment, degrees):
+	"""Rotate `environment`'s cubemap lookup basis (iblAxis, always exactly 3 Vec3 --
+	one orthonormal basis) about the world's vertical (Z) axis, in place, by an exact
+	multiple of 90 degrees -- a pure axis permutation, no interpolation. `degrees` must
+	be one of 0/90/180/270 (mod 360).
+
+	This is THE rotation knob for a baked HDRI: there's no authored "this way is north"
+	in an equirect environment map, so however it landed at bake time is arbitrary.
+	Rotating the lookup basis (rather than resampling the cubemap itself) is exact and
+	free -- both createPBRIBLScene()'s glTF material shader and FRAGMENT_SHADER_IBL read
+	iblAxis the same way, so applying this once to a shared `environment` before handing
+	it to either rotates dice and backdrop identically.
+
+	iblAxis round-trips through Python as a plain list copy (pybind11/stl.h), not a live
+	view -- reassign the whole list, per-element mutation is silently a no-op.
+	"""
+
+	if degrees % 90 != 0:
+		raise ValueError(f"rotate_ibl_environment: {degrees} is not a multiple of 90")
+
+	steps = (degrees // 90) % 4
+
+	def rotated(axis):
+		x, y, z = axis.x, axis.y, axis.z
+
+		for _ in range(steps):
+			x, z = -z, x
+
+		return osg.Vec3(x, y, z)
+
+	environment.iblAxis = [rotated(axis) for axis in environment.iblAxis]
+
+def prepare_environment(hdr=None, env=None, rotate=0):
+	"""Resolve --hdr/--env (mutually exclusive; both optional) into a PBRIBLEnvironment,
+	optionally pre-rotated -- see rotate_ibl_environment(). Returns None if neither
+	hdr nor env is given."""
+
+	if hdr:
+		hdr_path = resolve_hdr(hdr)
+		environment = osgx.gltf.pbribl.preparePBRIBLEnvironment(str(hdr_path), lutSize=1024)
+
+	elif env:
+		env_path = resolve_environment_manifest(env)
+		environment = osgx.gltf.pbribl.loadPBRIBLEnvironment(str(env_path))
+
+	else:
+		return None
+
+	if rotate:
+		rotate_ibl_environment(environment, rotate)
+
+	return environment
 
 FLOOR_FRAGMENT_SHADER = """
 #version 330 core
@@ -184,133 +441,65 @@ FONT_PIXEL = 7
 FONT_PIXEL_MULTI = 5
 INK = (0.08, 0.07, 0.07)
 
-# Canonical, fixed UV shape per face vertex-count -- identical for every
-# face of a given die, since a Platonic solid's faces are all congruent.
-# Both exact isometries of the real 3D face (equilateral triangle, unit
-# square) -- for anything less "nice" (D10's kite, D12's pentagon later),
-# use isometric_face_uv() below instead of guessing proportions by eye; see
-# its docstring for why a guessed shape visibly stretches whatever gets
-# decaled onto it.
-TRIANGLE_UV = (osg.Vec2(0.0, 0.0), osg.Vec2(1.0, 0.0), osg.Vec2(0.5, 3.0 ** 0.5 / 2.0))
-SQUARE_UV = (osg.Vec2(0.0, 0.0), osg.Vec2(1.0, 0.0), osg.Vec2(1.0, 1.0), osg.Vec2(0.0, 1.0))
+class FaceInfo:
+	"""Stable mesh/decal basis for one numbered die face."""
 
-def canonical_uv(face):
-	if len(face) == 3:
-		return TRIANGLE_UV
-
-	if len(face) == 4:
-		return SQUARE_UV
-
-	raise ValueError(f"no canonical UV defined yet for a {len(face)}-vertex face")
-
-def isometric_face_uv(vertices):
-	"""Flattens a planar polygon's REAL 3D vertices into 2D UV coordinates
-	that exactly preserve every true distance between them (a rigid
-	projection onto the face's own plane -- confirmed by cross-checking
-	every pairwise distance, not just consecutive edges, not just an
-	approximation). Use this instead of a hand-picked canonical UV table
-	whenever a face's true proportions aren't a "nice" regular polygon
-	(first needed for D10's kite, since a hand-guessed KITE_UV visibly
-	stretched its digit decals -- a "square" region in a non-isometric UV
-	space does not correspond to a square region on the real 3D face)."""
-	v0 = vertices[0]
-	right = (vertices[1] - v0)
-
-	right.normalize()
-
-	normal = right.cross(vertices[2] - v0)
-
-	normal.normalize()
-
-	up = normal.cross(right)
-
-	return tuple(osg.Vec2((v - v0).dot(right), (v - v0).dot(up)) for v in vertices)
-
-def normalize_vertices(vertices, target_radius=1.0):
-	"""Recenter `vertices` (any sequence of osg.Vec3) on their own centroid,
-	then scale uniformly so the farthest vertex sits exactly `target_radius`
-	away -- i.e. every die built through this factory agrees on its
-	CIRCUMRADIUS, regardless of its own raw edge-length math. Lets every
-	caller share ONE size constant (DIE_SIZE = target_radius) instead of
-	hand-tuned, not-necessarily-comparable per-die-type constants -- see
-	ai/context-todo-dice.md."""
-	count = len(vertices)
-	centroid = osg.Vec3(
-		sum(v.x for v in vertices) / count,
-		sum(v.y for v in vertices) / count,
-		sum(v.z for v in vertices) / count,
-	)
-	centered = [v - centroid for v in vertices]
-	radius = max(v.length() for v in centered)
-	scale = target_radius / radius
-
-	return [v * scale for v in centered]
-
-def resting_offset(vertices):
-	"""Z shift needed to put `vertices`' LOWEST point at z=0. Deliberately a
-	separate step from normalize_vertices(): the centroid is the right
-	origin for consistent SIZE and for rotating a die naturally (e.g. a
-	roll animation), but the centroid-to-resting-face distance differs per
-	shape (a cube's centroid sits exactly between opposite faces; a
-	tetrahedron's sits only 1/4 of the way from base to apex) -- so two
-	dice normalized to the same circumradius and placed at the same z=0 via
-	a plain translate do NOT actually rest on the same floor level. Apply
-	this to whichever face/vertex is currently "down" (post any rotation)
-	at placement time to make every die actually sit flush, regardless of
-	shape -- see ai/context-todo-dice.md."""
-	return -min(v.z for v in vertices)
-
-def face_normal(vertices, face):
-	"""Returns the normalized outward normal of an already outward-wound face."""
-	v0, v1, v2 = (vertices[i] for i in face[:3])
-	normal = (v1 - v0).cross(v2 - v0)
-
-	normal.normalize()
-
-	return normal
+	def __init__(self, index, face, positions, value=None):
+		self.index = index
+		self.vertices = tuple(face.vertices)
+		self.normal = face.normal(positions)
+		self.text_up = face.up(positions)
+		self.value = value
 
 class RollSpec:
 	"""The rotation-independent data needed to roll one die shape.
 
-	Outcomes contain (label, support_face, support_normal, value) entries. The
-	support face is explicit so a final roll pose is exactly flush with the
-	floor even when a die's faces are not all equally distant from its center.
+	Outcomes contain (label, support_face_index, support_normal, value, active_faces)
+	entries. The support face is explicit so a final roll pose is exactly flush
+	with the floor even when a die's faces are not all equally distant from its
+	center. active_faces lets a consumer present the chosen result without
+	putting presentation policy in this module.
 	"""
 
-	def __init__(self, vertices, outcomes):
-		self.vertices = tuple(vertices)
+	def __init__(self, polyhedron, outcomes, values=()):
 		self.outcomes = tuple(outcomes)
+		self.polyhedron = polyhedron
+		self.face_infos = tuple(
+			FaceInfo(index, face, polyhedron.vertices, values[index] if values else None)
+			for index, face in enumerate(polyhedron.faces)
+		)
 
-def face_roll_spec(vertices, faces, values, opposite_face_indices):
+def face_roll_spec(polyhedron, values, opposite_face_indices):
 	"""Builds one outcome per value-bearing face, with its opposite as support."""
-	if not (len(faces) == len(values) == len(opposite_face_indices)):
+	if not (len(polyhedron.faces) == len(values) == len(opposite_face_indices)):
 		raise ValueError("faces, values, and opposite_face_indices must have equal lengths")
 
 	outcomes = []
 
 	for face_index, value in enumerate(values):
-		face = faces[face_index]
-		support_face = faces[opposite_face_indices[face_index]]
-		face_normal_ = face_normal(vertices, face)
-		support_normal = face_normal(vertices, support_face)
+		support_face_index = opposite_face_indices[face_index]
+		face_normal_ = polyhedron.faces[face_index].normal(polyhedron.vertices)
+		support_normal = polyhedron.faces[support_face_index].normal(polyhedron.vertices)
 
 		if (face_normal_ + support_normal).length() > 1e-5:
 			raise ValueError(f"face {face_index}'s support face is not opposite")
 
-		outcomes.append((f"face {face_index}", support_face, support_normal, value))
+		outcomes.append((f"face {face_index}", support_face_index, support_normal, value, (face_index,)))
 
-	return RollSpec(vertices, outcomes)
+	return RollSpec(polyhedron, outcomes, values)
 
-def vertex_roll_spec(vertices, values, support_faces):
+def vertex_roll_spec(polyhedron, values, support_faces):
 	"""Builds D4-style vertex outcomes with their opposite faces as support."""
-	if not (len(vertices) == len(values) == len(support_faces)):
+	if not (len(polyhedron.vertices) == len(values) == len(support_faces)):
 		raise ValueError("vertices, values, and support_faces must have equal lengths")
 
+	face_indices = {tuple(face.vertices): index for index, face in enumerate(polyhedron.faces)}
 	outcomes = []
 
 	for vertex_index, (value, support_face) in enumerate(zip(values, support_faces)):
-		top_axis = osg.Vec3(vertices[vertex_index])
-		support_normal = face_normal(vertices, support_face)
+		top_axis = osg.Vec3(polyhedron.vertices[vertex_index])
+		support_face_index = face_indices[tuple(support_face)]
+		support_normal = polyhedron.faces[support_face_index].normal(polyhedron.vertices)
 
 		top_axis.normalize()
 
@@ -319,12 +508,13 @@ def vertex_roll_spec(vertices, values, support_faces):
 
 		outcomes.append((
 			f"vertex {vertex_index}",
-			support_face,
+			support_face_index,
 			support_normal,
 			value,
+			tuple(face_index for face_index, face in enumerate(polyhedron.faces) if vertex_index in face.vertices),
 		))
 
-	return RollSpec(vertices, outcomes)
+	return RollSpec(polyhedron, outcomes)
 
 def support_down_quat(support_normal):
 	"""Rotation that brings a support face's outward normal to world -Z."""
@@ -346,17 +536,13 @@ def random_quat(rng):
 
 	return osg.Quat(rng.uniform(0.0, 2.0 * math.pi), axis)
 
-def rest_position(rest_xy, vertices, quat):
+def rest_position(rest_xy, polyhedron, quat):
 	"""The floor-resting center position after applying quat to vertices."""
-	rotated_vertices = tuple(quat * vertex for vertex in vertices)
+	return osg.Vec3(rest_xy.x, rest_xy.y, polyhedron.restingOffset(quat))
 
-	return osg.Vec3(rest_xy.x, rest_xy.y, resting_offset(rotated_vertices))
-
-def support_rest_position(rest_xy, vertices, quat, support_face):
+def support_rest_position(rest_xy, polyhedron, quat, support_face_index):
 	"""Places the rotated support face's plane exactly at z=0."""
-	support_z = sum((quat * vertices[i]).z for i in support_face) / len(support_face)
-
-	return osg.Vec3(rest_xy.x, rest_xy.y, -support_z)
+	return osg.Vec3(rest_xy.x, rest_xy.y, polyhedron.faceRestingOffset(support_face_index, quat))
 
 class DiceRollCallback:
 	"""Animates one RollSpec using bounce height and elastic tumble easing."""
@@ -367,11 +553,13 @@ class DiceRollCallback:
 		roll_spec,
 		start_quat,
 		target_quat,
-		support_face,
+		support_face_index,
 		rest_xy,
 		rolling,
 		r_held,
 		index,
+		result_callback=None,
+		result=None,
 		duration=1.1,
 		drop_height=3.0
 	):
@@ -379,11 +567,13 @@ class DiceRollCallback:
 		self.roll_spec = roll_spec
 		self.start_quat = start_quat
 		self.target_quat = target_quat
-		self.support_face = support_face
+		self.support_face_index = support_face_index
 		self.rest_xy = rest_xy
 		self.rolling = rolling
 		self.r_held = r_held
 		self.index = index
+		self.result_callback = result_callback
+		self.result = result
 		self.duration = duration
 		self.drop_height = drop_height
 		self.t0 = time.time()
@@ -391,12 +581,17 @@ class DiceRollCallback:
 		self.was_held = False
 		self.last_spin_quat = start_quat
 
-	def set_matrix(self, quat, height, support_face=None):
-		if support_face is None:
-			pos = rest_position(self.rest_xy, self.roll_spec.vertices, quat)
+	def set_matrix(self, quat, height, support_face_index=None):
+		if support_face_index is None:
+			pos = rest_position(self.rest_xy, self.roll_spec.polyhedron, quat)
 
 		else:
-			pos = support_rest_position(self.rest_xy, self.roll_spec.vertices, quat, support_face)
+			pos = support_rest_position(
+				self.rest_xy,
+				self.roll_spec.polyhedron,
+				quat,
+				support_face_index
+			)
 
 		pos.z += height
 		self.mt.matrix = osg.Matrix.rotate(quat) * osg.Matrix.translate(pos)
@@ -427,7 +622,10 @@ class DiceRollCallback:
 				self.rolling[self.index] = False
 
 			if self.done:
-				self.set_matrix(self.target_quat, 0.0, self.support_face)
+				self.set_matrix(self.target_quat, 0.0, self.support_face_index)
+
+				if self.result_callback is not None:
+					self.result_callback(*self.result)
 
 			else:
 				quat = osg.Quat()
@@ -437,35 +635,89 @@ class DiceRollCallback:
 
 		return True
 
-def roll_die(mt, rest_xy, roll_spec, rng, rolling, r_held, index, notice_prefix="pyosg-dice"):
+def roll_die(
+	mt,
+	rest_xy,
+	roll_spec,
+	rng,
+	rolling,
+	r_held,
+	index,
+	notice_prefix="pyosg-dice",
+	result_callback=None,
+	roll_started_callback=None
+):
 	"""Choose an outcome before starting its purely visual roll animation."""
-	label, support_face, support_normal, value = rng.choice(roll_spec.outcomes)
+	label, support_face_index, support_normal, value, active_faces = rng.choice(roll_spec.outcomes)
 	spin = osg.Quat(rng.uniform(0.0, 2.0 * math.pi), osg.Vec3(0.0, 0.0, 1.0))
 	target_quat = support_down_quat(support_normal) * spin
 	start_quat = random_quat(rng)
 
 	osg.notice(f"[{notice_prefix}] rolling die {index} -- landing on {value} ({label} up)")
 
+	if roll_started_callback is not None:
+		roll_started_callback(index)
+
 	rolling[index] = True
 	mt.updateCallback = DiceRollCallback(
-		mt, roll_spec, start_quat, target_quat, support_face, rest_xy, rolling, r_held, index
+		mt,
+		roll_spec,
+		start_quat,
+		target_quat,
+		support_face_index,
+		rest_xy,
+		rolling,
+		r_held,
+		index,
+		result_callback,
+		(index, value, active_faces),
 	)
 
-def roll_all(dice, rng, rolling, r_held, notice_prefix="pyosg-dice"):
+def roll_all(
+	dice,
+	rng,
+	rolling,
+	r_held,
+	notice_prefix="pyosg-dice",
+	result_callback=None,
+	roll_started_callback=None
+):
 	"""Starts a simultaneous roll for (MatrixTransform, rest_xy, RollSpec) dice."""
 	for index, (mt, rest_xy, roll_spec) in enumerate(dice):
-		roll_die(mt, rest_xy, roll_spec, rng, rolling, r_held, index, notice_prefix)
+		roll_die(
+			mt,
+			rest_xy,
+			roll_spec,
+			rng,
+			rolling,
+			r_held,
+			index,
+			notice_prefix,
+			result_callback,
+			roll_started_callback,
+		)
 
 class DiceRollKeyHandler(osgGA.GUIEventHandler):
 	"""Rolls all dice on R; holding R spins them at their apex."""
 
-	def __init__(self, dice, rng, rolling, r_held, notice_prefix="pyosg-dice"):
+	def __init__(
+		self,
+		dice,
+		rng,
+		rolling,
+		r_held,
+		notice_prefix="pyosg-dice",
+		result_callback=None,
+		roll_started_callback=None
+	):
 		super().__init__()
 		self.dice = dice
 		self.rng = rng
 		self.rolling = rolling
 		self.r_held = r_held
 		self.notice_prefix = notice_prefix
+		self.result_callback = result_callback
+		self.roll_started_callback = roll_started_callback
 
 	def handle(self, ea, aa):
 		if ea.handled or ea.key != ord("r"):
@@ -483,7 +735,15 @@ class DiceRollKeyHandler(osgGA.GUIEventHandler):
 			return True
 
 		self.r_held[0] = True
-		roll_all(self.dice, self.rng, self.rolling, self.r_held, self.notice_prefix)
+		roll_all(
+			self.dice,
+			self.rng,
+			self.rolling,
+			self.r_held,
+			self.notice_prefix,
+			self.result_callback,
+			self.roll_started_callback,
+		)
 
 		return True
 
@@ -597,33 +857,17 @@ def build_number_atlas(values):
 
 	return img
 
-def build_polyhedron_geometry(base_vertices, faces, decals_for_face, uv_shape=None):
-	"""The shared factory. `base_vertices` is a sequence of osg.Vec3 (the
-	polyhedron's raw corners); `faces` is a sequence of vertex-index tuples
-	(any length >= 3), wound so `(v[1]-v[0]).cross(v[2]-v[0])` gives the
-	face's OUTWARD normal. `decals_for_face(face, face_uv)` is one of
-	center_decal_scheme(...)/corner_decal_scheme(...) above. `uv_shape`
-	overrides canonical_uv()'s vertex-count-based dispatch -- needed
-	whenever two different die types share a face vertex-count but not a
-	face SHAPE (e.g. D6's square vs D10's kite, both 4 vertices).
+def build_polyhedron_geometry(polyhedron, decals_for_face):
+	"""Add dice-decal streams to an ``osgx.Polyhedron``.
 
-	Each face gets its own unique vertices (never shared with another face,
-	even across a shared edge/corner) so every vertex can carry one flat
-	per-face normal -- same reason osg.ShapeDrawable(osg.Box()) builds 24
-	vertices rather than 8. Faces with more than 3 vertices are
-	fan-triangulated from slot 0.
+	``osgx`` owns the reusable mesh work: face-unique flat-shaded expansion,
+	UVs, fan triangulation, and the conventional/core-profile vertex streams.
+	This dice layer only supplies its three per-face decal attributes.
 	"""
-	positions, normals, uvs = [], [], []
 	decal_values, anchor_u, anchor_v = [], [], []
 
-	for face_index, face in enumerate(faces):
-		face_uv = uv_shape if uv_shape is not None else canonical_uv(face)
-		v0, v1, v2 = (base_vertices[i] for i in face[:3])
-		normal = (v1 - v0).cross(v2 - v0)
-
-		normal.normalize()
-
-		decals = decals_for_face(face_index, face, face_uv)
+	for face_index, face in enumerate(polyhedron.faces):
+		decals = decals_for_face(face_index, face.vertices, face.uv)
 
 		if not (1 <= len(decals) <= MAX_DECALS):
 			raise ValueError(f"expected 1-{MAX_DECALS} decals per face, got {len(decals)}")
@@ -633,39 +877,191 @@ def build_polyhedron_geometry(base_vertices, faces, decals_for_face, uv_shape=No
 		av = [0.0] * MAX_DECALS
 
 		for i, (anchor, value) in enumerate(decals):
-			dvals[i] = value
+			dvals[i] = value + face_index * DECAL_FACE_STRIDE
 			au[i] = anchor.x
 			av[i] = anchor.y
 
-		decal_vec = osg.Vec3(*dvals)
-		anchor_u_vec = osg.Vec3(*au)
-		anchor_v_vec = osg.Vec3(*av)
+		decal_values.append(osg.Vec3(*dvals))
+		anchor_u.append(osg.Vec3(*au))
+		anchor_v.append(osg.Vec3(*av))
 
-		def emit(slot):
-			positions.append(base_vertices[face[slot]])
-			normals.append(normal)
-			uvs.append(face_uv[slot])
-			decal_values.append(decal_vec)
-			anchor_u.append(anchor_u_vec)
-			anchor_v.append(anchor_v_vec)
+	polyhedron.setFaceAttribute(DECAL_VALUES_LOCATION, osg.Vec3Array(decal_values))
+	polyhedron.setFaceAttribute(ANCHOR_U_LOCATION, osg.Vec3Array(anchor_u))
+	polyhedron.setFaceAttribute(ANCHOR_V_LOCATION, osg.Vec3Array(anchor_v))
 
-		for t in range(1, len(face) - 1):
-			emit(0)
-			emit(t)
-			emit(t + 1)
+	return polyhedron
 
-	def per_vertex(array):
-		array.binding = osg.Array.Binding.BIND_PER_VERTEX
+ATLAS_DIGITS = (
+	"1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
+	"10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
+)
+DIE_SIZE = 1.1
 
-		return array
+def atlas_column(value):
+	return ATLAS_DIGITS.index(str(value))
 
-	geom = osg.Geometry()
-	geom.vertexArray = per_vertex(osg.Vec3Array(positions))
-	geom.normalArray = per_vertex(osg.Vec3Array(normals))
-	geom.vertexAttrib[3] = per_vertex(osg.Vec2Array(uvs))
-	geom.vertexAttrib[DECAL_VALUES_LOCATION] = per_vertex(osg.Vec3Array(decal_values))
-	geom.vertexAttrib[ANCHOR_U_LOCATION] = per_vertex(osg.Vec3Array(anchor_u))
-	geom.vertexAttrib[ANCHOR_V_LOCATION] = per_vertex(osg.Vec3Array(anchor_v))
-	geom.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.TRIANGLES, 0, len(positions)))
+def face_orientation(face_info, view_direction, view_up):
+	"""Return an orientation with `face_info` facing the viewer, text upright.
 
-	return geom
+	`view_direction` points from the die toward the viewer; `view_up` is the
+	viewer/screen-up direction. Both can come directly from a camera callback.
+	"""
+	target_normal = osg.Vec3(view_direction)
+
+	target_normal.normalize()
+	target_up = osg.Vec3(view_up) - target_normal * osg.Vec3(view_up).dot(target_normal)
+
+	if target_up.length() < 1e-6:
+		raise ValueError("view_up is parallel to view_direction")
+
+	target_up.normalize()
+	face_align = osg.Quat()
+
+	face_align.makeRotate(face_info.normal, target_normal)
+	text_spin = osg.Quat()
+
+	text_spin.makeRotate(face_align * face_info.text_up, target_up)
+
+	return face_align * text_spin
+
+class DieInstance:
+	"""A scene-graph die plus the stable data needed to present a chosen face."""
+
+	def __init__(self, spec, transform, geode, roll_spec):
+		self.spec = spec
+		self.transform = transform
+		self.geode = geode
+		self.roll_spec = roll_spec
+
+	def orient_face(self, face_index, position, view_direction, view_up):
+		orientation = face_orientation(self.roll_spec.face_infos[face_index], view_direction, view_up)
+
+		self.transform.matrix = osg.Matrix.rotate(orientation) * osg.Matrix.translate(position)
+
+		return orientation
+
+class DieSpec:
+	"""Topology, numbering, and presentation defaults for one die family."""
+
+	def __init__(
+		self,
+		name,
+		shape_factory,
+		values,
+		opposites,
+		decal_half,
+		body_color,
+		corner_values=None,
+		display_face_values=None
+	):
+		self.name = name
+		self.shape_factory = shape_factory
+		self.values = tuple(values)
+		self.opposites = tuple(opposites)
+		self.decal_half = decal_half
+		self.body_color = body_color
+		self.corner_values = corner_values
+		self.display_face_values = display_face_values
+
+	def build_geometry(self, display_mode="normal"):
+		geom = self.shape_factory()
+		if display_mode == "face":
+			if self.display_face_values is None:
+				raise ValueError(f"{self.name} has no face-display mode")
+
+			values = tuple(self.display_face_values)
+			geom = build_polyhedron_geometry(
+				geom,
+				center_decal_scheme(tuple(atlas_column(value) for value in values)),
+			)
+
+			return geom, RollSpec(geom, (), values)
+
+		if display_mode != "normal":
+			raise ValueError(f"unknown display mode {display_mode!r}")
+
+		if self.corner_values is not None:
+			geom = build_polyhedron_geometry(
+				geom,
+				corner_decal_scheme({index: atlas_column(value) for index, value in self.corner_values.items()}),
+			)
+
+			return geom, vertex_roll_spec(geom, self.values, self.opposites)
+
+		geom = build_polyhedron_geometry(
+			geom,
+			center_decal_scheme(tuple(atlas_column(value) for value in self.values)),
+		)
+
+		return geom, face_roll_spec(geom, self.values, self.opposites)
+
+	def make_instance(self, position=None, orientation=None, name=None, display_mode="normal"):
+		geom, roll_spec = self.build_geometry(display_mode)
+		position = osg.Vec3() if position is None else osg.Vec3(position)
+		orientation = osg.Quat() if orientation is None else orientation
+		transform = osg.MatrixTransform(osg.Matrix.rotate(orientation) * osg.Matrix.translate(position))
+		geode = osg.Geode(name=self.name if name is None else name)
+
+		geode.drawables.append(geom)
+		transform.children.append(geode)
+
+		return DieInstance(self, transform, geode, roll_spec)
+
+def _d4_spec():
+	return DieSpec(
+		"d4",
+		lambda: osgx.Tetrahedron(radius=DIE_SIZE),
+		(1, 2, 3, 4),
+		((1, 2, 3), (0, 3, 2), (0, 1, 3), (0, 2, 1)),
+		0.13,
+		(0.12, 0.78, 0.34),
+		corner_values={0: 1, 1: 2, 2: 3, 3: 4},
+		display_face_values=(1, 2, 3, 4),
+	)
+
+def _d6_spec():
+	return DieSpec(
+		"d6",
+		lambda: osgx.Cube(radius=DIE_SIZE),
+		(4, 3, 5, 2, 6, 1), (1, 0, 3, 2, 5, 4), 0.38, (0.52, 0.55, 0.61),
+	)
+
+def _d8_spec():
+	return DieSpec(
+		"d8",
+		lambda: osgx.Octahedron(radius=DIE_SIZE),
+		(1, 2, 3, 4, 5, 6, 7, 8), (7, 6, 5, 4, 3, 2, 1, 0), 0.24, (0.04, 0.72, 0.90),
+	)
+
+def _d10_spec():
+	return DieSpec(
+		"d10", lambda: osgx.PentagonalTrapezohedron(radius=DIE_SIZE),
+		(7, 0, 6, 1, 5, 2, 9, 3, 8, 4), (5, 6, 7, 8, 9, 0, 1, 2, 3, 4),
+		0.18, (0.88, 0.16, 0.72),
+	)
+
+def _d20_spec():
+	return DieSpec(
+		"d20",
+		lambda: osgx.Icosahedron(radius=DIE_SIZE),
+		(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 17, 18, 19, 20, 16, 12, 11, 15, 14, 13), (13, 12, 11, 10, 14, 17, 18, 19, 15, 16, 3, 2, 1, 0, 4, 8, 9, 5, 6, 7), 0.22, (0.90, 0.10, 0.10),
+	)
+
+def _d12_spec():
+	return DieSpec(
+		"d12", lambda: osgx.Dodecahedron(radius=DIE_SIZE),
+		(1, 2, 3, 4, 5, 6, 9, 12, 8, 7, 10, 11),
+		(7, 11, 10, 6, 8, 9, 3, 0, 4, 5, 2, 1), 0.20, (0.96, 0.78, 0.08),
+	)
+
+DIE_SPECS = {
+	"d4": _d4_spec(),
+	"d6": _d6_spec(),
+	"d8": _d8_spec(),
+	"d10": _d10_spec(),
+	"d12": _d12_spec(),
+	"d20": _d20_spec(),
+}
+
+def make_die(name, position=None, orientation=None, node_name=None, display_mode="normal"):
+	return DIE_SPECS[name].make_instance(position, orientation, node_name, display_mode)

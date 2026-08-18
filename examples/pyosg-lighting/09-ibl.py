@@ -198,12 +198,10 @@ uniform vec3 emissiveFactor;
 
 // ---- osgGLTF material inputs ------------------------------------------------ //
 // Everything below comes from osgGLTF's ReaderWriterGLTF (applyMaterial() in GLTFReader.hpp),
-// grouped here as the two osgx_gltf_* declarations rather than scattered loose uniforms. Scalars/
-// flags arrive as a single UBO; textures can't join them there (GLSL disallows opaque/sampler
-// types inside a uniform block), so they're a parallel struct-of-samplers uniform instead -- as
-// close to "one place" as GLSL allows. Layout must match the std140 packing built in
-// GLTFReader.hpp exactly.
-layout(std140, binding = 0) uniform osgx_gltf_Material {
+// grouped here as the two osgx_gltf_* declarations rather than scattered loose uniforms. Scalar
+// material data arrives in one buffer; textures remain a parallel struct-of-samplers uniform.
+// Layout must match the data built in GLTFReader.hpp exactly.
+layout(std430, binding = 0) readonly buffer osgx_gltf_Material {
 	vec4 baseColorFactor;
 	float roughnessFactor;
 	float metallicFactor;

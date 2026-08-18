@@ -1,550 +1,420 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-dice.py
+#vimrun! ../examples/pyosg-dice.py --die d4,d6,d8,d10,d12,d20
 
-"""Procedural dice -- see ai/context-todo-dice.md for the full staged plan
-this came out of (match4's colored spheres are a placeholder for real
-polyhedral dice; this is the start of the real thing). Scope of THIS file,
-per the plan's own staging:
+"""Combined D4/D6/D8/D10/D12/D20 procedural-number-atlas prototype -- see
+ai/context-todo-dice.md. Supersedes the separate `pyosg-d4.py`/
+`pyosg-d6-numbers.py` prototypes now that all these dice reduce to the same
+mesh/shader mechanism via `pyosg_dice.py` (see that module's docstring for
+the full writeup: one shared vertex-attribute layout, one shared decal
+shader, the only real difference between die types being DATA -- which base
+vertices/faces, and whether numbering is per-face-center or per-vertex-corner).
 
-  1. A plain D6 -- osg.ShapeDrawable(osg.Box()), same minimal core-profile
-     Lambertian shader as pyosg-picking.py/pyosg-hover.py/pyosg-match4.py.
-  2. A predetermined faux-physics roll: press 'r' to roll. The outcome (which
-     of the die's 6 faces lands up) is decided FIRST, then animated toward --
-     never the other way around. This is the same governing principle as
-     pyosg-match4.py's ShrinkCallback/FallCallback (board state is
-     authoritative, animation is pure visualization on top), and the SAME
-     wall-clock-timer-as-updateCallback mechanism.
-  3. A real per-face texture (this step) -- a small 6-cell "earthy/neutral"
-     color atlas, one cell per die value, sampled in the die's own fragment
-     shader. Deliberately a real osg.Texture2D (not just ShapeDrawable.color)
-     so a later step can layer noise/PBR data into the same atlas cells
-     without changing how faces are selected. Pip/dot layout is still the
-     next step after this, not here.
+Usage: `--die d4,d6,d8,d10,d12,d20` (default: all six) shows any subset of the
+currently supported dice side by side, sharing one Program and one number
+atlas. Press `r` to decide and animate a new outcome for every displayed die;
+holding it keeps the dice spinning at their apex until release. The generic
+roll support lives in `pyosg_dice.py`: it chooses each outcome first, then
+uses elastic tumble/bounce interpolation only as its visualization. The
+shape topology, face UVs, and support geometry now come from the named
+`osgx` polyhedra. This example remains responsible only for the procedural
+number atlas, dice-specific shader, scene assembly, and result highlight.
 
-The animation itself uses tier 1 from the plan's faux-physics section --
-pure eased interpolation, zero hand-rolled physics: `osgAnimation.outBounce`
-(already-bound pyosgAnimation easing, 28 functions total) drives the drop
-height, since its curve already looks exactly like a decaying bounce-to-rest
-without any spring/gravity math, and `osgAnimation.outElastic` drives the
-slerp parameter from a random tumble-start orientation to the known target
-orientation, giving a bit of overshoot-and-settle wobble for free. Tiers 2
-(spring-damper) and 3 (decaying noise) from the plan are NOT here -- this is
-deliberately the cheapest tier first.
-
-Die values are assigned to local box-face directions the same way a real D6
-does (opposite faces sum to 7): +X=1/-X=6, +Y=2/-Y=5, +Z=3/-Z=4 -- see
-FACES below. roll() uses that to pick a target orientation and osg.notice()
-the predetermined outcome up front; the fragment shader uses the SAME table
-(baked into a per-vertex `faceValue` attribute, see FACE_ATTRIB_LOCATION) to
-pick which atlas cell each face samples.
-
-Per-face texturing deliberately does NOT hand-author a replacement Geometry,
-and does NOT touch osg.Geometry's legacy TexCoordArray path either (not even
-bound in Python yet -- see `pyosg/osg/Geometry.cpp`'s TODO comment).
-osg.ShapeDrawable(osg.Box()) already builds correct per-face 0..1 UVs in C++
-at construction (24 unique vertices, 4 per face -- verified empirically by
-inspecting .vertexArray/.normalArray directly, no shared/welded corners),
-which reach the shader for free as `osg_MultiTexCoord0` via OSG's
-core-profile vertex-attrib aliasing -- same mechanism this project already
-leans on for osg_Vertex/osg_Normal/osg_Color. The only genuinely new
-per-vertex data needed is `faceValue` (which atlas column, 0-5), added as
-one extra generic `vertexAttrib` array -- the same already-proven mechanism
-pyosg-polyhaven.py's `faceDir` attribute uses -- at a location confirmed
-free by reading `osg::State::resetVertexAttributeAlias()`'s default compact
-numbering directly (`~/dev/OpenSceneGraph-3.6.5/src/osg/State.cpp`, not
-guessed): osg_Vertex=0, osg_Normal=1, osg_Color=2, osg_MultiTexCoord0-7=3-10,
-osg_SecondaryColor=11, osg_FogCoord=12 -- so 13 is the first free slot,
-confirmed against this project's own setup (`pyosg/pyosgViewer.cpp` calls
-`state->setUseVertexAttributeAliasing(true)` but never overrides the default
-compact/8-texcoord-unit numbering).
-
-The atlas image itself is filled via the plain buffer protocol
-(`memoryview(img).cast("B")` + per-row 1-D slice assignment), not numpy --
-multi-dimensional `memoryview` slice ASSIGNMENT is a general CPython
-restriction to ndim==1 (confirmed: reproduces identically on a bare numpy
-array's memoryview, nothing project-specific), so a cast-to-1D + per-row
-approach is the real fix, not a numpy workaround.
+`--hdr PATH`/`--env MANIFEST` (mutually exclusive, both optional -- same
+contract as `pyosg-khronos-viewer.py`) swap the dice's lighting from the
+fixed N.L term to real PBR/IBL: the atlas-decal fragment logic is unchanged,
+only the term the decal-composited albedo is lit by. Dice are treated as a
+fixed dielectric plastic (metallic=0, a constant roughness) for now -- no
+per-face material data yet, that's still future work. The floor stays on
+the plain N.L shader either way; this is a first proof that the procedural
+dice mesh/shader can sit under osgx's PBR/IBL substrate at all.
 """
 
 import argparse
-import math
 import os
 import random
-import time
 
 os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
 os.environ.setdefault("OSG_THREADING", "SingleThreaded")
 os.environ.setdefault("OSG_GL_CONTEXT_PROFILE_MASK", "1")
 os.environ.setdefault("OSG_GL_VERSION", "4.6")
 os.environ.setdefault("OSG_GL_CONTEXT_VERSION", "4.6")
+os.environ.setdefault(
+	"OSG_LIBRARY_PATH", ":".join((
+		"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/plugins/ktx2",
+		"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/plugins/gltf"
+	))
+)
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
-# First generic vertex-attrib location confirmed free of OSG's own default aliases --
-# see module docstring for how this was verified (not guessed).
-FACE_ATTRIB_LOCATION = 13
+import osgx
+import pyosg_dice as dice
 
-# Shared by both the floor and the die -- forwards everything either fragment shader
-# might need. `faceValue` is unused/zero for the floor (its Program below never declares
-# it as an active input -- see FLOOR_FRAGMENT_SHADER), harmless per GL's default generic
-# vertex attribute value.
-SCENE_VERTEX_SHADER = f"""
-#version 330 core
+W, H = 800, 600
+DIE_SPACING = 3.0
+FLOOR_MARGIN = 1.6
 
-in vec4 osg_Vertex;
-in vec3 osg_Normal;
-in vec4 osg_Color;
-in vec2 osg_MultiTexCoord0;
-layout(location = {FACE_ATTRIB_LOCATION}) in float faceValue;
+DIE_SIZE = dice.DIE_SIZE
+ATLAS_DIGITS = dice.ATLAS_DIGITS
 
-uniform mat4 osg_ModelViewProjectionMatrix;
-uniform mat3 osg_NormalMatrix;
-
-out vec3 vNormal;
-out vec4 vColor;
-out vec2 vUV;
-flat out float vFaceValue;
-
-void main() {{
-	vNormal = normalize(osg_NormalMatrix * osg_Normal);
-	vColor = osg_Color;
-	vUV = osg_MultiTexCoord0;
-	vFaceValue = faceValue;
-
-	gl_Position = osg_ModelViewProjectionMatrix * osg_Vertex;
-}}
-"""
-
-# Floor: same flat-lit vColor path as step 1/2 -- no texture.
-FLOOR_FRAGMENT_SHADER = """
-#version 330 core
-
-in vec3 vNormal;
-in vec4 vColor;
-
-out vec4 fragColor;
-
-void main() {
-	const vec3 L = vec3(0.4, 0.6, 0.7);
-
-	float diffuse = max(dot(normalize(vNormal), normalize(L)), 0.0);
-	float light = 0.35 + 0.65 * diffuse;
-
-	fragColor = vec4(vColor.rgb * light, vColor.a);
-}
-"""
-
-# Die: samples the 6-cell face-color atlas -- `vFaceValue` (0-5) picks the column,
-# `vUV` (the box's own per-face 0..1 UV) picks position within that column's cell --
-# then draws the standard 7-slot pip layout procedurally on top, purely from `vUV`
-# and the die value, as a cheap placeholder for the later slughorn/osgSlug
-# MSDF-engraved-numeral upgrade (see module docstring / ai/context-todo-dice.md).
 DIE_FRAGMENT_SHADER = """
 #version 330 core
 
 in vec3 vNormal;
 in vec2 vUV;
-flat in float vFaceValue;
+flat in vec3 vDecalValues;
+flat in vec3 vAnchorU;
+flat in vec3 vAnchorV;
 
-uniform sampler2D diceAtlas;
+uniform sampler2D numberAtlas;
+uniform int digitCount;
+uniform float decalHalf;
+uniform vec3 bodyColor;
+uniform int activeFaceMask;
+uniform int activeDecalValue;
 
 out vec4 fragColor;
 
-// Standard 7-slot pip grid (TL, TR, ML, MM, MR, BL, BR) -- every die value 1-6 lights
-// some subset of these same 7 positions, so one shared layout covers all of them.
-const vec2 PIP_POS[7] = vec2[7](
-	vec2(0.24, 0.76), vec2(0.76, 0.76), // TL, TR
-	vec2(0.24, 0.50), vec2(0.50, 0.50), vec2(0.76, 0.50), // ML, MM, MR
-	vec2(0.24, 0.24), vec2(0.76, 0.24) // BL, BR
-);
-
-// One bit per PIP_POS slot above, indexed by die value (index 0 unused/never hit).
-const int PIP_MASKS[7] = int[7](0, 0x08, 0x41, 0x49, 0x63, 0x6B, 0x77);
-
-const float PIP_RADIUS = 0.11;
-const float PIP_AA = 0.02;
-
 void main() {
 	const vec3 L = vec3(0.4, 0.6, 0.7);
+	const float DECAL_FACE_STRIDE = 32.0;
 
 	float diffuse = max(dot(normalize(vNormal), normalize(L)), 0.0);
 	float light = 0.35 + 0.65 * diffuse;
+	int faceBit = 1 << int(vDecalValues[0] / DECAL_FACE_STRIDE);
+	bool activeFace = (activeFaceMask & faceBit) != 0;
 
-	vec2 atlasUV = vec2((vFaceValue + vUV.x) / 6.0, vUV.y);
-	vec4 texColor = texture(diceAtlas, atlasUV);
+	vec2 anchorSum = vec2(0.0);
+	int count = 0;
 
-	int value = int(vFaceValue + 0.5) + 1;
-	int mask = PIP_MASKS[value];
-	float pip = 0.0;
-
-	for (int i = 0; i < 7; i++) {
-		if ((mask & (1 << i)) != 0) {
-			float d = distance(vUV, PIP_POS[i]);
-
-			pip = max(pip, 1.0 - smoothstep(PIP_RADIUS - PIP_AA, PIP_RADIUS + PIP_AA, d));
+	for (int i = 0; i < 3; i++) {
+		if (vDecalValues[i] >= 0.0) {
+			anchorSum += vec2(vAnchorU[i], vAnchorV[i]);
+			count++;
 		}
 	}
 
-	// Contrast-adaptive pip ink -- dark on light faces, light on dark faces -- rather than
-	// one fixed color that would wash out against faces like walnut/slate.
-	float luminance = dot(texColor.rgb, vec3(0.299, 0.587, 0.114));
-	vec3 pipColor = luminance > 0.45 ? vec3(0.12, 0.10, 0.09) : vec3(0.92, 0.88, 0.80);
-	vec3 baseColor = mix(texColor.rgb, pipColor, pip);
+	vec2 avgAnchor = count > 0 ? anchorSum / float(count) : vec2(0.0);
+	vec3 color = activeFace ? bodyColor * 0.55 : bodyColor;
 
-	fragColor = vec4(baseColor * light, texColor.a);
+	for (int i = 0; i < 3; i++) {
+		if (vDecalValues[i] < 0.0) continue;
+
+		float decalValue = mod(vDecalValues[i], DECAL_FACE_STRIDE);
+		vec2 anchor = vec2(vAnchorU[i], vAnchorV[i]);
+		vec2 up = count > 1 ? normalize(anchor - avgAnchor) : vec2(0.0, 1.0);
+		vec2 right = vec2(up.y, -up.x);
+
+		vec2 local = vUV - anchor;
+		float lu = dot(local, right) / decalHalf;
+		float lv = dot(local, up) / decalHalf;
+
+		if (abs(lu) <= 1.0 && abs(lv) <= 1.0) {
+			vec2 atlasUV = vec2(
+				(decalValue + (lu * 0.5 + 0.5)) / float(digitCount),
+				lv * 0.5 + 0.5
+			);
+			vec4 glyph = texture(numberAtlas, atlasUV);
+			bool activeDecal = activeFace && int(decalValue + 0.5) == activeDecalValue;
+			vec3 glyphColor = activeDecal ? vec3(0.95, 0.92, 0.82) : glyph.rgb;
+
+			color = mix(color, glyphColor, glyph.a);
+		}
+	}
+
+	fragColor = vec4(color * light, 1.0);
 }
 """
 
-W, H = 800, 600
-DIE_SIZE = 1.4
-DICE_COUNT = 3
-PIP_SPACING = 3.5
-DROP_HEIGHT = 3.0
-ROLL_DURATION = 1.1
+# IBL variant of the fragment shader above: same decal-atlas logic, lit via osgx's
+# PBR/IBL substrate instead of the fixed N.L term. Forked from dice.FRAGMENT_SHADER_IBL
+# to add the activeFaceMask/activeDecalValue highlight uniforms, same relationship
+# DIE_FRAGMENT_SHADER has to dice.FRAGMENT_SHADER. The vertex side needs no such fork --
+# dice.VERTEX_SHADER_IBL carries no highlight data, so it's used directly below.
+DIE_FRAGMENT_SHADER_IBL = """
+#version 460 core
 
-ATLAS_CELL = 64
-ATLAS_SIZE = (ATLAS_CELL * 6, ATLAS_CELL)
+#pragma osgx::pbr F_MULTISCATTER
 
-# (label, local face-normal, die value) -- opposite faces sum to 7, same as a real D6.
-FACES = (
-	("+X", osg.Vec3(1.0, 0.0, 0.0), 1),
-	("-X", osg.Vec3(-1.0, 0.0, 0.0), 6),
-	("+Y", osg.Vec3(0.0, 1.0, 0.0), 2),
-	("-Y", osg.Vec3(0.0, -1.0, 0.0), 5),
-	("+Z", osg.Vec3(0.0, 0.0, 1.0), 3),
-	("-Z", osg.Vec3(0.0, 0.0, -1.0), 4),
-)
+in vec3 vNormal;
+in vec3 vViewDir;
+in vec2 vUV;
+flat in vec3 vDecalValues;
+flat in vec3 vAnchorU;
+flat in vec3 vAnchorV;
 
-# Earthy/neutral per-value atlas colors -- keeping the same palette family as the
-# floor/die flat colors from steps 1/2, one shade per die value.
-FACE_COLORS = {
-	1: (0.82, 0.76, 0.66), # bone
-	2: (0.70, 0.42, 0.28), # terracotta
-	3: (0.45, 0.47, 0.33), # moss
-	4: (0.36, 0.40, 0.44), # slate
-	5: (0.42, 0.29, 0.20), # walnut
-	6: (0.76, 0.64, 0.44), # sand
+uniform mat4 osg_ViewMatrix;
+uniform sampler2D numberAtlas;
+uniform int digitCount;
+uniform float decalHalf;
+uniform vec3 bodyColor;
+uniform int activeFaceMask;
+uniform int activeDecalValue;
+
+uniform samplerCube envMap;
+uniform sampler2D brdfLUT;
+uniform samplerCube diffuseEnv;
+
+// Same cubemap lookup basis osgx.gltf.pbribl.createPBRIBLScene() reads off
+// PBRIBLEnvironment.iblAxis -- see dice.rotate_ibl_environment().
+uniform vec3 iblAxis[3];
+
+// Whole-die material knobs -- no per-face roughness/metallic data yet, just a uniform
+// scalar pair so the PBR/IBL response is at least visibly tunable from the CLI.
+uniform float roughness;
+uniform float metallic;
+
+out vec4 fragColor;
+
+// Ported from osgx::gltf::pbribl's own PBRIBL.cpp shader -- Z-up world direction to the
+// baked cubemap's Y-up convention, then onto the (possibly rotated) lookup basis.
+vec3 osgx_ZUpToGLTF(vec3 d) { return vec3(d.x, d.z, -d.y); }
+vec3 osgx_OrientIBL(vec3 d) {
+	return vec3(dot(d, iblAxis[0]), dot(d, iblAxis[1]), dot(d, iblAxis[2]));
 }
 
-# Die centers arranged exactly like the pips for the corresponding D6 value.
-# The center die for 1/3/5 is shared deliberately, just as it is on a die face.
-DICE_LAYOUTS = {
-	1: ((0.0, 0.0),),
-	2: ((-0.5, 0.5), (0.5, -0.5)),
-	3: ((-0.5, 0.5), (0.0, 0.0), (0.5, -0.5)),
-	4: ((-0.5, 0.5), (0.5, 0.5), (-0.5, -0.5), (0.5, -0.5)),
-	5: ((-0.5, 0.5), (0.5, 0.5), (0.0, 0.0), (-0.5, -0.5), (0.5, -0.5)),
-	6: ((-0.5, 0.5), (0.5, 0.5), (-0.5, 0.0), (0.5, 0.0), (-0.5, -0.5), (0.5, -0.5)),
+void main() {
+	const float DECAL_FACE_STRIDE = 32.0;
+
+	int faceBit = 1 << int(vDecalValues[0] / DECAL_FACE_STRIDE);
+	bool activeFace = (activeFaceMask & faceBit) != 0;
+
+	vec2 anchorSum = vec2(0.0);
+	int count = 0;
+
+	for (int i = 0; i < 3; i++) {
+		if (vDecalValues[i] >= 0.0) {
+			anchorSum += vec2(vAnchorU[i], vAnchorV[i]);
+			count++;
+		}
+	}
+
+	vec2 avgAnchor = count > 0 ? anchorSum / float(count) : vec2(0.0);
+	vec3 albedo = activeFace ? bodyColor * 0.55 : bodyColor;
+
+	for (int i = 0; i < 3; i++) {
+		if (vDecalValues[i] < 0.0) continue;
+
+		float decalValue = mod(vDecalValues[i], DECAL_FACE_STRIDE);
+		vec2 anchor = vec2(vAnchorU[i], vAnchorV[i]);
+		vec2 up = count > 1 ? normalize(anchor - avgAnchor) : vec2(0.0, 1.0);
+		vec2 right = vec2(up.y, -up.x);
+
+		vec2 local = vUV - anchor;
+		float lu = dot(local, right) / decalHalf;
+		float lv = dot(local, up) / decalHalf;
+
+		if (abs(lu) <= 1.0 && abs(lv) <= 1.0) {
+			vec2 atlasUV = vec2(
+				(decalValue + (lu * 0.5 + 0.5)) / float(digitCount),
+				lv * 0.5 + 0.5
+			);
+			vec4 glyph = texture(numberAtlas, atlasUV);
+			bool activeDecal = activeFace && int(decalValue + 0.5) == activeDecalValue;
+			vec3 glyphColor = activeDecal ? vec3(0.95, 0.92, 0.82) : glyph.rgb;
+
+			albedo = mix(albedo, glyphColor, glyph.a);
+		}
+	}
+
+	// Eye-space N/V, rotated into world space the same way pyosg-khronos-viewer.py's
+	// underlying shader does -- transpose(mat3(osg_ViewMatrix)) is the view rotation's
+	// inverse, since it's orthonormal.
+	mat3 invView = transpose(mat3(osg_ViewMatrix));
+	vec3 N = invView * normalize(vNormal);
+	vec3 V = invView * normalize(vViewDir);
+	vec3 F0 = mix(vec3(0.04), albedo, metallic);
+
+	vec3 diffuseIrradiance = texture(diffuseEnv, osgx_OrientIBL(osgx_ZUpToGLTF(N))).rgb;
+	vec3 R = reflect(-V, N);
+	float maxMip = float(max(textureQueryLevels(envMap) - 2, 0));
+	vec3 prefiltered = textureLod(envMap, osgx_OrientIBL(osgx_ZUpToGLTF(R)), roughness * maxMip).rgb;
+	vec3 Fd = osgx_F_MultiScatter(N, V, roughness, F0, brdfLUT);
+	vec3 color = diffuseIrradiance * albedo * (1.0 - Fd) * (1.0 - metallic) + prefiltered * Fd;
+
+	fragColor = vec4(pow(color, vec3(1.0 / 2.2)), 1.0);
 }
+"""
 
-def dice_positions(dice_count):
-	return tuple(
-		osg.Vec3(x * PIP_SPACING, y * PIP_SPACING, DIE_SIZE / 2.0)
-		for x, y in DICE_LAYOUTS[dice_count]
-	)
+# The shared module owns topology, values, and presentation defaults.
+DIE_SPECS = dice.DIE_SPECS
 
-def floor_size(positions):
-	max_extent = max(max(abs(pos.x), abs(pos.y)) for pos in positions)
+def create_scene(die_names, environment=None, roughness=0.45, metallic=0.0):
+	root = osg.Group(name="scene")
+	vertex_shader = osg.Shader(osg.Shader.VERTEX, dice.VERTEX_SHADER)
 
-	return 2.0 * (max_extent + DIE_SIZE / 2.0 + 0.4)
-
-def build_face_atlas():
-	"""A `6 * ATLAS_CELL` x `ATLAS_CELL` RGB image, one flat-colored cell per die
-	value (column = value - 1) -- see FACE_COLORS. Filled via the plain buffer
-	protocol (memoryview + cast-to-1D + per-row slice assignment), not numpy --
-	see module docstring for why cast-to-1D specifically is needed.
-	"""
-	img = osg.Image()
-
-	img.allocateImage(ATLAS_SIZE[0], ATLAS_SIZE[1], 1, GL_RGB, GL_UNSIGNED_BYTE)
-
-	view = memoryview(img)
-	flat = view.cast("B")
-	row_stride = view.strides[0]
-	channels = view.shape[2]
-
-	for value, color in FACE_COLORS.items():
-		col0 = (value - 1) * ATLAS_CELL
-		rgb = bytes(int(round(c * 255)) for c in color)
-		row_bytes = rgb * ATLAS_CELL
-
-		for row in range(ATLAS_SIZE[1]):
-			start = row * row_stride + col0 * channels
-
-			flat[start:start + len(row_bytes)] = row_bytes
-
-	return img
-
-def face_value_array(drawable):
-	"""Per-vertex `faceValue` (0-5) for `drawable`'s existing vertex/normal arrays --
-	looked up per-vertex from its own normalArray against FACES, rather than assumed
-	from ShapeDrawable(Box)'s known face-group order, so this keeps working even if
-	that internal tessellation order ever changes.
-	"""
-	normals = drawable.normalArray
-	values = []
-
-	for i in range(len(normals)):
-		n = normals[i]
-		_, axis, value = min(FACES, key=lambda face: (face[1] - n).length2())
-
-		values.append(float(value - 1))
-
-	array = osg.FloatArray(values)
-	array.binding = osg.Array.Binding.BIND_PER_VERTEX
-
-	return array
-
-def face_up_quat(local_axis):
-	"""Rotation that brings a die-local face normal to point along world +Z --
-	this codebase's world is Z-up (see 08-shadows.py's floor-plane comment)."""
-	q = osg.Quat()
-
-	q.makeRotate(local_axis, osg.Vec3(0.0, 0.0, 1.0))
-
-	return q
-
-def random_quat(rng):
-	"""A random tumble-start orientation -- only ever used as slerp's FROM
-	endpoint, so it just needs to look random, not be a perfectly uniform
-	SO(3) sample."""
-	axis = osg.Vec3(rng.uniform(-1.0, 1.0), rng.uniform(-1.0, 1.0), rng.uniform(-1.0, 1.0))
-
-	if axis.length() < 1e-6:
-		axis = osg.Vec3(1.0, 0.0, 0.0)
+	if environment is not None:
+		die_program = osg.Program(name="pyosg-dice-ibl", shaders=(
+			osg.Shader(osg.Shader.VERTEX, dice.VERTEX_SHADER_IBL),
+			osg.Shader(osg.Shader.FRAGMENT, osgx.resolveShaderLibs(DIE_FRAGMENT_SHADER_IBL)),
+		))
+		root.stateSet.uniforms.extend((
+			osg.Uniform("roughness", roughness),
+			osg.Uniform("metallic", metallic),
+			osg.Uniform(osg.Uniform.Type.FLOAT_VEC3, "iblAxis", tuple(environment.iblAxis)),
+		))
 
 	else:
-		axis.normalize()
+		die_program = osg.Program(name="pyosg-dice", shaders=(
+			vertex_shader,
+			osg.Shader(osg.Shader.FRAGMENT, DIE_FRAGMENT_SHADER),
+		))
 
-	return osg.Quat(rng.uniform(0.0, 2.0 * math.pi), axis)
-
-class DiceRollCallback:
-	"""Animates `mt` from a random tumble-start orientation to `target_quat`
-	(already decided by roll(), below, before this callback ever exists) over
-	`duration` seconds -- same wall-clock-timer/no-self-detach pattern as
-	ShrinkCallback/FallCallback in pyosg-match4.py. Height follows
-	osgAnimation.outBounce (decaying-bounce shape, for free); rotation slerps
-	along osgAnimation.outElastic (slight overshoot wobble, for free) -- no
-	physics simulation of any kind, see module docstring.
-
-	`rolling` is the shared per-die flag list (one entry per die in `dice`,
-	see create_scene()) and `index` is this die's own slot in it -- lets N
-	independent dice roll/settle on their own schedules while DiceKeyHandler
-	still only needs one `any(rolling)` check to know if the whole row is
-	still moving.
-	"""
-
-	def __init__(
-		self,
-		mt,
-		start_quat,
-		target_quat,
-		rest_pos,
-		rolling,
-		r_held,
-		index,
-		duration=ROLL_DURATION
-	):
-		self.mt = mt
-		self.start_quat = start_quat
-		self.target_quat = target_quat
-		self.rest_pos = rest_pos
-		self.rolling = rolling
-		self.r_held = r_held
-		self.index = index
-		self.duration = duration
-		self.t0 = time.time()
-		self.done = False
-		self.was_held = False
-		self.last_spin_quat = start_quat
-
-	def __call__(self, node, nv):
-		if not self.done:
-			if self.r_held[0]:
-				# A held roll remains at its highest point while rotating. On release,
-				# the normal drop starts from this exact orientation.
-				spin = osg.Quat(
-					4.0 * math.pi * (time.time() - self.t0),
-					osg.Vec3(0.0, 0.0, 1.0)
-				)
-				self.last_spin_quat = self.start_quat * spin
-				self.was_held = True
-				self.mt.matrix = osg.Matrix.rotate(self.last_spin_quat) * osg.Matrix.translate(
-					osg.Vec3(self.rest_pos.x, self.rest_pos.y, self.rest_pos.z + DROP_HEIGHT)
-				)
-
-				return True
-
-			if self.was_held:
-				self.start_quat = self.last_spin_quat
-				self.t0 = time.time()
-				self.was_held = False
-
-			t = (time.time() - self.t0) / self.duration
-
-			if t >= 1.0:
-				t = 1.0
-				self.done = True
-				self.rolling[self.index] = False
-
-			z = self.rest_pos.z + DROP_HEIGHT * (1.0 - osgAnimation.outBounce(t))
-			pos = osg.Vec3(self.rest_pos.x, self.rest_pos.y, z)
-
-			quat = osg.Quat()
-
-			quat.slerp(osgAnimation.outElastic(t), self.start_quat, self.target_quat)
-
-			self.mt.matrix = osg.Matrix.rotate(quat) * osg.Matrix.translate(pos)
-
-		return True
-
-def roll(mt, rest_pos, rng, rolling, r_held, index):
-	"""Decide the roll's outcome FIRST -- a random die value (and a random
-	multiple-of-90-degree spin around the vertical axis, so repeated rolls
-	on the same value don't look identical) -- THEN kick off the animation
-	toward it. Never the other way around; see module docstring.
-	"""
-	label, axis, value = rng.choice(FACES)
-	spin = osg.Quat(rng.choice((0, 1, 2, 3)) * (math.pi / 2.0), osg.Vec3(0.0, 0.0, 1.0))
-	target_quat = face_up_quat(axis) * spin
-	start_quat = random_quat(rng)
-
-	osg.notice(f"[pyosg-dice] rolling die {index} -- landing on {value} (local {label} face up)")
-
-	rolling[index] = True
-	mt.updateCallback = DiceRollCallback(
-		mt,
-		start_quat,
-		target_quat,
-		rest_pos,
-		rolling,
-		r_held,
-		index
+	atlas_tex = osg.Texture2D(
+		image=dice.build_number_atlas(ATLAS_DIGITS),
+		filter=(osg.Texture.NEAREST, osg.Texture.NEAREST),
+		wrap=(osg.Texture.CLAMP_TO_EDGE, osg.Texture.CLAMP_TO_EDGE),
 	)
 
-def roll_all(dice, rng, rolling, r_held):
-	"""Rolls every die in `dice` (see create_scene()) at once."""
-	for index, (mt, rest_pos) in enumerate(dice):
-		roll(mt, rest_pos, rng, rolling, r_held, index)
-
-def create_scene(dice_count):
-	positions = dice_positions(dice_count)
-	root = osg.Group(name="scene")
-	vertex_shader = osg.Shader(osg.Shader.VERTEX, SCENE_VERTEX_SHADER)
+	positions = [(i - (len(die_names) - 1) / 2.0) * DIE_SPACING for i in range(len(die_names))]
+	# Every die has this shared circumradius, so no per-die footprint estimates are needed.
+	floor_half = (max((abs(x) for x in positions), default=0.0) + DIE_SIZE + FLOOR_MARGIN)
 
 	floor_geode = osg.Geode(name="floor")
 	floor_drawable = osg.ShapeDrawable(osg.Box(
-		osg.Vec3(0.0, 0.0, -0.05),
-		floor_size(positions),
-		floor_size(positions),
-		0.1
+		osg.Vec3(0.0, 0.0, -0.05), floor_half * 2.0, floor_half * 2.0, 0.1
 	))
-
-	# TODO: Add `color` to `kwargs_init`!
-	floor_drawable.color = osg.Vec4(0.88, 0.86, 0.80, 1.0)
 
 	floor_geode.drawables.append(floor_drawable)
 	floor_geode.stateSet.attributes.append(osg.Program(name="pyosg-dice-floor", shaders=(
 		vertex_shader,
-		osg.Shader(osg.Shader.FRAGMENT, FLOOR_FRAGMENT_SHADER),
+		osg.Shader(osg.Shader.FRAGMENT, dice.FLOOR_FRAGMENT_SHADER),
 	)))
 	root.children.append(floor_geode)
 
-	# Program/texture/uniform are each built ONCE and shared across every die below --
-	# only the geometry (and its per-vertex faceValue attribute) is genuinely per-instance.
-	die_prog = osg.Program(name="pyosg-dice-die", shaders=(
-		vertex_shader,
-		osg.Shader(osg.Shader.FRAGMENT, DIE_FRAGMENT_SHADER),
-	))
-	die_tex = osg.Texture2D(
-		image=build_face_atlas(),
-		filter=(osg.Texture.NEAREST, osg.Texture.NEAREST),
-		wrap=(osg.Texture.CLAMP_TO_EDGE, osg.Texture.CLAMP_TO_EDGE),
-	)
-	die_atlas_uniform = osg.Uniform("diceAtlas", 0)
+	rollable_dice = []
+	active_face_uniforms = []
+	active_decal_uniforms = []
 
-	dice = []
-
-	for i, rest_pos in enumerate(positions):
+	for x, name in zip(positions, die_names):
+		spec = DIE_SPECS[name]
+		geom, roll_spec = spec.build_geometry()
+		rest_xy = osg.Vec3(x, 0.0, 0.0)
+		rest_pos = dice.rest_position(rest_xy, roll_spec.polyhedron, osg.Quat())
 		mt = osg.MatrixTransform(osg.Matrix.translate(rest_pos))
-		die_geode = osg.Geode(name=f"die{i}")
-		die_drawable = osg.ShapeDrawable(osg.Box(osg.Vec3(), DIE_SIZE))
+		die_geode = osg.Geode(name=name)
 
-		die_drawable.vertexAttrib[FACE_ATTRIB_LOCATION] = face_value_array(die_drawable)
-
-		die_geode.drawables.append(die_drawable)
+		die_geode.drawables.append(geom)
 		mt.children.append(die_geode)
 		root.children.append(mt)
 
 		die_ss = die_geode.stateSet
+		active_face_uniform = osg.Uniform("activeFaceMask", 0)
+		active_decal_uniform = osg.Uniform("activeDecalValue", -1)
 
-		die_ss.attributes.append(die_prog)
-		die_ss.textureAttributes[0] = die_tex
-		die_ss.uniforms.extend((die_atlas_uniform,))
+		die_ss.attributes.append(die_program)
+		die_ss.textureAttributes[0] = atlas_tex
+		die_ss.uniforms.extend((
+			osg.Uniform("numberAtlas", 0),
+			osg.Uniform("digitCount", len(ATLAS_DIGITS)),
+			osg.Uniform("decalHalf", spec.decal_half),
+			osg.Uniform("bodyColor", osg.Vec3(*spec.body_color)),
+			active_face_uniform,
+			active_decal_uniform,
+		))
 
-		dice.append((mt, rest_pos))
+		if environment is not None:
+			die_ss.textureAttributes[5] = environment.envMap
+			die_ss.textureAttributes[6] = environment.brdfLUT
+			die_ss.textureAttributes[7] = environment.diffuseEnv
+			die_ss.uniforms.extend((
+				osg.Uniform("envMap", 5),
+				osg.Uniform("brdfLUT", 6),
+				osg.Uniform("diffuseEnv", 7),
+			))
 
-	return root, dice
+		rollable_dice.append((mt, rest_xy, roll_spec))
+		active_face_uniforms.append(active_face_uniform)
+		active_decal_uniforms.append(active_decal_uniform)
 
-class DiceKeyHandler(osgGA.GUIEventHandler):
-	"""Rolls every die on 'r'; holding it spins them at the drop's peak."""
-
-	def __init__(self, dice, rng, rolling, r_held):
-		super().__init__()
-
-		self.dice = dice
-		self.rng = rng
-		self.rolling = rolling
-		self.r_held = r_held
-
-	def handle(self, ea, aa):
-		if ea.handled or ea.key != ord("r"):
-			return False
-
-		if ea.type == osgGA.GUIEventAdapter.KEYUP:
-			self.r_held[0] = False
-
-			return True
-
-		if ea.type != osgGA.GUIEventAdapter.KEYDOWN:
-			return False
-
-		if self.r_held[0] or any(self.rolling):
-			return True
-
-		self.r_held[0] = True
-		roll_all(self.dice, self.rng, self.rolling, self.r_held)
-
-		return True
+	return root, rollable_dice, active_face_uniforms, active_decal_uniforms
 
 if __name__ == "__main__":
-	parser = argparse.ArgumentParser(description="Roll one to six procedural D6 dice.")
+	parser = argparse.ArgumentParser(description="Procedural polyhedral dice, number-atlas/decal prototype.")
 	parser.add_argument(
-		"--dice-count",
+		"--die",
+		default="d4,d6,d8,d10,d12,d20",
+		help=f"comma-separated dice to show, from {{{', '.join(sorted(DIE_SPECS))}}} (default: %(default)s)",
+	)
+	environment_group = parser.add_mutually_exclusive_group()
+	environment_group.add_argument(
+		"--hdr",
+		metavar="PATH",
+		help="source HDR environment; bakes diffuse, BRDF LUT, and GGX-prefiltered specular live, "
+			"and switches the dice from N.L shading to PBR/IBL"
+	)
+	environment_group.add_argument(
+		"--env",
+		metavar="MANIFEST",
+		help="fully pre-baked osgx_pbribl environment manifest (see pyosg-khronos-viewer.py)"
+	)
+	parser.add_argument(
+		"--roughness",
+		type=float,
+		default=0.45,
+		help="whole-die PBR/IBL roughness, only used with --hdr/--env (default: %(default)s)"
+	)
+	parser.add_argument(
+		"--metallic",
+		type=float,
+		default=0.0,
+		help="whole-die PBR/IBL metallic, only used with --hdr/--env (default: %(default)s)"
+	)
+	parser.add_argument(
+		"--ibl-rotate",
 		type=int,
-		choices=range(1, 7),
-		default=DICE_COUNT,
-		help="number of dice to show (default: %(default)s)",
+		default=0,
+		choices=(0, 90, 180, 270),
+		help="rotate the environment about the vertical axis by this many degrees before "
+			"sampling it, only used with --hdr/--env (default: %(default)s)"
 	)
 	args = parser.parse_args()
+	die_names = [d.strip() for d in args.die.split(",") if d.strip()]
+
+	for name in die_names:
+		if name not in DIE_SPECS:
+			parser.error(f"unknown die {name!r} -- choose from {{{', '.join(sorted(DIE_SPECS))}}}")
 
 	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
+	environment = dice.prepare_environment(args.hdr, args.env, args.ibl_rotate)
+
+	if environment is not None and not environment.valid():
+		parser.error("failed to prepare PBR/IBL environment resources")
+
 	viewer = osgViewer.Viewer()
 	viewer.cameraManipulator = osgGA.TrackballManipulator()
+	scene, rollable_dice, active_face_uniforms, active_decal_uniforms = create_scene(
+		die_names, environment, args.roughness, args.metallic
+	)
 
-	scene, dice = create_scene(args.dice_count)
+	if environment is not None and environment.root is not None:
+		scene.children.append(environment.root)
 	rng = random.Random()
-	rolling = [False] * len(dice)
+	rolling = [False] * len(rollable_dice)
 	r_held = [False]
 
+	def highlight_result(index, value, active_faces):
+		active_face_uniforms[index].value = sum(1 << face_index for face_index in active_faces)
+		active_decal_uniforms[index].value = dice.atlas_column(value)
+
+	def clear_result(index):
+		active_face_uniforms[index].value = 0
+		active_decal_uniforms[index].value = -1
+
 	viewer.sceneData = scene
-	viewer.eventHandlers.append(DiceKeyHandler(dice, rng, rolling, r_held))
+	viewer.eventHandlers.append(dice.DiceRollKeyHandler(
+		rollable_dice,
+		rng,
+		rolling,
+		r_held,
+		notice_prefix="pyosg-dice",
+		result_callback=highlight_result,
+		roll_started_callback=clear_result,
+	))
 
 	osg.notice("[pyosg-dice] press 'r' to roll; hold it to spin at the peak")
-
-	roll_all(dice, rng, rolling, r_held)
 
 	while not viewer.done:
 		viewer.frame()

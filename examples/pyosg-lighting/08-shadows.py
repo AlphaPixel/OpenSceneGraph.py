@@ -111,7 +111,7 @@ uniform sampler2D emissiveTex;
 uniform sampler2D shadowMap; // unit 4: depth from shadow camera
 
 // Exported by osgGLTF per material. This older forward example does not use
-// its full material UBO yet, but it can still honor texture alpha coverage.
+// its full material buffer yet, but it can still honor texture alpha coverage.
 uniform float osgx_gltf_alphaMode;
 uniform float osgx_gltf_alphaCutoff;
 

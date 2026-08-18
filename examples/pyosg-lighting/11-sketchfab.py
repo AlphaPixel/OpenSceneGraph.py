@@ -250,9 +250,8 @@ in vec4 vTangent;
 in vec2 vUV;
 
 // ---- osgGLTF material inputs ------------------------------------------------ //
-// See 09-ibl.py for the full rationale on the UBO/sampler-struct split (GLSL disallows
-// opaque/sampler types inside a std140 uniform block).
-layout(std140, binding = 0) uniform osgx_gltf_Material {
+// See 09-ibl.py for the full rationale on the material-buffer/sampler-struct split.
+layout(std430, binding = 0) readonly buffer osgx_gltf_Material {
 	vec4 baseColorFactor;
 	float roughnessFactor;
 	float metallicFactor;

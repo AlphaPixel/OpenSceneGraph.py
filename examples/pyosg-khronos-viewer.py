@@ -259,7 +259,8 @@ def main():
 	pbr = osgx.gltf.pbribl.createPBRIBLScene(
 		model,
 		environment,
-		iblIntensity=1.0,
+		iblDiffuseIntensity=1.0,
+		iblSpecularIntensity=1.0,
 		diagnostics=diagnostics
 	)
 
