@@ -44,7 +44,14 @@ def record_content(entries: list[tuple[zipfile.ZipInfo, bytes]], record_name: st
 
 def compact(wheel: Path) -> None:
     with zipfile.ZipFile(wheel) as source:
-        entries = [(info, source.read(info)) for info in source.infolist()]
+        # Wheel ZIPs need only file entries. Keeping an explicit directory
+        # entry confuses auditwheel's wheel scanner, which then tries to open
+        # it as an ELF file after extraction.
+        entries = [
+            (info, source.read(info))
+            for info in source.infolist()
+            if not info.is_dir()
+        ]
 
     by_basename = {PurePosixPath(info.filename).name: (info, data) for info, data in entries}
     discarded: set[str] = set()
