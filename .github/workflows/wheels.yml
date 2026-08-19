@@ -31,6 +31,10 @@ jobs:
 
       - name: Build and test repaired wheel
         uses: pypa/cibuildwheel@v3.4.1
+        with:
+          # Keep the action's output location explicit for the following
+          # inspection and artifact-upload steps.
+          output-dir: ${{ github.workspace }}/wheelhouse
         env:
           CIBW_BUILD: cp312-manylinux_x86_64
           CIBW_ARCHS_LINUX: x86_64
