@@ -65,3 +65,19 @@ jobs:
           name: OpenSceneGraph-cp312-manylinux_2_28-x86_64
           path: wheelhouse/*.whl
           if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: [linux-x86_64-cp312]
+    runs-on: [self-hosted, linux, x64]
+    environment:
+      name: pypi
+      url: https://pypi.org/p/openscenegraph
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: OpenSceneGraph-cp312-manylinux_2_28-x86_64
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
