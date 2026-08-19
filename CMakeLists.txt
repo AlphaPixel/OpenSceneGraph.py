@@ -72,12 +72,16 @@ if(PYOSG_FETCH_OSG)
         osg
         osgAnimation
         osgDB
+        # osgx links these additional OSG components; install them in the wheel
+        # with the rest of the project-owned OSG runtime graph.
+        osgFX
         osgGA
         # osgViewer and osgAnimation depend on osgText at runtime. Keep this
         # explicit so the first wheel contains its complete OSG runtime.
         osgText
         osgUtil
         osgViewer
+        osgWidget
     )
 else()
     find_package(OpenSceneGraph REQUIRED
