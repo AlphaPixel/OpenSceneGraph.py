@@ -27,16 +27,58 @@ set(PYOSG_OSG_GIT_TAG "a827840baf0786d72e11ac16d5338a4ee25779db"
 set(PYOSG_OSG_PLUGIN_DIR "osgPlugins-3.6.5"
     CACHE STRING "Private OSG plugin directory for the pinned OpenSceneGraph release")
 
+# Keep the first expanded wheel plugin set deliberately small. PNG, JPEG, and
+# TIFF are included because they are essential interchange formats; their
+# libraries are installed in the manylinux build container and audited into the
+# final wheel. GIF remains a later, separately audited dependency-bearing
+# addition.
+set(PYOSG_OSG_PLUGIN_NAMES
+    osg
+    obj
+    stl
+    bmp
+    dds
+    hdr
+    jpeg
+    pnm
+    png
+    rgb
+    tga
+    tiff
+)
+set(PYOSG_OSG_PLUGIN_TARGETS
+    osgdb_osg
+    # Modern .osgt/.osgb files use ObjectStream wrappers supplied by this
+    # companion serializer module rather than by osgdb_osg itself.
+    osgdb_serializers_osg
+    osgdb_obj
+    osgdb_stl
+    osgdb_bmp
+    osgdb_dds
+    osgdb_hdr
+    osgdb_jpeg
+    osgdb_pnm
+    osgdb_png
+    osgdb_rgb
+    osgdb_tga
+    osgdb_tiff
+)
+
 if(PYOSG_FETCH_OSG)
     include(FetchContent)
 
-    # Build only the libraries needed by the bindings. In particular, plugins
-    # are intentionally excluded: the first distributable wheel must not imply
-    # support for arbitrary osgDB file formats.
+    # Build only the explicitly supported plugins. OSG's default is broad, so
+    # opt into the master plugin build while disabling its "all plugins" default.
     set(BUILD_OSG_APPLICATIONS OFF CACHE BOOL "" FORCE)
     set(BUILD_OSG_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(BUILD_OSG_PLUGINS OFF CACHE BOOL "" FORCE)
+    set(BUILD_OSG_PLUGINS ON CACHE BOOL "" FORCE)
+    set(BUILD_OSG_PLUGINS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
     set(BUILD_DOCUMENTATION OFF CACHE BOOL "" FORCE)
+
+    foreach(PYOSG_OSG_PLUGIN_NAME IN LISTS PYOSG_OSG_PLUGIN_NAMES)
+        string(TOUPPER "${PYOSG_OSG_PLUGIN_NAME}" PYOSG_OSG_PLUGIN_NAME_UPPER)
+        set(BUILD_OSG_PLUGIN_${PYOSG_OSG_PLUGIN_NAME_UPPER} ON CACHE BOOL "" FORCE)
+    endforeach()
 
     # This project requires a modern core-profile OSG build.  Set every
     # derived capability explicitly as well, so a reused CMake cache cannot
@@ -237,6 +279,13 @@ if(PYOSG_FETCH_OSG OR PYOSG_BUILD_OSGX)
 	# osgx is EXCLUDE_FROM_ALL, so make all wheel runtime products dependencies
 	# of the extension target.
 	add_dependencies(OpenSceneGraph_python osgx osgx_python osgdb_gltf osgdb_ktx2)
+
+	# These targets belong to the project-fetched OSG source tree. A developer
+	# may instead add osgx alongside a pre-installed system OSG, whose plugin
+	# targets are not part of this CMake build.
+	if(PYOSG_FETCH_OSG)
+		add_dependencies(OpenSceneGraph_python ${PYOSG_OSG_PLUGIN_TARGETS})
+	endif()
 endif()
 target_compile_options(OpenSceneGraph_python PRIVATE ${PYOSG_COMPILE_OPTIONS})
 	target_compile_features(OpenSceneGraph_python PUBLIC cxx_std_20)
@@ -299,13 +348,19 @@ if(NOT PYOSG_EMBEDDED)
 			BUILD_RPATH "$ORIGIN/.."
 			INSTALL_RPATH "$ORIGIN/.."
 		)
+		# Native OSG plugins live one directory below the private OSG libraries.
+		# Give both the loader and auditwheel an explicit route back to them.
+		set_target_properties(${PYOSG_OSG_PLUGIN_TARGETS} PROPERTIES
+			BUILD_RPATH "$ORIGIN/.."
+			INSTALL_RPATH "$ORIGIN/.."
+		)
 
 		install(TARGETS ${PYOSG_OSG_LIBRARIES} osgx osgx_python ktx
 			LIBRARY DESTINATION "."
 			RUNTIME DESTINATION "."
 			ARCHIVE DESTINATION "."
 		)
-		install(TARGETS osgdb_gltf osgdb_ktx2
+		install(TARGETS osgdb_gltf osgdb_ktx2 ${PYOSG_OSG_PLUGIN_TARGETS}
 			LIBRARY DESTINATION "${PYOSG_OSG_PLUGIN_DIR}"
 			RUNTIME DESTINATION "${PYOSG_OSG_PLUGIN_DIR}"
 		)

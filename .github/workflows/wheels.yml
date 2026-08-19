@@ -41,16 +41,26 @@ jobs:
           CIBW_BUILD: cp312-manylinux_x86_64
           CIBW_ARCHS_LINUX: x86_64
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
-          # osgx::platform requires XRandR; install the development metadata in
-          # the manylinux container, not on the self-hosted runner host.
-          CIBW_BEFORE_ALL: dnf install -y libXrandr-devel
+          # osgx::platform and the PNG/JPEG/TIFF plugins require these
+          # development packages. Install them inside the manylinux container,
+          # not on the self-hosted runner host.
+          CIBW_BEFORE_ALL: >-
+            dnf install -y libXrandr-devel libjpeg-turbo-devel libpng-devel libtiff-devel
+          # auditwheel needs the usual ELF link chain while it analyzes the
+          # wheel. Afterwards compact the ZIP-flattened aliases and rebuild
+          # RECORD, keeping only each library's ABI SONAME.
+          CIBW_REPAIR_WHEEL_COMMAND: >-
+            auditwheel repair -w {dest_dir} {wheel} &&
+            python /project/etc/scripts/compact-wheel-libraries.py {dest_dir}
           # cibuildwheel installs the repaired wheel into an isolated test
           # environment before executing this command.
           CIBW_TEST_COMMAND: >-
             python -c "import OpenSceneGraph;
             registry = OpenSceneGraph.osgDB.Registry.instance();
-            assert registry.getReaderWriterForExtension('gltf');
-            assert registry.getReaderWriterForExtension('ktx2');
+            extensions = ('osg', 'obj', 'stl', 'bmp', 'dds', 'hdr', 'jpeg',
+            'jpg', 'pnm', 'png', 'rgb', 'tga', 'tif', 'tiff', 'gltf', 'ktx2');
+            assert all(registry.getReaderWriterForExtension(extension)
+            for extension in extensions);
             import osgx"
 
       - name: Inspect repaired wheel dependencies
