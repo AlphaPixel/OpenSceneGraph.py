@@ -35,6 +35,9 @@ jobs:
           CIBW_BUILD: cp312-manylinux_x86_64
           CIBW_ARCHS_LINUX: x86_64
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+          # osgx::platform requires XRandR; install the development metadata in
+          # the manylinux container, not on the self-hosted runner host.
+          CIBW_BEFORE_ALL: dnf install -y libXrandr-devel
           # cibuildwheel installs the repaired wheel into an isolated test
           # environment before executing this command.
           CIBW_TEST_COMMAND: >-
