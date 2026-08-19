@@ -6,6 +6,8 @@ name: Build Linux wheel
 on:
   push:
     branches: [cubicool-wip]
+    # Release tags build the same wheel, then unlock the publish job below.
+    tags: ["v*"]
   workflow_dispatch:
 
 # The workflow only needs to read the repository and upload its wheel artifact.
@@ -45,10 +47,11 @@ jobs:
           # cibuildwheel installs the repaired wheel into an isolated test
           # environment before executing this command.
           CIBW_TEST_COMMAND: >-
-            python -c "import OpenSceneGraph; import osgx;
+            python -c "import OpenSceneGraph;
             registry = OpenSceneGraph.osgDB.Registry.instance();
             assert registry.getReaderWriterForExtension('gltf');
-            assert registry.getReaderWriterForExtension('ktx2')"
+            assert registry.getReaderWriterForExtension('ktx2');
+            import osgx"
 
       - name: Inspect repaired wheel dependencies
         run: |
@@ -68,11 +71,14 @@ jobs:
 
   publish:
     name: Publish to PyPI
+    # Branch pushes and manual test runs produce an artifact only. Publishing
+    # requires an explicit versioned release tag, e.g. v0.1.1.
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [linux-x86_64-cp312]
     runs-on: [self-hosted, linux, x64]
     environment:
       name: pypi
-      url: https://pypi.org/p/openscenegraph
+      url: https://pypi.org/project/openscenegraph/
     permissions:
       id-token: write
     steps:

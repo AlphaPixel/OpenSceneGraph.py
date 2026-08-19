@@ -270,6 +270,9 @@ if(NOT PYOSG_EMBEDDED)
 	pybind11_add_module(OpenSceneGraph "pyosg/OpenSceneGraph-python.cpp")
 
 	target_link_libraries(OpenSceneGraph PRIVATE OpenSceneGraph_python)
+	target_compile_definitions(OpenSceneGraph PRIVATE
+		PYOSG_OSG_PLUGIN_DIR="${PYOSG_OSG_PLUGIN_DIR}"
+	)
 
 	# Keep the extension and project-built OSG libraries together in the wheel.
 	# $ORIGIN makes the installed extension independent of the CMake build tree

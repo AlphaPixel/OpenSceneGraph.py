@@ -11,6 +11,10 @@
 
 #include <GL/gl.h>
 
+#include <osgDB/Registry>
+
+#include <algorithm>
+#include <filesystem>
 #include <limits>
 
 #ifdef PYOSG_EMBEDDED
@@ -25,6 +29,27 @@ PYOSG_CONSTRUCTOR(pyosg_preinit) {
 #include <chrono>
 
 namespace pyx = pybind11x;
+
+namespace {
+
+void add_packaged_plugin_path(py::module_& module) {
+	const auto module_file = py::str(module.attr("__file__")).cast<std::string>();
+	const auto plugin_directory = std::filesystem::path(module_file).parent_path() / PYOSG_OSG_PLUGIN_DIR;
+	std::error_code error;
+
+	// Ordinary developer/system-OSG builds do not necessarily install private
+	// plugins next to the extension. The wheel does; only register a real path.
+	if(!std::filesystem::is_directory(plugin_directory, error)) return;
+
+	const auto plugin_path = plugin_directory.string();
+	auto& paths = osgDB::Registry::instance()->getLibraryFilePathList();
+
+	if(std::find(paths.begin(), paths.end(), plugin_path) == paths.end()) {
+		paths.push_back(plugin_path);
+	}
+}
+
+} // namespace
 
 std::string pyosg_async_task_example(
 	size_t seconds,
@@ -59,6 +84,11 @@ std::string pyosg_async_task_example(
 }
 
 PYBIND11_MODULE(OpenSceneGraph, m) {
+	// The wheel owns its deliberately supported osgDB plugins. Register their
+	// private directory when the core module imports, so loading a packaged
+	// format does not require an otherwise unrelated `import osgx`.
+	add_packaged_plugin_path(m);
+
 	auto osg = m.def_submodule("osg", "osg namespace");
 
 	pyosg::bind(osg);
