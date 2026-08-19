@@ -28,6 +28,9 @@ LIBRARY_ALIASES = {
     "libosgUtil.so.161": ("libosgUtil.so", "libosgUtil.so.3.6.5"),
     "libosgViewer.so.161": ("libosgViewer.so", "libosgViewer.so.3.6.5"),
     "libosgWidget.so.161": ("libosgWidget.so", "libosgWidget.so.3.6.5"),
+    # KTX 4.x/early 5.x releases used the 0 ABI SONAME; current KTX 5 uses 5.
+    # Keep either layout compact so pin updates do not reintroduce bloat.
+    "libktx.so.0": ("libktx.so", "libktx.so.0.0.0"),
     "libktx.so.5": ("libktx.so", "libktx.so.5.0.0"),
 }
 
