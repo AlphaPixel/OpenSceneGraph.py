@@ -257,32 +257,40 @@ def create_hud_camera(cb, db):
 
 	return cam
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
-
-	v = osgViewer.Viewer()
-	r = osg.Group()
-
-	rttCam, cb, db = create_rtt_camera(800, 600)
+# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side
+# effects. This is what external tooling (e.g. etc/pyside6-glsl.py's shader-editor scaffold,
+# ../pyosg-cli) imports and calls directly, so it MUST stay side-effect-free w.r.t. any
+# global viewer state. Takes (w, h) explicitly rather than reading module-level constants.
+def build_scene(w, h):
+	rttCam, cb, db = create_rtt_camera(w, h)
 	hudCam = create_hud_camera(cb, db)
 
 	# This is how the RTT camera "knows" what to render...
 	rttCam.children.append(create_scene())
-
-	r.children.extend((rttCam, hudCam))
 
 	znear = osg.Uniform("znear", 0.0)
 	zfar = osg.Uniform("zfar", 0.0)
 
 	hudCam.stateSet.uniforms.extend((znear, zfar))
 
-	# This function is used as the `Camera.DrawCallback` for the default `osgViewer.Viewer`
-	# camera, and injects the proper near/far Z values into our `Program` state every frame.
-	#
-	# OSG recomputes the znear/zfar every frame (based on its `CameraManipulator`) so that
-	# the resultant depth range has as much precision as possible. MANY post-processing
+	# Injects the proper near/far Z values into our `Program` state every frame. OSG
+	# recomputes the znear/zfar every frame (based on its `CameraManipulator`) so that the
+	# resultant depth range has as much precision as possible. MANY post-processing
 	# techniques rely on being able to properly query and/or "linearize" depth values, so
 	# it's important that you're always working with accurate values.
+	#
+	# state.projectionMatrix (osg::State::getProjectionMatrix()) is a SHARED per-context
+	# value, not scoped to whichever camera's callback reads it -- it reflects whatever was
+	# LAST applied to the GL state, not necessarily this camera's own matrix. rttCam is
+	# PRE_RENDER (draws FIRST each frame), so attaching this callback there would read a
+	# STALE value left over from the END of the previous frame (hudCam's own identity
+	# projectionMatrix, since hudCam draws last) -- confirmed the hard way on pyosg-mrt.py's
+	# equivalent gbuffer_cam (see [[project_pyosg_examples_runner]] memory): garbage
+	# near/far, and inverse(identity) breaking anything relying on invProjectionMatrix.
+	# hudCam is POST_RENDER (draws LAST), so by the time ITS preDrawCallback fires, the real
+	# viewer camera has already drawn in between and applied its real, this-frame-fresh
+	# projection -- the same timing guarantee this used to get directly from the caller's own
+	# v.camera.preDrawCallback, without build_scene() needing a viewer reference at all.
 	def update_uniforms(ri):
 		pm = ri.state.projectionMatrix
 		fovy, aspect, near, far = pm.getPerspective()
@@ -290,9 +298,20 @@ if __name__ == "__main__":
 		hudCam.stateSet.uniforms["znear"] = float(near)
 		hudCam.stateSet.uniforms["zfar"] = float(far)
 
-	v.sceneData = r
+	hudCam.preDrawCallback = update_uniforms
+
+	root = osg.Group()
+	root.children.extend((rttCam, hudCam))
+
+	return root
+
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	v = osgViewer.Viewer()
+
+	v.sceneData = build_scene(800, 600)
 	v.cameraManipulator = osgGA.TrackballManipulator()
-	v.camera.preDrawCallback = update_uniforms
 
 	# You could just call `v.run()`, but it's informative to demonstrate different ways of
 	# "driving" the redraw/render process.

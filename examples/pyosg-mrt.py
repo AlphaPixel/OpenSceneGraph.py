@@ -392,18 +392,15 @@ class VisualizeModeHandler(osgGA.GUIEventHandler):
 
 		return True
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
-
-	v = osgViewer.Viewer()
-	r = osg.Group()
-
-	gbuffer_cam, color_tex, normal_tex, depth_tex = create_gbuffer_camera(W, H)
+# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side
+# effects. This is what external tooling (e.g. etc/pyside6-glsl.py's shader-editor scaffold,
+# ../pyosg-cli) imports and calls directly, so it MUST stay side-effect-free w.r.t. any
+# global viewer state. Takes (w, h) explicitly rather than reading module-level W/H.
+def build_scene(w, h):
+	gbuffer_cam, color_tex, normal_tex, depth_tex = create_gbuffer_camera(w, h)
 	hud_cam = create_hud_camera(color_tex, normal_tex, depth_tex)
 
 	gbuffer_cam.children.append(create_scene())
-
-	r.children.extend((gbuffer_cam, hud_cam))
 
 	znear_u = osg.Uniform("znear", 0.0)
 	zfar_u = osg.Uniform("zfar", 0.0)
@@ -412,10 +409,27 @@ if __name__ == "__main__":
 
 	hud_cam.stateSet.uniforms.extend((znear_u, zfar_u, inv_proj_u, visualize_mode_u))
 
-	# Same idea as pyosg-rtt.py's update_uniforms: OSG recomputes znear/zfar
-	# every frame based on the CameraManipulator, so depth linearization and
-	# view-space reconstruction both need fresh values every frame, not just
-	# at startup.
+	# Same idea as pyosg-rtt.py's update_uniforms: OSG recomputes znear/zfar every frame
+	# based on the CameraManipulator, so depth linearization and view-space reconstruction
+	# both need fresh values every frame, not just at startup.
+	#
+	# ri.state.projectionMatrix is a SHARED per-context value, not scoped to whichever
+	# camera's callback reads it -- it reflects whatever was last applied to the GL state,
+	# not necessarily this camera's own matrix. gbuffer_cam is PRE_RENDER (draws FIRST each
+	# frame), so its preDrawCallback fires before anything THIS frame has applied a fresh
+	# projection -- it read a STALE leftover from the END of the PREVIOUS frame instead:
+	# hud_cam's own identity projectionMatrix (hud_cam draws last). That silently broke
+	# znear/zfar (decomposing an identity matrix as a perspective gives garbage near/far,
+	# killing the depth/normal-edge outline) and invProjectionMatrix (inverse(identity) =
+	# identity, breaking reconstructViewPos() and blowing out the rim-light term instead).
+	# Confirmed visually 2026-08-19: outline vanished, image washed out toward rimColor's
+	# orange/yellow.
+	#
+	# hud_cam is POST_RENDER (draws LAST), so by the time ITS preDrawCallback fires, the
+	# real viewer camera has already drawn in between (PRE_RENDER -> viewer's own NESTED_RENDER
+	# -> POST_RENDER) and applied its real, this-frame-fresh projection -- the same timing
+	# guarantee the original code got directly from attaching to the caller's own
+	# v.camera.preDrawCallback, without build_scene() needing a viewer reference at all.
 	def update_uniforms(ri):
 		pm = ri.state.projectionMatrix
 		fovy, aspect, near, far = pm.getPerspective()
@@ -424,25 +438,55 @@ if __name__ == "__main__":
 		zfar_u.value = float(far)
 		inv_proj_u.value = osg.Matrixf(osg.Matrix.inverse(pm))
 
-	v.sceneData = r
-	v.cameraManipulator = osgGA.TrackballManipulator()
-	v.camera.preDrawCallback = update_uniforms
-	v.eventHandlers.append(VisualizeModeHandler(visualize_mode_u))
+	hud_cam.preDrawCallback = update_uniforms
+
+	root = osg.Group()
+	root.children.extend((gbuffer_cam, hud_cam))
+
+	return root
+
+# Optional second hook, beyond build_scene(): a Node factory has no Viewer to attach
+# osgGA.GUIEventHandlers to, so any example wanting real interactivity (custom key bindings,
+# debug visitors, ...) beyond the default TrackballManipulator defines this too. Purely
+# optional -- an example with nothing interactive just doesn't define it. Called with the
+# SAME (viewer, root) shape by both __main__ below and ../pyosg-cli, so standalone and
+# runner-driven runs behave identically instead of the runner silently dropping this example's
+# interactivity (confirmed missing 2026-08-19, before this hook existed).
+def configure_viewer(viewer, root):
+	gbuffer_cam, hud_cam = root.children
+
+	# build_scene() doesn't return the visualizeMode Uniform directly (its contract is just
+	# "return a Node") -- pull it back out of the HUD camera's StateSet, the same place
+	# build_scene() put it.
+	visualize_mode_u = hud_cam.stateSet.uniforms["visualizeMode"]
+
+	viewer.eventHandlers.append(VisualizeModeHandler(visualize_mode_u))
 
 	# GatherVisitor bound as a default arg -- this file doesn't drive its loop
 	# through aipython/pyosg_repl today, but a callback's free variables resolve
 	# unpredictably the moment it IS invoked from that bridge (confirmed live in
 	# 11-sketchfab.py's --repl session). See aipython/01-core.md rule 2.
-	def gather(ea, aa, GatherVisitor=GatherVisitor, v=v):
+	def gather(ea, aa, GatherVisitor=GatherVisitor, v=viewer):
 		if ea.handled or ea.type != osgGA.GUIEventAdapter.KEYUP:
 			return False
 
 		if ea.key == ord("g"):
 			v.sceneData.accept(GatherVisitor(namespace=globals()))
 
-	v.eventHandlers.append(gather)
+	viewer.eventHandlers.append(gather)
 
 	print("Press 1=color 2=depth 3=normal 0=lit composite (default)", flush=True)
+
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	v = osgViewer.Viewer()
+	root = build_scene(W, H)
+
+	v.sceneData = root
+	v.cameraManipulator = osgGA.TrackballManipulator()
+
+	configure_viewer(v, root)
 
 	while not v.done:
 		v.frame()

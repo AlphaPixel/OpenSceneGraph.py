@@ -67,19 +67,6 @@ void main(void) {
 }
 """
 
-def create_spiral_point_cloud(count, da=0.08, dr=0.01):
-	positions = np.zeros((count, 3), dtype=np.float32)
-
-	for i in range(count):
-		a = float(i) * da
-		r = float(i) * dr
-
-		positions[i, 0] = r * np.cos(a)
-		positions[i, 1] = r * np.sin(a)
-		positions[i, 2] = float(i) / float(count)
-
-	return positions
-
 if __name__ == "__main__":
 	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
@@ -106,7 +93,6 @@ if __name__ == "__main__":
 
 	g = osg.Geometry()
 	# a = osg.Vec3Array([osg.Vec3(i, i, i) for i in range(10)])
-	# a = osg.Vec3Array(create_spiral_point_cloud(1000))
 	a = osg.Vec3Array(tree_arr)
 
 	print(f" >> {len(a)}")

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-#vimrun! python3 ../examples/pyosg-lighting-5-normalmapping.py ../examples/data/BoomBox/glTF/BoomBox.gltf
+#vimrun! python3 05-normalmapping.py
 
 import sys
 import os
+import pathlib
 
 os.environ.update({
 	"OSG_WINDOW": "50 50 800 600",
@@ -13,6 +14,20 @@ os.environ.update({
 })
 
 from OpenSceneGraph import *
+
+import osgx
+
+# Bare name (e.g. "Corset") -> glTF-Sample-Assets/Models/<name>/glTF/<name>.gltf via
+# osgx.findDataFile(), same convention pyosg-khronos-viewer.py's own resolve_model() uses.
+def resolve_model(value):
+	path = pathlib.Path(value).expanduser()
+
+	if path.is_file():
+		return str(path)
+
+	return osgx.findDataFile(value) or osgx.findDataFile(
+		path.stem, ("glTF-Sample-Assets/Models/{}/glTF/{}.gltf",)
+	) or None
 
 # Normal mapping: replace the smooth per-vertex geometric normal with a
 # per-TEXEL normal sampled from a texture.
@@ -145,10 +160,10 @@ void main() {
 if __name__ == "__main__":
 	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
-	path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-		os.path.dirname(os.path.abspath(__file__)),
-		"data/BoomBox/glTF/BoomBox.gltf"
-	)
+	path = resolve_model(sys.argv[1] if len(sys.argv) > 1 else "BoomBox")
+
+	if not path:
+		sys.exit("Cannot find model -- clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
 
 	root = osgDB.readNodeFile(path)
 
