@@ -21,6 +21,7 @@ namespace pyosg::detail {
 	struct TextureAttributesTag;
 	struct AttributesTag;
 	struct ModesTag;
+	struct DefinesTag;
 }
 
 template<>
@@ -376,6 +377,62 @@ struct pyx::ValueMappingTraits<osg::StateSet, pyosg::detail::ModesTag> {
 	}
 };
 
+// The shader-define list -- e.g. `stateSet.defines["OSGX_PBRIBL_AO"] = osg.StateAttribute.ON`
+// (matches osg::StateSet::setDefine(name, value)'s single-arg overload -- sets the define's own
+// value string to "", i.e. a flag-style #ifdef-tested define, not a `#define NAME value`
+// substitution; OSG's OTHER setDefine(name, valueString, mode) overload for a real value string
+// has no Python-facing shorthand yet). Same ValueMappingTraits shape as ModesTag above (a named
+// flag toggle, not an object with real identity, so no MappingTraits/element-pointer caching
+// needed) -- `contains()`/`get()` go through getDefineList() directly, matching ModesTag's own
+// style, rather than getDefinePair()'s pointer-returning overload.
+template<>
+struct pyx::ValueMappingTraits<osg::StateSet, pyosg::detail::DefinesTag> {
+	using key_type = std::string;
+	using value_type = osg::StateAttribute::OverrideValue;
+
+	static value_type from_python(py::handle h) {
+		return h.cast<value_type>();
+	}
+
+	static size_t size(osg::StateSet* ss) {
+		return ss->getDefineList().size();
+	}
+
+	static bool contains(osg::StateSet* ss, key_type key) {
+		const auto& defines = ss->getDefineList();
+
+		return defines.find(key) != defines.end();
+	}
+
+	static value_type get(osg::StateSet* ss, key_type key) {
+		const auto& defines = ss->getDefineList();
+		auto it = defines.find(key);
+
+		if(it == defines.end()) throw py::key_error("key not found");
+
+		return it->second.second;
+	}
+
+	static void set(osg::StateSet* ss, key_type key, value_type value) {
+		ss->setDefine(key, value);
+	}
+
+	static void del(osg::StateSet* ss, key_type key) {
+		ss->removeDefine(key);
+	}
+
+	static std::vector<key_type> keys(osg::StateSet* ss) {
+		std::vector<key_type> out;
+		const auto& defines = ss->getDefineList();
+
+		out.reserve(defines.size());
+
+		for(const auto& [name, _] : defines) out.push_back(name);
+
+		return out;
+	}
+};
+
 namespace pyosg {
 
 namespace detail {
@@ -383,12 +440,14 @@ namespace detail {
 	using TextureAttributesProxy = pyx::MappingProxy<osg::StateSet, TextureAttributesTag>;
 	using AttributesProxy = pyx::MappingProxy<osg::StateSet, AttributesTag>;
 	using ModesProxy = pyx::ValueMappingProxy<osg::StateSet, ModesTag>;
+	using DefinesProxy = pyx::ValueMappingProxy<osg::StateSet, DefinesTag>;
 	using StateSetStorage = pyx::ProxyStorageOSG<
 		osg::StateSet,
 		UniformsProxy,
 		TextureAttributesProxy,
 		AttributesProxy,
-		ModesProxy
+		ModesProxy,
+		DefinesProxy
 	>;
 }
 

@@ -329,3 +329,75 @@ def test_modes_setdefault():
 	assert ss.modes.setdefault(GL_BLEND, StateAttribute.ON) == StateAttribute.ON
 	assert ss.modes[GL_BLEND] == StateAttribute.ON
 	assert len(ss.modes) == 2
+
+# Same ValueMappingProxy shape as .modes[] above (see State.hpp's DefinesTag) -- string keys
+# instead of GL enum keys, but otherwise identical get/set/del/keys/contains/pop/setdefault
+# behavior, so these mirror the .modes[] tests directly rather than inventing new coverage shapes.
+def test_defines_mapping():
+	ss = StateSet()
+
+	ss.defines["FOO"] = StateAttribute.ON
+	ss.defines["BAR"] = StateAttribute.ON | StateAttribute.OVERRIDE
+
+	assert ss.defines["FOO"] == StateAttribute.ON
+	assert ss.defines["BAR"] == StateAttribute.ON | StateAttribute.OVERRIDE
+	assert len(ss.defines) == 2
+	assert sorted(ss.defines.keys()) == sorted(("FOO", "BAR"))
+	assert "FOO" in ss.defines
+	assert "BAZ" not in ss.defines
+
+	del ss.defines["FOO"]
+
+	assert len(ss.defines) == 1
+	assert "FOO" not in ss.defines
+
+def test_defines_get_pop_clear():
+	ss = StateSet()
+
+	ss.defines["FOO"] = StateAttribute.ON
+	ss.defines["BAR"] = StateAttribute.ON
+
+	assert ss.defines.get("FOO") == StateAttribute.ON
+	assert ss.defines.get("MISSING") is None
+	assert ss.defines.get("MISSING", "fallback") == "fallback"
+
+	popped = ss.defines.pop("FOO")
+
+	assert popped == StateAttribute.ON
+	assert "FOO" not in ss.defines
+	assert len(ss.defines) == 1
+
+	assert ss.defines.pop("MISSING", "fallback") == "fallback"
+
+	with pytest.raises(KeyError):
+		ss.defines.pop("MISSING")
+
+	ss.defines.clear()
+
+	assert len(ss.defines) == 0
+
+def test_defines_setdefault():
+	ss = StateSet()
+
+	ss.defines["FOO"] = StateAttribute.OFF
+
+	# already present -- returns the existing value, unchanged
+	assert ss.defines.setdefault("FOO", StateAttribute.ON) == StateAttribute.OFF
+
+	# absent -- sets it, then returns the (now-existing) value
+	assert ss.defines.setdefault("BAR", StateAttribute.ON) == StateAttribute.ON
+	assert ss.defines["BAR"] == StateAttribute.ON
+	assert len(ss.defines) == 2
+
+# The actual real-world call shape this binding was added FOR (see 11-sketchfab.py's
+# OSGX_PBRIBL_AO wiring) -- setDefine()'s single-arg overload sets the define's own value string
+# to "" (a flag-style, #ifdef-tested define, not a `#define NAME value` substitution). There's no
+# Python-facing way to read that value string back yet (only the OverrideValue half of the
+# DefinePair is exposed -- see DefinesTag's own comment in State.hpp), so this only asserts the
+# round-trip on the half that IS exposed; it does not prove the value string landed correctly.
+def test_defines_set_matches_setDefine_single_arg_overload():
+	ss = StateSet()
+
+	ss.defines["OSGX_PBRIBL_AO"] = StateAttribute.ON
+
+	assert ss.defines["OSGX_PBRIBL_AO"] == StateAttribute.ON

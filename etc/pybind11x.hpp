@@ -10,6 +10,7 @@
 // PropertySlots -> "Make fields behave like stable Python attributes."
 // SequenceProxy -> "Turn arbitrary C++ containers into Python lists."
 // MappingProxy -> "Turn arbitrary C++ containers into Python dicts."
+// ValueMappingProxy -> "Same, when the values are plain scalars, not objects - copied, not identity-tracked."
 // Traits -> "Define behavior once, reuse everywhere."
 // bind_proxy_property -> "Wire a Sequence/Mapping/ValueMapping proxy onto its owner in one call."
 // build_info -> Injects "common" Python compiler information, merged with a user-defined dict
@@ -58,7 +59,7 @@ auto n_index(size_t size, py::ssize_t index) {
 }
 
 // list.insert()'s index rule is deliberately different from n_index() above: it never raises,
-// it clamps -- insert(-100, x) on a 3-element list inserts at 0, insert(100, x) inserts at 3
+// it clamps - insert(-100, x) on a 3-element list inserts at 0, insert(100, x) inserts at 3
 // (the end). This matches CPython's list.insert() exactly.
 template<typename R=size_t>
 auto n_insert_index(size_t size, py::ssize_t index) {
@@ -75,9 +76,9 @@ auto n_insert_index(size_t size, py::ssize_t index) {
 // Each participating type specializes two things (see the manifest in pyosg.hpp, which is what
 // makes these specializations visible everywhere the chain below might need them):
 //
-//   - `kwargs_base<T>::type` -- T's REAL immediate base (left as `void` for the root of a chain,
+//   - `kwargs_base<T>::type` - T's REAL immediate base (left as `void` for the root of a chain,
 //     or for any type that doesn't participate at all)
-//   - `kwargs_init_own<T>`   -- whatever kwargs T itself understands; no delegation code needed,
+//   - `kwargs_init_own<T>`   - whatever kwargs T itself understands; no delegation code needed,
 //     `kwargs_init<T>` walks `kwargs_base` up the chain for you
 //
 // A type's binding file therefore never has to know or re-derive what its "next" base is; if that
@@ -98,12 +99,12 @@ void kwargs_init(T& self, const py::kwargs& kwargs) {
 }
 
 // The common `py::init([](Args... args, py::kwargs kwargs) { auto obj = new T(args...);
-// kwargs_init(*obj, kwargs); return obj; })` pattern -- `Args...` are T's REAL leading positional
+// kwargs_init(*obj, kwargs); return obj; })` pattern - `Args...` are T's REAL leading positional
 // constructor parameter types (empty for the plain default-constructible case, e.g.
 // `kwargs_ctor<osg::Node>()`; e.g. `kwargs_ctor<osg::MatrixTransform, const osg::Matrix&>()` for
 // a type whose real constructor takes a required leading arg, letting `osg.MatrixTransform(m,
 // name=...)` work instead of forcing a separate `xform.name = ...` statement afterward). Each
-// `Args` parameter is necessarily positional-only from Python's side -- pybind11 has no name to
+// `Args` parameter is necessarily positional-only from Python's side - pybind11 has no name to
 // match a keyword against an unnamed lambda parameter, so `py::kwargs` is the only way anything
 // past it can be passed. Types needing custom/aliased allocation (a Python-subclassing trampoline)
 // still write their own lambda and just call `kwargs_init(*obj, kwargs)` directly.
@@ -120,7 +121,7 @@ auto kwargs_ctor() {
 
 namespace detail {
 	// The actual cast attempt, split out so the index pack (`Is...`) can be built from `Ts...`
-	// via `index_sequence_for` -- expanding `seq[Is].cast<Ts>()` directly keeps each index tied
+	// via `index_sequence_for` - expanding `seq[Is].cast<Ts>()` directly keeps each index tied
 	// to its own compile-time constant, unlike a runtime counter (e.g. `seq[i++]`), which would
 	// have unspecified evaluation order across pack elements.
 	template<typename... Ts, size_t... Is>
@@ -139,7 +140,7 @@ namespace detail {
 }
 
 // Attempts to unpack `obj` as an exact-length sequence of `sizeof...(Ts)` elements, casting
-// element `i` to `Ts...[i]`. Returns `std::nullopt` -- never throws -- if `obj` isn't
+// element `i` to `Ts...[i]`. Returns `std::nullopt` - never throws - if `obj` isn't
 // sequence-like, is a `str`/`bytes` (both satisfy `py::isinstance<py::sequence>`, but are never
 // what's meant by "a tuple of values" at any of this helper's call sites), doesn't have exactly
 // `sizeof...(Ts)` elements, or any element fails to cast to its corresponding type. Folding EVERY
@@ -148,7 +149,7 @@ namespace detail {
 // the error the user sees.
 //
 // For a setter that accepts a variable number of elements (e.g. 1-3), call this once per exact
-// arity, largest first -- there is deliberately no separate variadic/min-max variant.
+// arity, largest first - there is deliberately no separate variadic/min-max variant.
 template<typename... Ts>
 std::optional<std::tuple<Ts...>> try_unpack_sequence(const py::object& obj) {
 	if(py::isinstance<py::str>(obj) || py::isinstance<py::bytes>(obj)) return std::nullopt;
@@ -247,7 +248,7 @@ public:
 		return s.py;
 	}
 
-	// TODO: Investigate a future optimization similar to get() above -- unlike get(), this always
+	// TODO: Investigate a future optimization similar to get() above - unlike get(), this always
 	// reassigns even when `ptr` is unchanged from the cached slot, relying on pybind11's own
 	// registered-instance registry (py::cast() returns the existing wrapper for a known pointer)
 	// to avoid allocating a duplicate Python object. That's a hashmap-lookup-plus-refcount cost
@@ -551,14 +552,14 @@ concept SequenceAppendable = requires(T* obj, py::object py_obj) {
 
 // Does this specialization provide a REAL insert-at-position primitive (e.g. Group's
 // insertChild, Geometry's insertPrimitiveSet, or View reaching into its own mutable
-// std::list)? Not every owner has one -- Geode and Program only expose append/remove.
+// std::list)? Not every owner has one - Geode and Program only expose append/remove.
 template<typename T, typename Tag=DEFAULT_PROXY_TAG>
 concept SequenceTraitsProvidesInsert = requires(T* obj, size_t i, py::object py_obj) {
 	SequenceTraits<T, Tag>::insert(obj, i, SequenceTraits<T, Tag>::from_python(py_obj));
 };
 
-// insert() is supported either via a native traits-provided primitive, or -- for owners
-// without one -- by emulating it out of append()/del(), both of which are already required
+// insert() is supported either via a native traits-provided primitive, or - for owners
+// without one - by emulating it out of append()/del(), both of which are already required
 // to be optional-but-present via their own concepts above.
 template<typename T, typename Tag=DEFAULT_PROXY_TAG>
 concept SequenceInsertable =
@@ -610,7 +611,7 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 
 			auto* ptr = traits_type::get(obj, i);
 
-			// Cache the canonical pointer's own wrapper, not the raw input py_obj -- see the
+			// Cache the canonical pointer's own wrapper, not the raw input py_obj - see the
 			// "Caching Rules" section of ai/context-pybind11x.md. Only mattered silently before
 			// because every prior SequenceTraits had value_type == element_type*, where py_obj
 			// already wrapped the same pointer get() would independently return; a value_type
@@ -631,18 +632,18 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 
 			traits_type::del(obj, i);
 
-			// Every index AFTER i shifts down by one -- it's still a live, still-present
+			// Every index AFTER i shifts down by one - it's still a live, still-present
 			// element (just relocated), so its cached slot must SHIFT down with it, not be
 			// erased: erasing here can drop the only strong Python reference a trampoline-
 			// backed object has (e.g. `viewer.eventHandlers.append(SomeHandler())` with no
 			// local variable retaining it), letting it get garbage collected even though
-			// OSG's own ref_ptr keeps the C++ object alive -- silently downgrading later
+			// OSG's own ref_ptr keeps the C++ object alive - silently downgrading later
 			// access to the nearest bound C++ base type, with no error anywhere. This used
 			// to erase every slot from i through the old last index; that was the root cause
 			// behind "del viewer.eventHandlers[i] corrupts identity, use [i] = x instead"
 			// being a known workaround rather than something that needed one.
 			//
-			// Copy into a local first, then assign -- `slot(j - 1) = slot(j)` directly hits
+			// Copy into a local first, then assign - `slot(j - 1) = slot(j)` directly hits
 			// the same C++17 evaluation-order hazard insert() did: assignment sequences its
 			// RIGHT side before its LEFT side, so the right-hand slot(j) reference would be
 			// taken before the left-hand slot(j - 1) call's possible resize/reallocation,
@@ -653,7 +654,7 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 				base_type::slot(j - 1) = moved;
 			}
 
-			// old_size - 1, not the now-shrunk size() - 1 -- whatever's left there is either
+			// old_size - 1, not the now-shrunk size() - 1 - whatever's left there is either
 			// the deleted element's own slot (if i was already the last index, so nothing
 			// shifted) or a stale duplicate of what the loop above just copied down one slot.
 			// Either way it must be cleared, or it leaks a duplicate strong reference.
@@ -663,7 +664,7 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 
 	// list.insert(i, x). Prefers a native SequenceTraits::insert() when the specialization
 	// provides one (O(1)/native for Group.children, Geometry.primitiveSets, View.eventHandlers
-	// -- see the owner traits files for how each reaches its underlying container). Falls back,
+	// - see the owner traits files for how each reaches its underlying container). Falls back,
 	// for owners with only append()/del() (Geode, Program), to rotating the tail out and back
 	// in around the new value: capture it via get(), remove it back-to-front (front-to-back
 	// would shift indices out from under later del() calls), append the new value, then
@@ -685,7 +686,7 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 
 				traits_type::insert(obj, i, value);
 
-				// UNLIKE del()'s "just erase, let it re-derive later" -- erasing here would be
+				// UNLIKE del()'s "just erase, let it re-derive later" - erasing here would be
 				// wrong, not just less efficient. A trampoline-backed element (e.g. a Python
 				// GUIEventHandler subclass passed straight into append()/insert() with no local
 				// variable retaining it, as viewer.eventHandlers.append(MyHandler()) commonly
@@ -699,11 +700,11 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 				// way append()/set() do (also as a strong reference, not left to be discovered
 				// later, for the identical reason).
 				//
-				// Copy into a local first, THEN assign -- do not write `slot(j) = slot(j - 1)`
+				// Copy into a local first, THEN assign - do not write `slot(j) = slot(j - 1)`
 				// directly. Since C++17, assignment sequences its right side before its left
 				// side, so slot(j - 1) (a reference) is taken FIRST while the backing vector is
 				// still short, and slot(j) evaluated second is exactly what may grow/reallocate
-				// that vector -- invalidating the reference slot(j - 1) already handed back
+				// that vector - invalidating the reference slot(j - 1) already handed back
 				// before the assignment it's part of ever runs. Segfaulted inside
 				// IdentitySlot::operator=, Py_INCREF on a dangling pointer, until fixed this way.
 				for(auto j = old_size; j > i; j--) {
@@ -786,9 +787,9 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 		for(py::handle item : iterable) append(py::reinterpret_borrow<py::object>(item));
 	}
 
-	// Shared by contains()/index()/remove() -- first index whose element pointer equals
+	// Shared by contains()/index()/remove() - first index whose element pointer equals
 	// py_obj's, or nullopt if py_obj is None or not found. Identity comparison (pointer
-	// equality), same as contains() always used -- not value equality.
+	// equality), same as contains() always used - not value equality.
 	std::optional<size_t> _find_index(py::object py_obj) {
 		if(!py_obj.is_none()) {
 			auto* ptr = py_obj.cast<element_type*>();
@@ -805,7 +806,7 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 		return _find_index(py_obj).has_value();
 	}
 
-	// list.index(x): position of the first matching element, ValueError if absent -- same
+	// list.index(x): position of the first matching element, ValueError if absent - same
 	// exception CPython's list.index() raises, not IndexError.
 	size_t index(py::object py_obj) {
 		if(auto i = _find_index(py_obj)) return *i;
@@ -965,7 +966,7 @@ public MapSlotCache<typename MappingTraits<T, Tag>::key_type> {
 		return base_type::get(key, ptr);
 	}
 
-	// dict.get(key, default=None) -- a separate method from get() above (which is __getitem__
+	// dict.get(key, default=None) - a separate method from get() above (which is __getitem__
 	// and must raise KeyError) rather than a default argument on it, since the two need
 	// different missing-key behavior.
 	py::object get(key_type key, py::object default_value) {
@@ -1019,7 +1020,7 @@ public MapSlotCache<typename MappingTraits<T, Tag>::key_type> {
 
 	// dict.setdefault(key, default=None): return the existing value if key is present,
 	// otherwise set it to default and return that. Unlike get()/pop(), there's no
-	// raise-vs-not-raise split to force two overloads -- a plain pybind11 default argument
+	// raise-vs-not-raise split to force two overloads - a plain pybind11 default argument
 	// is enough, since setdefault() always treats a missing `default` the same way (as
 	// None), never differently depending on whether the caller passed it.
 	py::object setdefault(key_type key, py::object default_value) {
@@ -1067,7 +1068,7 @@ public MapSlotCache<typename MappingTraits<T, Tag>::key_type> {
 
 	// dict.pop(key, default): same, but returns default instead of raising when absent. A
 	// second overload rather than a default argument on the one above, mirroring get()'s split
-	// for the same reason -- the no-default form must raise, the with-default form must not.
+	// for the same reason - the no-default form must raise, the with-default form must not.
 	py::object pop(key_type key, py::object default_value) {
 		if constexpr(!MappingDeletable<T, Tag>) throw py::type_error(
 			"Mapping does not support deletion"
@@ -1085,7 +1086,7 @@ public MapSlotCache<typename MappingTraits<T, Tag>::key_type> {
 			"Mapping does not support deletion or key-based iteration"
 		);
 
-		// Snapshot keys() up front -- del() mutates the underlying container, so iterating a
+		// Snapshot keys() up front - del() mutates the underlying container, so iterating a
 		// live view of it while deleting would be undefined behavior.
 		else for(auto k : traits_type::keys(obj)) del(k);
 	}
@@ -1322,7 +1323,7 @@ struct PYOBJECT_INTERNAL ValueMappingProxy {
 		return traits_type::get(obj, key);
 	}
 
-	// dict.get(key, default=None) -- see MappingProxy::get(key, default) for why this is a
+	// dict.get(key, default=None) - see MappingProxy::get(key, default) for why this is a
 	// separate overload rather than a default argument on get() above.
 	py::object get(key_type key, py::object default_value) {
 		if(!contains(key)) return default_value;
@@ -1342,7 +1343,7 @@ struct PYOBJECT_INTERNAL ValueMappingProxy {
 		}
 	}
 
-	// dict.setdefault(key, default=None) -- see MappingProxy::setdefault for why a single
+	// dict.setdefault(key, default=None) - see MappingProxy::setdefault for why a single
 	// overload with a plain default argument is enough here.
 	py::object setdefault(key_type key, py::object default_value) {
 		if constexpr(!ValueMappingSettable<T, Tag>) throw py::type_error(
@@ -1526,7 +1527,7 @@ struct PYOBJECT_INTERNAL ValueMappingProxy {
 // { return Storage::get(self)->template proxy<Proxy>(); }, py::return_value_policy::reference_
 // internal);` pair that was previously hand-written at every proxy call site (Program.shaders/
 // .bindAttribLocation/.bindFragDataLocation/.bindUniformBlock, StateSet.uniforms/.textureAttributes)
-// -- `Proxy` can be any of `SequenceProxy`/`MappingProxy`/`ValueMappingProxy`, they all expose the
+// - `Proxy` can be any of `SequenceProxy`/`MappingProxy`/`ValueMappingProxy`, they all expose the
 // same `::bind(py::handle, const char*)` static method this relies on.
 template<typename Proxy, typename Owner, typename Storage, typename PyClass>
 PyClass& bind_proxy_property(PyClass& cls, const char* internal_name, const char* property_name) {
@@ -1569,11 +1570,11 @@ inline void build_info(py::module_ m, py::dict info) {
 
 // A cooperative cancellation flag: Python creates one, hands it to a C++ function running on a
 // background thread (see put_nowait below), and can call stop() from the event-loop thread at any
-// time. The C++ side must check stop.load() itself between units of work -- this cannot preemptively
+// time. The C++ side must check stop.load() itself between units of work - this cannot preemptively
 // interrupt anything already in flight (e.g. a single blocking third-party library call).
 //
 // The py::class_ binding for this type must be registered in exactly ONE module's PYBIND11_MODULE
-// block (currently OpenSceneGraph-python.cpp) -- pybind11 doesn't allow the same C++ type to be
+// block (currently OpenSceneGraph-python.cpp) - pybind11 doesn't allow the same C++ type to be
 // registered as a Python class twice across different extension modules loaded into one interpreter.
 // Other modules (e.g. osgGLTF's) can still accept `StopEvent*`/`StopEvent&` as a parameter type in
 // their own bound functions; pybind11 resolves it via that single existing registration at runtime.
@@ -1584,7 +1585,7 @@ struct StopEvent {
 // Thread-safe bridge: schedules `queue.put_nowait((args...))` onto `loop` from whatever thread calls
 // this (typically a C++ background thread with the GIL released). Re-acquires the GIL to touch the
 // Python objects at all; `loop`/`queue` are a plain asyncio.AbstractEventLoop/asyncio.Queue handed in
-// from Python -- call_soon_threadsafe is what makes this safe to call from a non-Python thread.
+// from Python - call_soon_threadsafe is what makes this safe to call from a non-Python thread.
 template<typename... Args>
 inline void put_nowait(const py::object& loop, const py::object& queue, Args&&... args) {
 	py::gil_scoped_acquire gil;

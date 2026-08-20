@@ -208,6 +208,10 @@ void bind_State(py::module_& m) {
 		ss, "_Modes", "modes"
 	);
 
+	pyx::bind_proxy_property<detail::DefinesProxy, osg::StateSet, detail::StateSetStorage>(
+		ss, "_Defines", "defines"
+	);
+
 	// Not using pyx::bind_proxy_property here (unlike textureAttributes above) - uniforms needs
 	// its own append()/extend() beyond what MappingProxy provides generically, so it keeps direct
 	// access to the bound proxy class (`up`) to chain those onto.
