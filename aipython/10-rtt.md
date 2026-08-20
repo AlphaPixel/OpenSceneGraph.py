@@ -65,6 +65,80 @@ This matches the same pattern shadow-map cameras in the Lighting Series use
 (`08-shadows.py`'s `shadow_cam`) -- any RTT/shadow-style camera with its own
 independent view should be `ABSOLUTE_RF`.
 
+## A fullscreen-quad pass re-targeted to an FBO renders a single flat color
+
+Confirmed 2026-08-20, the second time this exact root cause cost a session
+(see also `feedback_fullscreen_quad_depth_test` -- the first variant showed up
+as "correct for frame 0, solid black forever after").
+
+A fullscreen-quad camera (`ABSOLUTE_RF`, identity view/projection: composite,
+SSAO, bloom, deferred lighting) **must own its own depth state**:
+
+```python
+cam.stateSet.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF
+```
+
+Without it, such a pass works **only by accident while it draws to the
+backbuffer** -- the main camera clears depth to 1.0 every frame, so the quad
+happens to pass `GL_LESS`. Re-target that same camera to an FBO
+(`renderOrder = PRE_RENDER` + `attach()`, which is what you must do the moment
+anything downstream needs its output as a *texture*) and OSG attaches an
+**implicit depth renderbuffer** that a color-only `clearMask` never clears.
+Undefined depth, every fragment discarded, and the attachment keeps nothing
+but its clear color.
+
+The failure is silent and misleading: the FBO is valid, the viewport is right,
+the draw call is issued, no GL errors. It reads as a broken shader, and you
+will debug the shader for hours.
+
+> **"It renders fine today" is not evidence a pass owns its depth state** --
+> only that something else cleared depth for it. Every backbuffer-only
+> fullscreen pass is a latent instance of this bug; re-targeting is what
+> exposes it.
+
+### Diagnosing a pass that outputs one flat color
+
+Generalizes past this bug -- this sequence beat several rounds of reading and
+hypothesizing:
+
+1. **Dump the texture and count distinct colors** rather than judging by eye.
+   "Flat gray" turned out to be exactly `(48,53,66)` x 1024000 -- precisely the
+   *master camera's* clear color, which is what proved we were looking at
+   another framebuffer's contents rather than bad shading. (After the fix:
+   1797 distinct colors.)
+
+   ```python
+   from PIL import Image
+   from collections import Counter
+   px = list(Image.open("dump.png").convert("RGB").getdata())
+   print(len(set(px)), Counter(px).most_common(5))
+   ```
+
+2. **Set a deliberately absurd clear color** (magenta) on the suspect camera.
+   At the default black, "FBO live but nothing drew", "never rendered", and
+   "shaded to black" are indistinguishable; magenta separates all three.
+
+3. **Probe from a draw callback on the pass's own geometry** -- proves in one
+   run whether the draw happens at all, and whether an FBO is really bound or
+   OSG silently fell back to the default framebuffer:
+
+   ```python
+   # GL_DRAW_FRAMEBUFFER_BINDING == 0x8CA6; 0 means the DEFAULT framebuffer
+   ```
+
+4. **Add a flag to a known-good example** instead of writing a fresh repro, so
+   the A/B differs by exactly one variable inside one binary
+   (`osgx-gbuffer --rtt` is the worked example).
+
+### A debug blit must not disable the camera that writes the texture
+
+A "visualize mode" that `nodeMask`s off a pass and then blits that pass's own
+RTT output samples an attachment nothing rendered into this frame -- undefined,
+spatially uniform, unaffected by camera movement. That looks *exactly* like a
+broken render pass, and it is purely a broken instrument. Toggle only the
+cameras that draw to the **backbuffer**; leave every `PRE_RENDER`/FBO stage
+running in all modes.
+
 ## Z-up convention: a quad grid built in the XY plane is invisible
 
 This project's examples default to Z-up (`up = (0, 0, 1)` in `lookAt` calls,
