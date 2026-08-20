@@ -21,6 +21,13 @@
 	extern "C" PYBIND11_EXPORT PyObject* PyInit_OpenSceneGraph();
 #endif
 
+// The embedded interpreter has always registered this as OpenSceneGraph.
+// Wheels use a private extension module behind the Python package facade, so
+// make the initializer name a target-level choice without changing embedding.
+#ifndef PYOSG_MODULE_NAME
+	#define PYOSG_MODULE_NAME OpenSceneGraph
+#endif
+
 PYOSG_CONSTRUCTOR(pyosg_preinit) {
 	// OSG_INFO << "PYOSG_CONSTRUCTOR: You can do your static init here..." << std::endl;
 }
@@ -83,7 +90,7 @@ std::string pyosg_async_task_example(
 	return "result-from-cpp";
 }
 
-PYBIND11_MODULE(OpenSceneGraph, m) {
+PYBIND11_MODULE(PYOSG_MODULE_NAME, m) {
 	// The wheel owns its deliberately supported osgDB plugins. Register their
 	// private directory when the core module imports, so loading a packaged
 	// format does not require an otherwise unrelated `import osgx`.

@@ -227,6 +227,8 @@ else(WIN32)
 endif()
 
 option(PYOSG_EMBEDDED "Build OpenSceneGraph bindings for embedding" OFF)
+option(PYOSG_BUILD_PACKAGE_OVERLAY
+	"Expose the Python package directly from the CMake build tree" ON)
 
 set(PYOSG_SOURCES
 	"pyosg/pyosg.cpp"
@@ -316,10 +318,58 @@ set_property(TARGET OpenSceneGraph_python PROPERTY POSITION_INDEPENDENT_CODE ON)
 # set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
 
 if(NOT PYOSG_EMBEDDED)
-	pybind11_add_module(OpenSceneGraph "pyosg/OpenSceneGraph-python.cpp")
+	# The wheel is a normal Python package.  Keep its native implementation
+	# private while retaining the OpenSceneGraph initializer for embedded users.
+	pybind11_add_module(_OpenSceneGraph "pyosg/OpenSceneGraph-python.cpp")
 
-	target_link_libraries(OpenSceneGraph PRIVATE OpenSceneGraph_python)
-	target_compile_definitions(OpenSceneGraph PRIVATE
+	if(PYOSG_BUILD_PACKAGE_OVERLAY)
+		# Developers run examples from BUILD-*/.  Mirror the installed package
+		# there, but keep Python sources canonical in python/OpenSceneGraph and
+		# the compiled extension specific to this build directory.
+		set(PYOSG_PYTHON_PACKAGE_SOURCE_DIR
+			"${CMAKE_CURRENT_SOURCE_DIR}/python/OpenSceneGraph")
+		set(PYOSG_BUILD_PACKAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/OpenSceneGraph")
+		file(MAKE_DIRECTORY "${PYOSG_BUILD_PACKAGE_DIR}")
+
+		# CONFIGURE_DEPENDS notices added or removed helpers. Existing source files
+		# are symbolic links, so Python-only edits are immediately visible without
+		# rebuilding the native extension. COPY_ON_ERROR keeps this usable where
+		# symlink creation is unavailable.
+		file(GLOB_RECURSE PYOSG_PYTHON_PACKAGE_FILES CONFIGURE_DEPENDS
+			LIST_DIRECTORIES false
+			"${PYOSG_PYTHON_PACKAGE_SOURCE_DIR}/*")
+		foreach(PYOSG_PYTHON_PACKAGE_FILE IN LISTS PYOSG_PYTHON_PACKAGE_FILES)
+			file(RELATIVE_PATH PYOSG_PYTHON_PACKAGE_RELATIVE
+				"${PYOSG_PYTHON_PACKAGE_SOURCE_DIR}"
+				"${PYOSG_PYTHON_PACKAGE_FILE}")
+			# Never link bytecode or a manually placed native artifact from the
+			# source tree into a developer build package.
+			if(PYOSG_PYTHON_PACKAGE_RELATIVE MATCHES "(^|/)__pycache__/|\\.(pyc|pyo|so|dylib|dll)$")
+				continue()
+			endif()
+
+			set(PYOSG_PYTHON_PACKAGE_DESTINATION
+				"${PYOSG_BUILD_PACKAGE_DIR}/${PYOSG_PYTHON_PACKAGE_RELATIVE}")
+			get_filename_component(PYOSG_PYTHON_PACKAGE_DESTINATION_DIR
+				"${PYOSG_PYTHON_PACKAGE_DESTINATION}" DIRECTORY)
+			file(MAKE_DIRECTORY "${PYOSG_PYTHON_PACKAGE_DESTINATION_DIR}")
+			if(EXISTS "${PYOSG_PYTHON_PACKAGE_DESTINATION}" OR
+				IS_SYMLINK "${PYOSG_PYTHON_PACKAGE_DESTINATION}")
+				file(REMOVE "${PYOSG_PYTHON_PACKAGE_DESTINATION}")
+			endif()
+			file(CREATE_LINK "${PYOSG_PYTHON_PACKAGE_FILE}"
+				"${PYOSG_PYTHON_PACKAGE_DESTINATION}" SYMBOLIC COPY_ON_ERROR)
+		endforeach()
+
+		set_target_properties(_OpenSceneGraph PROPERTIES
+			LIBRARY_OUTPUT_DIRECTORY "${PYOSG_BUILD_PACKAGE_DIR}"
+			RUNTIME_OUTPUT_DIRECTORY "${PYOSG_BUILD_PACKAGE_DIR}"
+		)
+	endif()
+
+	target_link_libraries(_OpenSceneGraph PRIVATE OpenSceneGraph_python)
+	target_compile_definitions(_OpenSceneGraph PRIVATE
+		PYOSG_MODULE_NAME=_OpenSceneGraph
 		PYOSG_OSG_PLUGIN_DIR="${PYOSG_OSG_PLUGIN_DIR}"
 	)
 
@@ -327,17 +377,21 @@ if(NOT PYOSG_EMBEDDED)
 	# $ORIGIN makes the installed extension independent of the CMake build tree
 	# and avoids relying on LD_LIBRARY_PATH at import time.
 	if(PYOSG_FETCH_OSG)
-		set_target_properties(OpenSceneGraph ${PYOSG_OSG_LIBRARIES} PROPERTIES
+		set_target_properties(_OpenSceneGraph ${PYOSG_OSG_LIBRARIES} PROPERTIES
 			BUILD_RPATH "$ORIGIN"
 			INSTALL_RPATH "$ORIGIN"
 		)
 	endif()
 
-	install(TARGETS OpenSceneGraph
-		LIBRARY DESTINATION "."
-		RUNTIME DESTINATION "."
-		ARCHIVE DESTINATION "."
+	install(TARGETS _OpenSceneGraph
+		LIBRARY DESTINATION "OpenSceneGraph"
+		RUNTIME DESTINATION "OpenSceneGraph"
+		ARCHIVE DESTINATION "OpenSceneGraph"
 	)
+	install(FILES "python/OpenSceneGraph/__init__.py" DESTINATION "OpenSceneGraph")
+	# osgx used to be a top-level native extension.  Keep that import path alive
+	# while locating its implementation with the rest of this wheel's runtime.
+	install(FILES "python/osgx.py" DESTINATION ".")
 
 	if(PYOSG_FETCH_OSG)
 		set_target_properties(osgx osgx_python ktx PROPERTIES
@@ -356,13 +410,13 @@ if(NOT PYOSG_EMBEDDED)
 		)
 
 		install(TARGETS ${PYOSG_OSG_LIBRARIES} osgx osgx_python ktx
-			LIBRARY DESTINATION "."
-			RUNTIME DESTINATION "."
-			ARCHIVE DESTINATION "."
+			LIBRARY DESTINATION "OpenSceneGraph"
+			RUNTIME DESTINATION "OpenSceneGraph"
+			ARCHIVE DESTINATION "OpenSceneGraph"
 		)
 		install(TARGETS osgdb_gltf osgdb_ktx2 ${PYOSG_OSG_PLUGIN_TARGETS}
-			LIBRARY DESTINATION "${PYOSG_OSG_PLUGIN_DIR}"
-			RUNTIME DESTINATION "${PYOSG_OSG_PLUGIN_DIR}"
+			LIBRARY DESTINATION "OpenSceneGraph/${PYOSG_OSG_PLUGIN_DIR}"
+			RUNTIME DESTINATION "OpenSceneGraph/${PYOSG_OSG_PLUGIN_DIR}"
 		)
 	endif()
 

@@ -56,6 +56,10 @@ jobs:
           # environment before executing this command.
           CIBW_TEST_COMMAND: >-
             python -c "import OpenSceneGraph;
+            from OpenSceneGraph.osg import Node;
+            from OpenSceneGraph.GL import GL_RGBA;
+            assert Node is OpenSceneGraph.osg.Node;
+            assert GL_RGBA == OpenSceneGraph.GL.GL_RGBA;
             registry = OpenSceneGraph.osgDB.Registry.instance();
             extensions = ('osg', 'obj', 'stl', 'bmp', 'dds', 'hdr', 'jpeg',
             'jpg', 'pnm', 'png', 'rgb', 'tga', 'tif', 'tiff', 'gltf', 'ktx2');
