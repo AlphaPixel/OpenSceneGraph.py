@@ -10,6 +10,11 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 
+[project.entry-points."aipython.skills"]
+# aipython reads this package's OpenSceneGraph/aipython/*.md resources without
+# requiring a source checkout or importing the native bindings.
+OpenSceneGraph = "OpenSceneGraph"
+
 [tool.scikit-build]
 # Distribution builds always use the project-pinned OSG rather than inheriting
 # an arbitrary system installation.

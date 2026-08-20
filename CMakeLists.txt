@@ -12,20 +12,21 @@ add_subdirectory("etc/pybind11")
 # The packaged build must not inherit an arbitrary distro OSG ABI or feature
 # set. Keep this opt-in while the wheel work is still being established, but
 # make the source and revision used by this path explicit and reproducible.
-option(PYOSG_FETCH_OSG
-    "Fetch and build the project-pinned OpenSceneGraph dependency" OFF)
-
+option(PYOSG_FETCH_OSG "Fetch and build the project-pinned OpenSceneGraph dependency" OFF)
 
 # Defaults to the project-pinned OSG path, but accepts any osgx source checkout
 # so contributors can keep developing the two projects side by side.
-option(PYOSG_BUILD_OSGX
-    "Build osgx alongside a manually supplied OpenSceneGraph" OFF)
+option(PYOSG_BUILD_OSGX "Build osgx alongside a manually supplied OpenSceneGraph" OFF)
+
 set(PYOSG_OSGX_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/etc/osgx"
-    CACHE PATH "Path to the osgx source checkout")
+	CACHE PATH "Path to the osgx source checkout"
+)
 set(PYOSG_OSG_GIT_TAG "a827840baf0786d72e11ac16d5338a4ee25779db"
-    CACHE STRING "OpenSceneGraph revision (OpenSceneGraph-3.6.5)")
+	CACHE STRING "OpenSceneGraph revision (OpenSceneGraph-3.6.5)"
+)
 set(PYOSG_OSG_PLUGIN_DIR "osgPlugins-3.6.5"
-    CACHE STRING "Private OSG plugin directory for the pinned OpenSceneGraph release")
+	CACHE STRING "Private OSG plugin directory for the pinned OpenSceneGraph release"
+)
 
 # Keep the first expanded wheel plugin set deliberately small. PNG, JPEG, and
 # TIFF are included because they are essential interchange formats; their
@@ -33,130 +34,133 @@ set(PYOSG_OSG_PLUGIN_DIR "osgPlugins-3.6.5"
 # final wheel. GIF remains a later, separately audited dependency-bearing
 # addition.
 set(PYOSG_OSG_PLUGIN_NAMES
-    osg
-    obj
-    stl
-    bmp
-    dds
-    hdr
-    jpeg
-    pnm
-    png
-    rgb
-    tga
-    tiff
+	osg
+	obj
+	stl
+	bmp
+	dds
+	hdr
+	jpeg
+	pnm
+	png
+	rgb
+	tga
+	tiff
 )
 set(PYOSG_OSG_PLUGIN_TARGETS
-    osgdb_osg
-    # Modern .osgt/.osgb files use ObjectStream wrappers supplied by this
-    # companion serializer module rather than by osgdb_osg itself.
-    osgdb_serializers_osg
-    osgdb_obj
-    osgdb_stl
-    osgdb_bmp
-    osgdb_dds
-    osgdb_hdr
-    osgdb_jpeg
-    osgdb_pnm
-    osgdb_png
-    osgdb_rgb
-    osgdb_tga
-    osgdb_tiff
+	osgdb_osg
+	# Modern .osgt/.osgb files use ObjectStream wrappers supplied by this
+	# companion serializer module rather than by osgdb_osg itself.
+	osgdb_serializers_osg
+	osgdb_obj
+	osgdb_stl
+	osgdb_bmp
+	osgdb_dds
+	osgdb_hdr
+	osgdb_jpeg
+	osgdb_pnm
+	osgdb_png
+	osgdb_rgb
+	osgdb_tga
+	osgdb_tiff
 )
 
 if(PYOSG_FETCH_OSG)
-    include(FetchContent)
+	include(FetchContent)
 
-    # Build only the explicitly supported plugins. OSG's default is broad, so
-    # opt into the master plugin build while disabling its "all plugins" default.
-    set(BUILD_OSG_APPLICATIONS OFF CACHE BOOL "" FORCE)
-    set(BUILD_OSG_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(BUILD_OSG_PLUGINS ON CACHE BOOL "" FORCE)
-    set(BUILD_OSG_PLUGINS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
-    set(BUILD_DOCUMENTATION OFF CACHE BOOL "" FORCE)
+	# Build only the explicitly supported plugins. OSG's default is broad, so
+	# opt into the master plugin build while disabling its "all plugins" default.
+	set(BUILD_OSG_APPLICATIONS OFF CACHE BOOL "" FORCE)
+	set(BUILD_OSG_EXAMPLES OFF CACHE BOOL "" FORCE)
+	set(BUILD_OSG_PLUGINS ON CACHE BOOL "" FORCE)
+	set(BUILD_OSG_PLUGINS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
+	set(BUILD_DOCUMENTATION OFF CACHE BOOL "" FORCE)
 
-    foreach(PYOSG_OSG_PLUGIN_NAME IN LISTS PYOSG_OSG_PLUGIN_NAMES)
-        string(TOUPPER "${PYOSG_OSG_PLUGIN_NAME}" PYOSG_OSG_PLUGIN_NAME_UPPER)
-        set(BUILD_OSG_PLUGIN_${PYOSG_OSG_PLUGIN_NAME_UPPER} ON CACHE BOOL "" FORCE)
-    endforeach()
+	foreach(PYOSG_OSG_PLUGIN_NAME IN LISTS PYOSG_OSG_PLUGIN_NAMES)
+		string(TOUPPER "${PYOSG_OSG_PLUGIN_NAME}" PYOSG_OSG_PLUGIN_NAME_UPPER)
+		set(BUILD_OSG_PLUGIN_${PYOSG_OSG_PLUGIN_NAME_UPPER} ON CACHE BOOL "" FORCE)
+	endforeach()
 
-    # This project requires a modern core-profile OSG build.  Set every
-    # derived capability explicitly as well, so a reused CMake cache cannot
-    # re-enable fixed-function support.
-    set(OPENGL_PROFILE GLCORE CACHE STRING "" FORCE)
-    set(OSG_GL1_AVAILABLE OFF CACHE BOOL "" FORCE)
-    set(OSG_GL2_AVAILABLE OFF CACHE BOOL "" FORCE)
-    set(OSG_GL3_AVAILABLE ON CACHE BOOL "" FORCE)
-    set(OSG_GL_DISPLAYLISTS_AVAILABLE OFF CACHE BOOL "" FORCE)
-    set(OSG_GL_MATRICES_AVAILABLE OFF CACHE BOOL "" FORCE)
-    set(OSG_GL_VERTEX_FUNCS_AVAILABLE OFF CACHE BOOL "" FORCE)
-    set(OSG_GL_VERTEX_ARRAY_FUNCS_AVAILABLE OFF CACHE BOOL "" FORCE)
-    set(OSG_GL_FIXED_FUNCTION_AVAILABLE OFF CACHE BOOL "" FORCE)
-    set(OSG_GL_CONTEXT_VERSION "4.3" CACHE STRING "" FORCE)
+	# This project requires a modern core-profile OSG build. Set every
+	# derived capability explicitly as well, so a reused CMake cache cannot
+	# re-enable fixed-function support.
+	set(OPENGL_PROFILE GLCORE CACHE STRING "" FORCE)
+	set(OSG_GL1_AVAILABLE OFF CACHE BOOL "" FORCE)
+	set(OSG_GL2_AVAILABLE OFF CACHE BOOL "" FORCE)
+	set(OSG_GL3_AVAILABLE ON CACHE BOOL "" FORCE)
+	set(OSG_GL_DISPLAYLISTS_AVAILABLE OFF CACHE BOOL "" FORCE)
+	set(OSG_GL_MATRICES_AVAILABLE OFF CACHE BOOL "" FORCE)
+	set(OSG_GL_VERTEX_FUNCS_AVAILABLE OFF CACHE BOOL "" FORCE)
+	set(OSG_GL_VERTEX_ARRAY_FUNCS_AVAILABLE OFF CACHE BOOL "" FORCE)
+	set(OSG_GL_FIXED_FUNCTION_AVAILABLE OFF CACHE BOOL "" FORCE)
+	set(OSG_GL_CONTEXT_VERSION "4.3" CACHE STRING "" FORCE)
 
-    FetchContent_Declare(OpenSceneGraph
-        GIT_REPOSITORY https://github.com/openscenegraph/OpenSceneGraph.git
-        GIT_TAG "${PYOSG_OSG_GIT_TAG}"
-        GIT_SHALLOW TRUE
-        GIT_PROGRESS TRUE
-    )
-    FetchContent_GetProperties(OpenSceneGraph)
-    if(NOT openscenegraph_POPULATED)
-        FetchContent_Populate(OpenSceneGraph)
-    endif()
+	FetchContent_Declare(OpenSceneGraph
+		GIT_REPOSITORY https://github.com/openscenegraph/OpenSceneGraph.git
+		GIT_TAG "${PYOSG_OSG_GIT_TAG}"
+		GIT_SHALLOW TRUE
+		GIT_PROGRESS TRUE
+	)
+	FetchContent_GetProperties(OpenSceneGraph)
 
-    # The parent owns the wheel layout. Exclude OSG's normal headers,
-    # pkg-config files, and broad library installation from this install.
-    add_subdirectory("${openscenegraph_SOURCE_DIR}" "${openscenegraph_BINARY_DIR}" EXCLUDE_FROM_ALL)
+	if(NOT openscenegraph_POPULATED)
+		FetchContent_Populate(OpenSceneGraph)
+	endif()
 
-    set(PYOSG_OSG_LIBRARIES
-        OpenThreads
-        osg
-        osgAnimation
-        osgDB
-        # osgx links these additional OSG components; install them in the wheel
-        # with the rest of the project-owned OSG runtime graph.
-        osgFX
-        osgGA
-        # osgViewer and osgAnimation depend on osgText at runtime. Keep this
-        # explicit so the first wheel contains its complete OSG runtime.
-        osgText
-        osgUtil
-        osgViewer
-        osgWidget
-    )
+	# The parent owns the wheel layout. Exclude OSG's normal headers,
+	# pkg-config files, and broad library installation from this install.
+	add_subdirectory("${openscenegraph_SOURCE_DIR}" "${openscenegraph_BINARY_DIR}" EXCLUDE_FROM_ALL)
+
+	set(PYOSG_OSG_LIBRARIES
+		OpenThreads
+		osg
+		osgAnimation
+		osgDB
+		# osgx links these additional OSG components; install them in the wheel
+		# with the rest of the project-owned OSG runtime graph.
+		osgFX
+		osgGA
+		# osgViewer and osgAnimation depend on osgText at runtime. Keep this
+		# explicit so the first wheel contains its complete OSG runtime.
+		osgText
+		osgUtil
+		osgViewer
+		osgWidget
+	)
+
 else()
-    find_package(OpenSceneGraph REQUIRED
-        osg
-        osgAnimation
-        osgUtil
+	find_package(OpenSceneGraph REQUIRED
+		osg
+		osgAnimation
+		osgUtil
+		osgDB
+		osgGA
+		osgViewer
+	)
 
-        osgDB
-        osgGA
-        osgViewer
-    )
-
-    set(PYOSG_OSG_LIBRARIES ${OPENSCENEGRAPH_LIBRARIES})
+	set(PYOSG_OSG_LIBRARIES ${OPENSCENEGRAPH_LIBRARIES})
 endif()
 
 if(PYOSG_FETCH_OSG OR PYOSG_BUILD_OSGX)
-    if(NOT EXISTS "${PYOSG_OSGX_SOURCE_DIR}/CMakeLists.txt")
-        message(FATAL_ERROR
-            "PYOSG_BUILD_OSGX is ON, but PYOSG_OSGX_SOURCE_DIR "
-            "Initialize etc/osgx or pass -DPYOSG_OSGX_SOURCE_DIR=/path/to/osgx.")
-    endif()
+	if(NOT EXISTS "${PYOSG_OSGX_SOURCE_DIR}/CMakeLists.txt")
+		message(FATAL_ERROR
+			"PYOSG_BUILD_OSGX is ON, but PYOSG_OSGX_SOURCE_DIR "
+			"Initialize etc/osgx or pass -DPYOSG_OSGX_SOURCE_DIR=/path/to/osgx."
+		)
+	endif()
 
-    # The wheel owns this complete dependency graph. Build osgx's Python
-    # module and its deliberately supported osgDB plugins, but no examples or
-    # standalone installation rules.
-    set(OSGX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(OSGX_BUILD_UTILS OFF CACHE BOOL "" FORCE)
-    set(OSGX_BUILD_PYTHON ON CACHE BOOL "" FORCE)
-    set(OSGX_BUILD_KTX2 ON CACHE BOOL "" FORCE)
-    set(OSGX_BUILD_GLTF ON CACHE BOOL "" FORCE)
-    set(OSGX_OPENSCENEGRAPH_PY_DIR "${CMAKE_CURRENT_SOURCE_DIR}" CACHE PATH "" FORCE)
-    set(OSGX_INSTALL OFF CACHE BOOL "" FORCE)
-    add_subdirectory("${PYOSG_OSGX_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/_deps/osgx-build" EXCLUDE_FROM_ALL)
+	# The wheel owns this complete dependency graph. Build osgx's Python
+	# module and its deliberately supported osgDB plugins, but no examples or
+	# standalone installation rules.
+	set(OSGX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+	set(OSGX_BUILD_UTILS OFF CACHE BOOL "" FORCE)
+	set(OSGX_BUILD_PYTHON ON CACHE BOOL "" FORCE)
+	set(OSGX_BUILD_KTX2 ON CACHE BOOL "" FORCE)
+	set(OSGX_BUILD_GLTF ON CACHE BOOL "" FORCE)
+	set(OSGX_OPENSCENEGRAPH_PY_DIR "${CMAKE_CURRENT_SOURCE_DIR}" CACHE PATH "" FORCE)
+	set(OSGX_INSTALL OFF CACHE BOOL "" FORCE)
+
+	add_subdirectory("${PYOSG_OSGX_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/_deps/osgx-build" EXCLUDE_FROM_ALL)
 endif()
 
 # # Step A -> generate C++ from Cython
@@ -276,7 +280,6 @@ target_link_libraries(OpenSceneGraph_python PRIVATE
 	${PYOSG_OSG_LIBRARIES}
 )
 
-
 if(PYOSG_FETCH_OSG OR PYOSG_BUILD_OSGX)
 	# osgx is EXCLUDE_FROM_ALL, so make all wheel runtime products dependencies
 	# of the extension target.
@@ -302,6 +305,7 @@ if(PYOSG_FETCH_OSG)
 		"${OpenSceneGraph_SOURCE_DIR}/include"
 		"${OpenSceneGraph_BINARY_DIR}/include"
 	)
+
 else()
 	target_include_directories(OpenSceneGraph_python PUBLIC
 		${OPENSCENEGRAPH_INCLUDE_DIRS}
@@ -318,18 +322,30 @@ set_property(TARGET OpenSceneGraph_python PROPERTY POSITION_INDEPENDENT_CODE ON)
 # set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
 
 if(NOT PYOSG_EMBEDDED)
-	# The wheel is a normal Python package.  Keep its native implementation
+	# The wheel is a normal Python package. Keep its native implementation
 	# private while retaining the OpenSceneGraph initializer for embedded users.
 	pybind11_add_module(_OpenSceneGraph "pyosg/OpenSceneGraph-python.cpp")
 
 	if(PYOSG_BUILD_PACKAGE_OVERLAY)
-		# Developers run examples from BUILD-*/.  Mirror the installed package
+		# Developers run examples from BUILD-*/. Mirror the installed package
 		# there, but keep Python sources canonical in python/OpenSceneGraph and
 		# the compiled extension specific to this build directory.
 		set(PYOSG_PYTHON_PACKAGE_SOURCE_DIR
 			"${CMAKE_CURRENT_SOURCE_DIR}/python/OpenSceneGraph")
 		set(PYOSG_BUILD_PACKAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/OpenSceneGraph")
 		file(MAKE_DIRECTORY "${PYOSG_BUILD_PACKAGE_DIR}")
+		# The project knowledge stays canonical at the repository root, while the
+		# developer overlay exposes it as package data just like an installed wheel.
+		set(PYOSG_AIPYTHON_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/aipython")
+		set(PYOSG_BUILD_AIPYTHON_DIR "${PYOSG_BUILD_PACKAGE_DIR}/aipython")
+		if(
+			NOT EXISTS "${PYOSG_BUILD_AIPYTHON_DIR}" AND
+			NOT IS_SYMLINK "${PYOSG_BUILD_AIPYTHON_DIR}"
+		)
+			file(CREATE_LINK "${PYOSG_AIPYTHON_SOURCE_DIR}"
+				"${PYOSG_BUILD_AIPYTHON_DIR}" SYMBOLIC COPY_ON_ERROR
+			)
+		endif()
 
 		# CONFIGURE_DEPENDS notices added or removed helpers. Existing source files
 		# are symbolic links, so Python-only edits are immediately visible without
@@ -337,11 +353,13 @@ if(NOT PYOSG_EMBEDDED)
 		# symlink creation is unavailable.
 		file(GLOB_RECURSE PYOSG_PYTHON_PACKAGE_FILES CONFIGURE_DEPENDS
 			LIST_DIRECTORIES false
-			"${PYOSG_PYTHON_PACKAGE_SOURCE_DIR}/*")
+			"${PYOSG_PYTHON_PACKAGE_SOURCE_DIR}/*"
+		)
 		foreach(PYOSG_PYTHON_PACKAGE_FILE IN LISTS PYOSG_PYTHON_PACKAGE_FILES)
 			file(RELATIVE_PATH PYOSG_PYTHON_PACKAGE_RELATIVE
 				"${PYOSG_PYTHON_PACKAGE_SOURCE_DIR}"
-				"${PYOSG_PYTHON_PACKAGE_FILE}")
+				"${PYOSG_PYTHON_PACKAGE_FILE}"
+			)
 			# Never link bytecode or a manually placed native artifact from the
 			# source tree into a developer build package.
 			if(PYOSG_PYTHON_PACKAGE_RELATIVE MATCHES "(^|/)__pycache__/|\\.(pyc|pyo|so|dylib|dll)$")
@@ -349,16 +367,23 @@ if(NOT PYOSG_EMBEDDED)
 			endif()
 
 			set(PYOSG_PYTHON_PACKAGE_DESTINATION
-				"${PYOSG_BUILD_PACKAGE_DIR}/${PYOSG_PYTHON_PACKAGE_RELATIVE}")
+				"${PYOSG_BUILD_PACKAGE_DIR}/${PYOSG_PYTHON_PACKAGE_RELATIVE}"
+			)
 			get_filename_component(PYOSG_PYTHON_PACKAGE_DESTINATION_DIR
-				"${PYOSG_PYTHON_PACKAGE_DESTINATION}" DIRECTORY)
+				"${PYOSG_PYTHON_PACKAGE_DESTINATION}" DIRECTORY
+			)
 			file(MAKE_DIRECTORY "${PYOSG_PYTHON_PACKAGE_DESTINATION_DIR}")
-			if(EXISTS "${PYOSG_PYTHON_PACKAGE_DESTINATION}" OR
-				IS_SYMLINK "${PYOSG_PYTHON_PACKAGE_DESTINATION}")
+
+			if(
+				EXISTS "${PYOSG_PYTHON_PACKAGE_DESTINATION}" OR
+				IS_SYMLINK "${PYOSG_PYTHON_PACKAGE_DESTINATION}"
+			)
 				file(REMOVE "${PYOSG_PYTHON_PACKAGE_DESTINATION}")
 			endif()
+
 			file(CREATE_LINK "${PYOSG_PYTHON_PACKAGE_FILE}"
-				"${PYOSG_PYTHON_PACKAGE_DESTINATION}" SYMBOLIC COPY_ON_ERROR)
+				"${PYOSG_PYTHON_PACKAGE_DESTINATION}" SYMBOLIC COPY_ON_ERROR
+			)
 		endforeach()
 
 		set_target_properties(_OpenSceneGraph PROPERTIES
@@ -389,7 +414,9 @@ if(NOT PYOSG_EMBEDDED)
 		ARCHIVE DESTINATION "OpenSceneGraph"
 	)
 	install(FILES "python/OpenSceneGraph/__init__.py" DESTINATION "OpenSceneGraph")
-	# osgx used to be a top-level native extension.  Keep that import path alive
+	install(DIRECTORY "aipython/" DESTINATION "OpenSceneGraph/aipython"
+		FILES_MATCHING PATTERN "*.md")
+	# osgx used to be a top-level native extension. Keep that import path alive
 	# while locating its implementation with the rest of this wheel's runtime.
 	install(FILES "python/osgx.py" DESTINATION ".")
 
