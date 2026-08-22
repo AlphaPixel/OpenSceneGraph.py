@@ -105,14 +105,15 @@ jobs:
 
       # OSG itself is fetched from its pinned revision; vcpkg supplies the
       # Windows development dependencies needed by the OSG libraries/plugins
-      # selected in CMakeLists.txt. static-md keeps their code in the wheel's
-      # DLLs while retaining the normal MSVC dynamic runtime.
+      # selected in CMakeLists.txt. Use the normal shared triplet: OSG's older
+      # TIFF plugin only links tiff.lib, while the TIFF DLL itself correctly
+      # carries its JPEG/LZMA dependency graph for delvewheel to bundle.
       - name: Set up vcpkg dependencies
         shell: pwsh
         run: |
           git clone --depth 1 https://github.com/microsoft/vcpkg.git C:\vcpkg
           & C:\vcpkg\bootstrap-vcpkg.bat
-          & C:\vcpkg\vcpkg.exe install --triplet x64-windows-static-md freetype libjpeg-turbo libpng opengl tiff
+          & C:\vcpkg\vcpkg.exe install --triplet x64-windows freetype libjpeg-turbo libpng opengl tiff
 
       - name: Build and test Windows wheel
         uses: pypa/cibuildwheel@v3.4.1
@@ -125,7 +126,9 @@ jobs:
           # vcpkg's toolchain makes CMake's FindJPEG/FindPNG/FindTIFF and
           # FindFreetype resolve to the Windows libraries above.
           CIBW_ENVIRONMENT_WINDOWS: >-
-            CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static-md"
+            CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows"
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >-
+            delvewheel repair --add-path C:/vcpkg/installed/x64-windows/bin -w {dest_dir} {wheel}
           # cibuildwheel uses delvewheel by default on Windows, so the final
           # test runs against a DLL-repaired wheel rather than the build tree.
           CIBW_TEST_COMMAND: >-

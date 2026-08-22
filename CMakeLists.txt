@@ -111,6 +111,15 @@ if(PYOSG_FETCH_OSG)
 	# pkg-config files, and broad library installation from this install.
 	add_subdirectory("${openscenegraph_SOURCE_DIR}" "${openscenegraph_BINARY_DIR}" EXCLUDE_FROM_ALL)
 
+	# OSG's GLCORE configuration finds glcorearb.h for its own targets, but
+	# osgx and these bindings are configured afterwards in separate CMake
+	# directories. In particular, Windows obtains that header through vcpkg;
+	# make the discovered directory available to every project target that
+	# includes osg/GL after this point.
+	if(GLCORE_FOUND)
+		include_directories("${GLCORE_INCLUDE_DIR}")
+	endif()
+
 	set(PYOSG_OSG_LIBRARIES
 		OpenThreads
 		osg
