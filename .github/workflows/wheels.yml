@@ -1,4 +1,4 @@
-name: Build Linux wheel
+name: Build wheels
 
 # on:
 #  workflow_dispatch:
@@ -80,6 +80,67 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: OpenSceneGraph-cp312-manylinux_2_28-x86_64
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  windows-x86_64-cp312:
+    name: Windows x86-64 / CPython 3.12
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Match Linux exactly: the wheel builds the pinned osgx source.
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up cibuildwheel host Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      # OSG itself is fetched from its pinned revision; vcpkg supplies the
+      # Windows development dependencies needed by the OSG libraries/plugins
+      # selected in CMakeLists.txt. static-md keeps their code in the wheel's
+      # DLLs while retaining the normal MSVC dynamic runtime.
+      - name: Set up vcpkg dependencies
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git C:\vcpkg
+          & C:\vcpkg\bootstrap-vcpkg.bat
+          & C:\vcpkg\vcpkg.exe install --triplet x64-windows-static-md freetype libjpeg-turbo libpng tiff
+
+      - name: Build and test Windows wheel
+        uses: pypa/cibuildwheel@v3.4.1
+        with:
+          output-dir: ${{ github.workspace }}\wheelhouse
+        env:
+          CIBW_BUILD: cp312-win_amd64
+          CIBW_ARCHS_WINDOWS: AMD64
+          # scikit-build-core forwards CMAKE_ARGS to the native configure.
+          # vcpkg's toolchain makes CMake's FindJPEG/FindPNG/FindTIFF and
+          # FindFreetype resolve to the Windows libraries above.
+          CIBW_ENVIRONMENT_WINDOWS: >-
+            CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static-md"
+          # cibuildwheel uses delvewheel by default on Windows, so the final
+          # test runs against a DLL-repaired wheel rather than the build tree.
+          CIBW_TEST_COMMAND: >-
+            python -c "import OpenSceneGraph;
+            from OpenSceneGraph.osg import Node;
+            from OpenSceneGraph.GL import GL_RGBA;
+            assert Node is OpenSceneGraph.osg.Node;
+            assert GL_RGBA == OpenSceneGraph.GL.GL_RGBA;
+            registry = OpenSceneGraph.osgDB.Registry.instance();
+            extensions = ('osg', 'obj', 'stl', 'bmp', 'dds', 'hdr', 'jpeg',
+            'jpg', 'pnm', 'png', 'rgb', 'tga', 'tif', 'tiff', 'gltf', 'ktx2');
+            assert all(registry.getReaderWriterForExtension(extension)
+            for extension in extensions);
+            import osgx"
+
+      - name: Upload Windows wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenSceneGraph-cp312-win-amd64
           path: wheelhouse/*.whl
           if-no-files-found: error
 
