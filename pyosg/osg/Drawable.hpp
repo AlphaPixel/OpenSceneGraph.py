@@ -94,8 +94,6 @@ namespace detail {
 	public:
 		struct DrawCallback: public osg::Drawable::DrawCallback {
 			void drawImplementation(osg::RenderInfo& ri, const osg::Drawable* d) const override {
-				py::gil_scoped_acquire gil;
-
 				PYBIND11_OVERRIDE(
 					void,
 					osg::Drawable::DrawCallback,
@@ -107,8 +105,6 @@ namespace detail {
 		};
 
 		void drawImplementation(osg::RenderInfo& ri) const override {
-			py::gil_scoped_acquire gil;
-
 			PYBIND11_OVERRIDE(
 				void,
 				osg::Drawable,

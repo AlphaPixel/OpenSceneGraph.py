@@ -204,6 +204,9 @@ if(WIN32)
 		"/W4"
 		"/WX"
 		"/wd4100"
+		# MSVC's static analyzer reports a false-positive null dereference in
+		# pybind11's overload dispatcher, even when pybind11 is an external include.
+		"/wd28182"
 		"/analyze"
 		# "/wd4225"
 		# "/wd4244"

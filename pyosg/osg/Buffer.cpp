@@ -1,6 +1,10 @@
 #include "Buffer.hpp"
 
+OSGX_DISABLE_WARNINGS
+
 #include <osg/UserDataContainer>
+
+OSGX_ENABLE_WARNINGS
 
 namespace pyosg {
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <limits>
+
 #include "../pyosg.hpp"
 
 OSGX_DISABLE_WARNINGS
@@ -39,11 +41,11 @@ namespace detail {
 		py::class_<Slice>(m, name)
 			.def("__len__", &Slice::size)
 
-			.def("__getitem__", [](Slice& self, ssize_t index) {
+			.def("__getitem__", [](Slice& self, py::ssize_t index) {
 				return self[n_index(self.size(), index)];
 			})
 
-			.def("__setitem__", [](Slice& self, ssize_t index, const element_type& value) {
+			.def("__setitem__", [](Slice& self, py::ssize_t index, const element_type& value) {
 				self[n_index(self.size(), index)] = value;
 			})
 
@@ -116,7 +118,13 @@ namespace detail {
 
 		arr
 			.def(py::init<>())
-			.def(py::init<size_t>(), "size"_a)
+			.def(py::init([](py::ssize_t size) {
+				if(size < 0 || size > static_cast<py::ssize_t>(std::numeric_limits<unsigned int>::max())) {
+					throw py::value_error("Array size must fit in an unsigned int");
+				}
+
+				return new T(static_cast<unsigned int>(size));
+			}), "size"_a)
 			.def(py::init([](const std::vector<typename T::ElementDataType>& vec) {
 				auto a = new T();
 

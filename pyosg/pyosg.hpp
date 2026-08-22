@@ -5,11 +5,15 @@
 
 #include <osgx/Warnings.hpp>
 
+OSGX_DISABLE_WARNINGS
+
 #include "pybind11/pybind11.h"
 #include "pybind11/stl.h"
 #include "pybind11/stl_bind.h"
 #include "pybind11/operators.h"
 #include "pybind11/embed.h"
+
+OSGX_ENABLE_WARNINGS
 
 #if !defined(PYBIND11_VERSION_MAJOR) || \
 	!defined(PYBIND11_VERSION_MINOR) || \

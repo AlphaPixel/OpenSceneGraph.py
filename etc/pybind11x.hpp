@@ -17,11 +17,17 @@
 // StopEvent -> "Cooperative cancellation flag shared between a Python task and a C++ background thread."
 // put_nowait -> "Thread-safe: push a message onto an asyncio.Queue from any thread via call_soon_threadsafe."
 
+#include <osgx/Warnings.hpp>
+
+OSGX_DISABLE_WARNINGS
+
 #include "pybind11/pybind11.h"
 #include "pybind11/stl.h"
 #include "pybind11/stl_bind.h"
 #include "pybind11/operators.h"
 #include "pybind11/embed.h"
+
+OSGX_ENABLE_WARNINGS
 
 #include <algorithm>
 #include <atomic>
@@ -35,7 +41,11 @@ namespace py = pybind11;
 using namespace std::string_literals;
 using namespace py::literals;
 
+#if defined(_MSC_VER)
+#define PYOBJECT_INTERNAL
+#else
 #define PYOBJECT_INTERNAL __attribute__((visibility("hidden")))
+#endif
 
 namespace pybind11x {
 

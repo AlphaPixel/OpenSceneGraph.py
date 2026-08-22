@@ -9,7 +9,7 @@
 
 #include <osg/Version>
 
-#include <GL/gl.h>
+#include <osg/GL>
 
 #include <osgDB/Registry>
 
