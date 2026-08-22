@@ -2,13 +2,13 @@
 
 #include "Uniform.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osg/Node>
 #include <osg/State>
 #include <osg/StateAttribute>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
 #include <sstream>
 

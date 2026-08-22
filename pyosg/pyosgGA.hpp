@@ -3,14 +3,14 @@
 #include "pyosg.hpp"
 #include "osg/callable.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osgGA/GUIEventHandler>
 #include <osgGA/EventVisitor>
 #include <osgGA/EventQueue>
 #include <osgGA/TrackballManipulator>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
 #include "pybind11x.hpp"
 

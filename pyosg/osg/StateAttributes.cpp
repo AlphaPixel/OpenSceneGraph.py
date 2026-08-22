@@ -1,13 +1,13 @@
 #include "../pyosg.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osg/Viewport>
 #include <osg/BlendFunc>
 #include <osg/Depth>
 #include <osg/BufferIndexBinding>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
 namespace pyosg {
 

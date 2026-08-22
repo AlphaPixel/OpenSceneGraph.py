@@ -2,11 +2,11 @@
 
 #include "lifetime-probe.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osg/Group>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
 #include "pybind11x.hpp"
 

@@ -1,10 +1,10 @@
 #include "../pyosg.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osg/Quat>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
 namespace pyosg {
 
@@ -117,27 +117,27 @@ void bind_Quat(py::module_& m) {
 		.def("__iter__", [](const osg::Quat& v){
 			py::tuple t(4);
 
-			PYOSG_DISABLE_WARNINGS
+			OSGX_DISABLE_WARNINGS
 
 				for(size_t i = 0; i < 4; i++) t[i] = v[i];
 
-			PYOSG_ENABLE_WARNINGS
+			OSGX_ENABLE_WARNINGS
 
 			return py::iter(t);
 		})
 
 		.def("__repr__", [](const osg::Quat& v) {
 			return detail::seq_repr<4>("Quat", [&](size_t i) {
-				PYOSG_DISABLE_WARNINGS
+				OSGX_DISABLE_WARNINGS
 
 					return v[i];
 
-				PYOSG_ENABLE_WARNINGS
+				OSGX_ENABLE_WARNINGS
 			});
 		})
 	;
 
-	PYOSG_DISABLE_WARNINGS
+	OSGX_DISABLE_WARNINGS
 
 		quat
 			.def("__getitem__", [](const osg::Quat& v, py::ssize_t i) {
@@ -149,7 +149,7 @@ void bind_Quat(py::module_& m) {
 			})
 		;
 
-	PYOSG_ENABLE_WARNINGS
+	OSGX_ENABLE_WARNINGS
 
 	quat
 		.def_property_readonly("zeroRotation", &osg::Quat::zeroRotation)

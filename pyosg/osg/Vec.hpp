@@ -2,12 +2,12 @@
 
 #include "../pyosg.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osg/Vec4f>
 #include <osg/Vec4d>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
 namespace pyosg {
 
@@ -62,28 +62,28 @@ namespace detail {
 			.def("__iter__", [](const T& v){
 				py::tuple t(N);
 
-				PYOSG_DISABLE_WARNINGS
+				OSGX_DISABLE_WARNINGS
 
 					for(size_t i = 0; i < N; i++) t[i] = v[i];
 
-				PYOSG_ENABLE_WARNINGS
+				OSGX_ENABLE_WARNINGS
 
 				return py::iter(t);
 			})
 
 			.def("__repr__", [name](const T& v) {
 				return seq_repr<N>(name, [&](size_t i) {
-					PYOSG_DISABLE_WARNINGS
+					OSGX_DISABLE_WARNINGS
 
 						return v[i];
 
-					PYOSG_ENABLE_WARNINGS
+					OSGX_ENABLE_WARNINGS
 				});
 
 				/* py::list items;
 
 				for(size_t i = 0; i < N; i++) {
-					PYOSG_DISABLE_WARNINGS
+					OSGX_DISABLE_WARNINGS
 
 						// No matter WHAT the value_type is, lets give Python a double... a nice
 						// side-effect of how Python handles float-point numbers is that the
@@ -91,7 +91,7 @@ namespace detail {
 						// true 32bit float will look to the GPU!
 						auto val = py::float_(static_cast<double>(v[i]));
 
-					PYOSG_ENABLE_WARNINGS
+					OSGX_ENABLE_WARNINGS
 
 					items.append(py::repr(val));
 				}
@@ -110,7 +110,7 @@ namespace detail {
 			})
 		;
 
-		PYOSG_DISABLE_WARNINGS
+		OSGX_DISABLE_WARNINGS
 
 			vec
 				.def("__getitem__", [](const T& v, py::ssize_t i) {
@@ -122,7 +122,7 @@ namespace detail {
 				})
 			;
 
-		PYOSG_ENABLE_WARNINGS
+		OSGX_ENABLE_WARNINGS
 
 		// Now we're going to start defining CONDITIONAL comile-time methods, based on the value of
 		// the template parameter N; I really love modern C++.

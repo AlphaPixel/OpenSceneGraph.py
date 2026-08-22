@@ -307,6 +307,7 @@ target_include_directories(OpenSceneGraph_python PUBLIC
 	# TODO: This is currently a hack to ensure `pybind11x.hpp` is found! In the
 	# future, it will come in as another submodule!
 	"${CMAKE_SOURCE_DIR}/etc"
+	"${PYOSG_OSGX_SOURCE_DIR}/src"
 )
 
 if(PYOSG_FETCH_OSG)

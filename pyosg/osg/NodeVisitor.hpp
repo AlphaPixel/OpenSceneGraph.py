@@ -2,11 +2,11 @@
 
 #include "callable.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osg/Group>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
 // TODO: See `NodeVisitor.cpp` for WHY this exists; its current use is simply for "forwarding" to
 // other wrapped functions that require a valid `NodePath` argument.

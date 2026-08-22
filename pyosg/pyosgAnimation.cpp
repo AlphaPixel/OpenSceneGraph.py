@@ -1,10 +1,10 @@
 #include "pyosgAnimation.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osgAnimation/EaseMotion>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
 namespace pyosgAnimation {
 

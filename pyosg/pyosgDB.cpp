@@ -1,11 +1,11 @@
 #include "pyosgDB.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osgDB/ReadFile>
 #include <osgDB/WriteFile>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
 namespace pyosgDB {
 

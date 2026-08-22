@@ -299,11 +299,11 @@ template<typename T, typename... Proxies>
 struct ProxyStorageOSG: public osg::Object, public ProxyStorage<T, Proxies...> {
 	using base_type = ProxyStorage<T, Proxies...>;
 
-	PYOSG_DISABLE_WARNINGS
+	OSGX_DISABLE_WARNINGS
 
 	META_Object(pyosg, ProxyStorageOSG)
 
-	PYOSG_ENABLE_WARNINGS
+	OSGX_ENABLE_WARNINGS
 
 	ProxyStorageOSG(): osg::Object(), base_type() {
 		setName("pyosg.ProxyStorage");
