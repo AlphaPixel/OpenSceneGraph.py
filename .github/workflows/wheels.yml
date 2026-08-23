@@ -62,13 +62,14 @@ jobs:
             python -c "import OpenSceneGraph;
             from OpenSceneGraph.osg import Node;
             from OpenSceneGraph.GL import GL_RGBA;
-            assert Node is OpenSceneGraph.osg.Node;
-            assert GL_RGBA == OpenSceneGraph.GL.GL_RGBA;
+            assert Node is OpenSceneGraph.osg.Node, 'osg.Node identity mismatch';
+            assert GL_RGBA == OpenSceneGraph.GL.GL_RGBA, 'GL_RGBA identity mismatch';
             registry = OpenSceneGraph.osgDB.Registry.instance();
             extensions = ('osg', 'obj', 'stl', 'bmp', 'dds', 'hdr', 'jpeg',
             'jpg', 'pnm', 'png', 'rgb', 'tga', 'tif', 'tiff', 'gltf', 'ktx2');
-            assert all(registry.getReaderWriterForExtension(extension)
-            for extension in extensions);
+            missing = [extension for extension in extensions
+            if not registry.getReaderWriterForExtension(extension)];
+            assert not missing, f'missing osgDB plugins: {missing}';
             import osgx"
 
       - name: Inspect repaired wheel dependencies
@@ -133,7 +134,7 @@ jobs:
           CIBW_ENVIRONMENT_WINDOWS: >-
             CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows -DPYOSG_MSVC_WARNINGS_AS_ERRORS=OFF"
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >-
-            python -m delvewheel repair --ignore-existing --add-path C:/vcpkg/installed/x64-windows/bin -w {dest_dir} {wheel}
+            python -m delvewheel repair --ignore-existing --analyze-existing --add-path C:/vcpkg/installed/x64-windows/bin -w {dest_dir} {wheel}
           # cibuildwheel uses delvewheel by default on Windows, so the final
           # test runs against a DLL-repaired wheel rather than the build tree.
           CIBW_TEST_COMMAND: >-
