@@ -12,12 +12,18 @@ from pathlib import Path as _Path
 # plugins need their parent DLL directory in the process search path too.
 _dll_directory = None
 _plugin_dll_directory = None
-if hasattr(_os, "add_dll_directory"):
-	_package_directory = _Path(__file__).parent
-	_dll_directory = _os.add_dll_directory(str(_package_directory))
-	_plugin_dll_directory = _os.add_dll_directory(
-		str(_package_directory / "osgPlugins-3.6.5")
+_package_directory = _Path(__file__).parent
+_plugin_directory = _package_directory / "osgPlugins-3.6.5"
+if _os.name == "nt":
+	# osgDB loads plugins through legacy LoadLibrary(), which does not honor
+	# Python's add_dll_directory() entries.  Keep both directories on PATH for
+	# their transitive DLL dependencies as well.
+	_os.environ["PATH"] = _os.pathsep.join(
+		(str(_package_directory), str(_plugin_directory), _os.environ.get("PATH", ""))
 	)
+	if hasattr(_os, "add_dll_directory"):
+		_dll_directory = _os.add_dll_directory(str(_package_directory))
+		_plugin_dll_directory = _os.add_dll_directory(str(_plugin_directory))
 
 from ._OpenSceneGraph import * # noqa: F401,F403
 from . import _OpenSceneGraph as _native
