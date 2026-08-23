@@ -134,12 +134,10 @@ jobs:
           CIBW_ENVIRONMENT_WINDOWS: >-
             CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows -DPYOSG_MSVC_WARNINGS_AS_ERRORS=OFF"
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >-
-            python -m delvewheel repair --ignore-existing --analyze-existing --add-path C:/vcpkg/installed/x64-windows/bin -w {dest_dir} {wheel}
-          # Temporary Windows bring-up: let the expensive build/repair/upload
-          # pipeline complete while the packaged osgDB plugin smoke test is
-          # investigated separately with the local MSVC-on-Wine harness.
+            python -m delvewheel repair --ignore-existing --analyze-existing --add-path C:/vcpkg/installed/x64-windows/bin -w {dest_dir} {wheel} &&
+            python etc/scripts/repair-windows-wheel.py {dest_dir}
           CIBW_TEST_COMMAND: >-
-            python -c "print('Windows wheel smoke test temporarily deferred')"
+            python -c "import OpenSceneGraph; from OpenSceneGraph.osg import Node; from OpenSceneGraph.GL import GL_RGBA; assert Node is OpenSceneGraph.osg.Node; assert GL_RGBA == OpenSceneGraph.GL.GL_RGBA; registry = OpenSceneGraph.osgDB.Registry.instance(); extensions = ('osg', 'obj', 'stl', 'bmp', 'dds', 'hdr', 'jpeg', 'jpg', 'pnm', 'png', 'rgb', 'tga', 'tif', 'tiff', 'gltf', 'ktx2'); missing = [extension for extension in extensions if not registry.getReaderWriterForExtension(extension)]; assert not missing, f'Missing osgDB plugins: {missing}'; import osgx"
 
       - name: Upload Windows wheel
         uses: actions/upload-artifact@v4

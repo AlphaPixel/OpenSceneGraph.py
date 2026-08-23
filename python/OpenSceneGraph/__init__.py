@@ -11,8 +11,13 @@ from pathlib import Path as _Path
 # osgDB loads format plugins from its child directory later; on Windows those
 # plugins need their parent DLL directory in the process search path too.
 _dll_directory = None
+_plugin_dll_directory = None
 if hasattr(_os, "add_dll_directory"):
-	_dll_directory = _os.add_dll_directory(str(_Path(__file__).parent))
+	_package_directory = _Path(__file__).parent
+	_dll_directory = _os.add_dll_directory(str(_package_directory))
+	_plugin_dll_directory = _os.add_dll_directory(
+		str(_package_directory / "osgPlugins-3.6.5")
+	)
 
 from ._OpenSceneGraph import * # noqa: F401,F403
 from . import _OpenSceneGraph as _native
