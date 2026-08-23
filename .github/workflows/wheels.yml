@@ -122,13 +122,18 @@ jobs:
         env:
           CIBW_BUILD: cp312-win_amd64
           CIBW_ARCHS_WINDOWS: AMD64
+          # Custom repair commands are not given delvewheel automatically by
+          # cibuildwheel's isolated build environment. Install it there and
+          # invoke the module through that environment's Python below.
+          CIBW_BEFORE_BUILD_WINDOWS: >-
+            python -m pip install delvewheel
           # scikit-build-core forwards CMAKE_ARGS to the native configure.
           # vcpkg's toolchain makes CMake's FindJPEG/FindPNG/FindTIFF and
           # FindFreetype resolve to the Windows libraries above.
           CIBW_ENVIRONMENT_WINDOWS: >-
             CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows -DPYOSG_MSVC_WARNINGS_AS_ERRORS=OFF"
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >-
-            delvewheel repair --add-path C:/vcpkg/installed/x64-windows/bin -w {dest_dir} {wheel}
+            python -m delvewheel repair --add-path C:/vcpkg/installed/x64-windows/bin -w {dest_dir} {wheel}
           # cibuildwheel uses delvewheel by default on Windows, so the final
           # test runs against a DLL-repaired wheel rather than the build tree.
           CIBW_TEST_COMMAND: >-
