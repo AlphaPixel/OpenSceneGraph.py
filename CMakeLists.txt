@@ -14,6 +14,11 @@ add_subdirectory("etc/pybind11")
 # make the source and revision used by this path explicit and reproducible.
 option(PYOSG_FETCH_OSG "Fetch and build the project-pinned OpenSceneGraph dependency" OFF)
 
+# Keep local MSVC work strict by default, while allowing wheel CI bring-up to
+# report analyzer findings without throwing away an hour-long build before its
+# packaging/runtime checks run.
+option(PYOSG_MSVC_WARNINGS_AS_ERRORS "Treat MSVC warnings as errors" ON)
+
 # Defaults to the project-pinned OSG path, but accepts any osgx source checkout
 # so contributors can keep developing the two projects side by side.
 option(PYOSG_BUILD_OSGX "Build osgx alongside a manually supplied OpenSceneGraph" OFF)
@@ -202,11 +207,13 @@ endif()
 if(WIN32)
 	set(PYOSG_COMPILE_OPTIONS
 		"/W4"
-		"/WX"
 		"/wd4100"
-		# MSVC's static analyzer reports a false-positive null dereference in
+		# MSVC's static analyzer reports false-positive null dereferences in
 		# pybind11's overload dispatcher, even when pybind11 is an external include.
+		# Its function-record / current-overload invariants are established by the
+		# Python callback capsule and preserved across the two-pass dispatcher.
 		"/wd28182"
+		"/wd6011"
 		"/analyze"
 		# "/wd4225"
 		# "/wd4244"
@@ -217,6 +224,9 @@ if(WIN32)
 		# "/wd4334"
 		# "/wd4311"
 	)
+	if(PYOSG_MSVC_WARNINGS_AS_ERRORS)
+		list(APPEND PYOSG_COMPILE_OPTIONS "/WX")
+	endif()
 
 else(WIN32)
 	if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
