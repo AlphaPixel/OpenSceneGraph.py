@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Thin Python viewer for osgx.gltf.pbribl.createPBRIBLScene().
+"""Thin Python viewer for osgx.gltf.pbribl.PBRIBLScene.create().
 
 This is the Python counterpart to osgx/utils/osgx-gltf-viewer.cpp. It loads the model, selects
 optional diagnostics, and drives an osgViewer.Viewer.
@@ -10,6 +10,7 @@ import json
 import math
 import os
 import pathlib
+import time
 
 # os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
 os.environ.setdefault("OSG_WINDOW", "50 50 1420 933") # Default on cubicool's machine
@@ -235,7 +236,10 @@ def main():
 	osg.DisplaySettings.instance.numMultiSamples = 8
 
 	model_path = resolve_model(args.model)
+	t0 = time.time()
 	model = osgDB.readNodeFile(str(model_path))
+
+	print(f"readNodeFile({model_path.name}): {time.time() - t0:.3f}s", flush=True)
 
 	if model is None:
 		raise RuntimeError(f"failed to load model {model_path}")
@@ -248,15 +252,15 @@ def main():
 			"hdr",
 			("glTF-Sample-Environments/{}",)
 		)
-		environment = osgx.gltf.pbribl.preparePBRIBLEnvironment(str(hdr_path), lutSize=1024)
+		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepare(str(hdr_path), lutSize=1024)
 		environment_description = str(hdr_path)
 
 	else:
 		env_path = resolve_environment_manifest(args.env)
-		environment = osgx.gltf.pbribl.loadPBRIBLEnvironment(str(env_path))
+		environment = osgx.gltf.pbribl.PBRIBLEnvironment.load(str(env_path))
 		environment_description = str(env_path)
 
-	pbr = osgx.gltf.pbribl.createPBRIBLScene(
+	pbr = osgx.gltf.pbribl.PBRIBLScene.create(
 		model,
 		environment,
 		iblDiffuseIntensity=1.0,
