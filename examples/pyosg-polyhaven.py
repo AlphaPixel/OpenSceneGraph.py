@@ -563,7 +563,7 @@ def run_hdr(args):
 	options.maxFrames = args.max_frames
 	options.readbackFrame = 2
 
-	bake_scene = osgx.ibl.createGGXPrefilterScene(image, options)
+	bake_scene = osgx.ibl.GGXPrefilterScene.create(image, options)
 
 	root.children.append(bake_scene.root)
 	v.camera.postDrawCallback = bake_scene.readback
@@ -581,7 +581,7 @@ def run_hdr(args):
 	if not bake_scene.readback.done:
 		sys.exit("[polyhaven] GGX prefilter bake did not complete")
 
-	cubemap = osgx.ibl.finishGGXPrefilter(bake_scene.readback)
+	cubemap = bake_scene.readback.finish()
 
 	# GPU-baked mips are already embedded per-face -- don't let OSG
 	# regenerate them (see GGXPrefilter.hpp).

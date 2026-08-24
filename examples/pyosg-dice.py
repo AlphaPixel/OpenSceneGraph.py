@@ -156,7 +156,7 @@ uniform samplerCube envMap;
 uniform sampler2D brdfLUT;
 uniform samplerCube diffuseEnv;
 
-// Same cubemap lookup basis osgx.gltf.pbribl.createPBRIBLScene() reads off
+// Same cubemap lookup basis osgx.gltf.pbribl.PBRIBLScene.create() reads off
 // PBRIBLEnvironment.iblAxis -- see dice.rotate_ibl_environment().
 uniform vec3 iblAxis[3];
 

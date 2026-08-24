@@ -179,7 +179,7 @@ uniform samplerCube envMap;
 uniform sampler2D brdfLUT;
 uniform samplerCube diffuseEnv;
 
-// Same cubemap lookup basis osgx.gltf.pbribl.createPBRIBLScene() reads off
+// Same cubemap lookup basis osgx.gltf.pbribl.PBRIBLScene.create() reads off
 // PBRIBLEnvironment.iblAxis -- rotating that (in Python, on the SAME environment object)
 // rotates a --scene backdrop lit through that renderer and these dice identically, since
 // both end up sampling through this same remap.
@@ -191,7 +191,7 @@ uniform float roughness;
 uniform float metallic;
 
 // Independent diffuse-irradiance/specular-reflection intensity, matching the SAME uniform names
-// osgx::gltf::pbribl::createPBRIBLScene()'s backdrop shader reads -- e.g. --ibl-diffuse/
+// osgx::gltf::pbribl::PBRIBLScene::create()'s backdrop shader reads -- e.g. --ibl-diffuse/
 // --ibl-specular dial these down on both the dice AND a --scene backdrop identically, so
 // LIGHT_UNIFORMS' punctual lights (a torch) can be made to read more clearly against IBL.
 uniform float iblDiffuseIntensity;
@@ -264,7 +264,7 @@ void main() {
 	// Direct/punctual lights, via the osgx_DirectLighting() CONTRACT (DIRECT_LIGHTING_DECL/
 	// DIRECT_LIGHTING_HOOK_DEFAULT in PBR.hpp) -- worldPos comes from vViewDir's own unnormalized
 	// eye-space encoding (-eyePos.xyz, see VERTEX_SHADER_IBL), so no extra varying is needed. Same
-	// hook backdrop scenes use via osgx::gltf::pbribl::createPBRIBLScene() -- share the SAME
+	// hook backdrop scenes use via osgx::gltf::pbribl::PBRIBLScene::create() -- share the SAME
 	// osgx::pbr.LightSet (e.g. set on a common ancestor StateSet) to light dice and a --scene
 	// backdrop identically. The per-light dispatch loop itself lives ONCE in
 	// DIRECT_LIGHTING_HOOK_DEFAULT (added as a second FRAGMENT shader object -- see where this shader
@@ -357,7 +357,7 @@ def rotate_ibl_environment(environment, degrees):
 	This is THE rotation knob for a baked HDRI: there's no authored "this way is north"
 	in an equirect environment map, so however it landed at bake time is arbitrary.
 	Rotating the lookup basis (rather than resampling the cubemap itself) is exact and
-	free -- both createPBRIBLScene()'s glTF material shader and FRAGMENT_SHADER_IBL read
+	free -- both PBRIBLScene.create()'s glTF material shader and FRAGMENT_SHADER_IBL read
 	iblAxis the same way, so applying this once to a shared `environment` before handing
 	it to either rotates dice and backdrop identically.
 
@@ -387,11 +387,11 @@ def prepare_environment(hdr=None, env=None, rotate=0):
 
 	if hdr:
 		hdr_path = resolve_hdr(hdr)
-		environment = osgx.gltf.pbribl.preparePBRIBLEnvironment(str(hdr_path), lutSize=1024)
+		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepare(str(hdr_path), lutSize=1024)
 
 	elif env:
 		env_path = resolve_environment_manifest(env)
-		environment = osgx.gltf.pbribl.loadPBRIBLEnvironment(str(env_path))
+		environment = osgx.gltf.pbribl.PBRIBLEnvironment.load(str(env_path))
 
 	else:
 		return None
