@@ -16,6 +16,7 @@
 // build_info -> Injects "common" Python compiler information, merged with a user-defined dict
 // StopEvent -> "Cooperative cancellation flag shared between a Python task and a C++ background thread."
 // put_nowait -> "Thread-safe: push a message onto an asyncio.Queue from any thread via call_soon_threadsafe."
+// PollableProgress -> "Lock-free: a background thread writes progress, a poller pulls it - no GIL either way."
 
 #include <osgx/Warnings.hpp>
 
@@ -31,6 +32,7 @@ OSGX_ENABLE_WARNINGS
 
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <optional>
 #include <tuple>
 #include <type_traits>
@@ -1590,6 +1592,90 @@ inline void build_info(py::module_ m, py::dict info) {
 // their own bound functions; pybind11 resolves it via that single existing registration at runtime.
 struct StopEvent {
 	std::atomic<bool> stop{false};
+};
+
+// A lock-free progress channel: a background thread (typically one already running off the GIL via
+// asyncio.to_thread - see examples/pyosg_async.py's run_with_progress() for the Python-side
+// pattern) calls set() as often as it likes from inside a blocking native call, WITHOUT ever
+// touching Python; a single poller (normally the event-loop thread, which already owns the GIL as
+// a matter of course) calls poll() whenever it likes, since a poll is a handful of relaxed atomic
+// loads, not a GIL acquisition. This is the alternative to routing progress through put_nowait()
+// below: put_nowait() is for a background thread that genuinely needs to call arbitrary Python (an
+// irregular, Python-level event); PollableProgress is for a hot native loop reporting a simple
+// (stage, current, total, section) tick that a poller can just as easily pull instead of have
+// pushed at it. Prefer this one whenever the update shape is this simple - it removes the exact
+// cross-thread GIL contention put_nowait() creates (see aipython/25-async-loading.md for a real
+// case where that contention measured a 2x async/sync slowdown before this existed).
+//
+// IMPORTANT, learned the hard way: "poll() is cheap, call it as often as convenient" is true of
+// the CALL ITSELF, but is NOT permission to build a loop whose only job is polling with a
+// zero-delay yield (Python: `while not done: poll(); await asyncio.sleep(0)`). asyncio.sleep(0)
+// doesn't wait, it just reschedules immediately - a loop like that becomes a genuine unthrottled
+// busy-loop for the whole operation, burning ~100% of a CPU core on pure polling overhead. That's
+// real OS-level CPU contention with the background thread actually doing the work, and measured
+// worse than the GIL contention this type exists to remove (see run_with_progress()'s docstring
+// for the concrete regression this caused). "Poll every iteration" is only free when piggybacking
+// on a loop that already ticks for another reason (a render loop's own frame cadence); a loop that
+// exists purely to poll needs a real, positive sleep between checks, same as anything else would.
+//
+// Fields are independent atomics, not one struct behind a lock: a poll() that races a set() can
+// observe a torn combination (this tick's `current` alongside last tick's `section`) for exactly
+// one poll, self-correcting on the very next one. Fine for progress reporting; do not reuse this
+// where a torn read matters.
+//
+// `section` must point at storage that outlives the whole operation - a string literal, not a
+// std::string's data() (which can be freed/reallocated between set() and poll()).
+//
+// Like StopEvent, each concrete `PollableProgress<Stage>` instantiation's py::class_ binding must be
+// registered in exactly one module (wherever `Stage` itself is bound makes sense).
+template<typename Stage>
+struct PollableProgress {
+	std::atomic<std::uint64_t> generation{0};
+	std::atomic<Stage> stage{};
+	std::atomic<std::uint64_t> current{0};
+	std::atomic<std::uint64_t> total{0};
+	std::atomic<const char*> section{nullptr};
+	// A second, complementary facet of the same tick: a producer-computed 0.0-1.0 estimate of
+	// progress across the WHOLE operation, not just the current (stage, current, total) triple.
+	// Optional - defaults to 0.0 for any producer that has nothing better to report.
+	std::atomic<double> overall{0.0};
+
+	void set(Stage s, std::uint64_t c, std::uint64_t t, const char* sec, double o=0.0) {
+		stage.store(s, std::memory_order_relaxed);
+		current.store(c, std::memory_order_relaxed);
+		total.store(t, std::memory_order_relaxed);
+		section.store(sec, std::memory_order_relaxed);
+		overall.store(o, std::memory_order_relaxed);
+		// release, paired with poll()'s acquire - makes the five stores above visible to
+		// whichever poll() call is the first to observe this generation.
+		generation.fetch_add(1, std::memory_order_release);
+	}
+
+	// Not `poll()` itself - see the pybind11 binding at each Stage's registration site, which
+	// wraps this in a `_seen` member so Python callers don't have to thread a generation
+	// variable through themselves. Returns true (and fills the out-params) exactly when
+	// `seen` is behind the current generation; false (out-params untouched) otherwise.
+	bool poll(
+		std::uint64_t& seen,
+		Stage& out_stage,
+		std::uint64_t& out_current,
+		std::uint64_t& out_total,
+		const char*& out_section,
+		double& out_overall
+	) const {
+		std::uint64_t gen = generation.load(std::memory_order_acquire);
+
+		if(gen == seen) return false;
+
+		seen = gen;
+		out_stage = stage.load(std::memory_order_relaxed);
+		out_current = current.load(std::memory_order_relaxed);
+		out_total = total.load(std::memory_order_relaxed);
+		out_section = section.load(std::memory_order_relaxed);
+		out_overall = overall.load(std::memory_order_relaxed);
+
+		return true;
+	}
 };
 
 // Thread-safe bridge: schedules `queue.put_nowait((args...))` onto `loop` from whatever thread calls
