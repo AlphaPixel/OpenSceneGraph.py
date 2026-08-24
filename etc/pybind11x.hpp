@@ -1604,7 +1604,7 @@ struct StopEvent {
 // irregular, Python-level event); PollableProgress is for a hot native loop reporting a simple
 // (stage, current, total, section) tick that a poller can just as easily pull instead of have
 // pushed at it. Prefer this one whenever the update shape is this simple - it removes the exact
-// cross-thread GIL contention put_nowait() creates (see aipython/25-async-loading.md for a real
+// cross-thread GIL contention put_nowait() creates (see aipython/25-async-osgpy.md for a real
 // case where that contention measured a 2x async/sync slowdown before this existed).
 //
 // IMPORTANT, learned the hard way: "poll() is cheap, call it as often as convenient" is true of
