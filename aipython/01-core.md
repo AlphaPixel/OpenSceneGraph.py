@@ -1,370 +1,194 @@
 # Core rules for any OSG.py + aipython REPL session
 
-Universal, hit-more-than-once lessons. Read this before driving `viewer.frame()`
-live, writing any callback, or sending multi-line code through a tmux-backed
-session.
+Read this before driving `viewer.frame()` live, writing any callback, or sending
+multi-line code through a tmux-backed session.
 
-## 1. Launch `pyosg_repl.py` as the top-level script, never from inside an already-running `ipython3`
+## 1. Launch `pyosg_repl.py` directly — never from inside an already-running `ipython3`
 
-`examples/pyosg_repl.py`'s `repl(viewer, namespace)` embeds its own IPython
-shell (`InteractiveShellEmbed`) when driven from a terminal. If you first
-launch a bare `ipython3` in the tmux session and then call `repl(...)` from
-*inside* that prompt, you get:
+`repl(viewer, namespace)` embeds its own IPython shell (`InteractiveShellEmbed`).
+Launching a bare `ipython3` first and calling `repl()` from inside it raises:
 
 ```
 MultipleInstanceError: An incompatible sibling of 'InteractiveShellEmbed' is
 already instanciated as singleton: TerminalInteractiveShell
 ```
 
-IPython's `traitlets` singleton machinery only allows one shell class instance
-at a time, and the already-running top-level `ipython3` claimed that slot.
+Run the script directly (`python3 pyosg_repl.py`) so `repl()` is the first shell
+created. Edit the `if __name__ == "__main__":` block for a custom scene instead
+of driving a pre-existing prompt.
 
-**Fix:** run the script directly as the entry point --
-`../examples/pyosg_repl.py` (or `python3 pyosg_repl.py`) from the build
-directory -- so `repl()` is the *first* thing to create a shell, not the
-second. If you need a custom scene instead of the module's default empty
-`osg.Group()`, edit `pyosg_repl.py`'s `if __name__ == "__main__":` block
-directly (it's meant to be edited per-session) rather than trying to drive it
-from a pre-existing prompt.
+## 2. Bind free variables into callbacks as default args
 
-## 2. [FIXED 2026-08-01] Free variables in a C++-invoked callback used to resolve unpredictably -- root-caused and fixed at the source, terminal backend only so far
-
-This was the single most expensive lesson in this whole document, confirmed
-independently **seven separate times** across draw callbacks, `osgx.imgui`
-section callbacks, `debug=<callable>` deletion callbacks,
-`osg.NodeCallback`/`updateCallback`, and a plain function appended to
-`viewer.eventHandlers` -- always described as "root cause not fully nailed
-down." It's fully nailed down now:
-
-**Root cause:** `IPython.terminal.embed.InteractiveShellEmbed.mainloop()`
-keeps `self.user_ns` (what top-level prompt code -- imports, assignments,
-`def` statements -- actually writes into, since that code compiles to
-`LOAD_NAME`, which checks locals first) and `self.user_module.__dict__` /
-`user_global_ns` (what `func.__globals__` always is for anything you `def`,
-looked up via `LOAD_GLOBAL`, no locals fallback) as **two separate dict
-objects**, unconditionally, on every embed -- confirmed directly:
-`probe.__globals__ is ip.user_global_ns` is `True`,
-`probe.__globals__ is ip.user_ns` is `False`. A name present in the
-namespace *at `repl()`-embed time* (`viewer`, `osg`, ...) ends up in both and
-resolves fine inside any callback forever after. A name typed at the prompt
-*afterward* -- literally any new import, variable, class, or `def` --
-lands only in `user_ns`, is invisible via `LOAD_GLOBAL`, and raises
-`NameError` only when that function is later invoked from a callback --
-never when called directly at the prompt, which is why this always looked
-"unpredictable" (`v` resolving while `GatherVisitor`, defined moments
-earlier at the same prompt, did not, in the very same function body) rather
-than an all-or-nothing failure.
-
-**Fix:** `aipython/integration.py`'s `_drive_terminal()` now wraps
-`shell.interact` to merge `user_ns` into `user_module.__dict__` and alias
-them together right before the prompt starts accepting input, so every
-future write lands in the one dict both lookup paths read from. Verified
-live: a callback referencing a variable defined seconds earlier at the
-prompt, invoked from inside `viewer.frame()`'s C++ update traversal (both a
-direct call and the background asyncio-driven loop), resolved correctly
-with zero workaround.
-
-**Not yet verified: the kernel backend (`_drive_kernel`).** A normal
-Jupyter kernel doesn't go through the same "embed into an already-running
-program with foreign locals" path, so it may not have had this problem in
-the first place -- but that's an assumption, not a confirmed fact yet.
-Don't assume kernel-backed sessions are covered by this fix until checked
-the same way (compare `ip.user_ns is ip.user_global_ns` there).
-
-**Still worth doing defensively, especially against older/unpatched
-sessions or the unverified kernel path:** bind free variables as default
-arguments anyway --
+C++-invoked callbacks (draw callbacks, `osgx.imgui` sections, `debug=` deletion
+callbacks, `NodeCallback`/`updateCallback`, event handlers) can fail to resolve
+names defined at the prompt after the shell embedded — `user_ns` and
+`user_module.__dict__` can be separate dicts. The terminal backend merges them
+at embed time, but defend anyway:
 
 ```python
-# Still safe even if the root fix somehow isn't in effect:
 spin_xform.updateCallback = lambda node, nv, osg=osg: setattr(
-    node, "matrix", osg.Matrix.rotate(nv.frameStamp.simulationTime * 0.4, osg.Vec3(0, 0, 1))
+	node, "matrix", osg.Matrix.rotate(nv.frameStamp.simulationTime * 0.4, osg.Vec3(0, 0, 1))
 )
 ```
 
--- but for a `_drive_terminal()` session launched with the fix in place,
-this is no longer *required* to avoid `NameError`, just cheap insurance.
+Consequences differ by callback type:
+- A `DrawCallback` exception crashes the render thread/process.
+- An `osgx.imgui` section exception corrupts ImGui's frame state; the *next*
+  frame hard-aborts the process — no `try/except` catches this after the fact.
+- A `NodeCallback`/`updateCallback` exception doesn't crash but silently
+  breaks the update traversal every frame — queued captures stop resolving,
+  input stops responding. Check `_osg_repl_state` and try a plain
+  `viewer.frame()` to surface the real traceback.
+- A `debug=<callable>` deletion callback (see [`20-object-lifetime.md`](20-object-lifetime.md))
+  hits the same error from an ordinary GC destructor call, main thread, no
+  render loop involved.
 
-**Consequences of getting this wrong vary by callback type, and can look
-like a totally unrelated bug:**
-- A `DrawCallback` exception crashes the whole render thread/process.
-- An `osgx.imgui` section callback exception corrupts ImGui's frame state
-  (exception fires after `NewFrame()` but before `Render()`); the *next*
-  frame's `NewFrame()` hits a native C++ `assert()` and hard-aborts the
-  process -- no Python `try/except` can catch this after the fact.
-- A `NodeCallback`/`updateCallback` exception does **not** crash the
-  process, but silently breaks the update traversal every frame: queued
-  `capture_framebuffer()`/`capture_texture()` requests stop resolving, the
-  window stops responding to mouse input, and it looks exactly like a
-  hung/dead session -- not a Python exception. Check `_osg_repl_state` and
-  try a plain `viewer.frame()` to surface the real traceback if a session
-  looks frozen.
-- A `debug=<callable>` deletion callback (see
-  [`20-object-lifetime.md`](20-object-lifetime.md)) hits the same error from
-  an ordinary Python refcounting/GC destructor call, on the main thread, no
-  render loop involved at all.
+If wrapping defensively: set a one-shot "done" flag before risky code, wrap
+the body in `try/except Exception:`, write results to a file rather than a
+shared Python object — `except: pass` makes failures silent, not absent.
 
-If you must keep a callback resilient against *future* bugs, also: set any
-one-shot "done" flag before the risky code (not after), wrap the whole body
-in `try/except Exception:` with an except-clause that cannot itself throw,
-and write results straight to a file rather than a shared Python
-object -- but note `try/except: pass` makes failures *silent, not absent*;
-verify with something that logs to a file, don't assume an empty-looking
-result means "nothing happened."
+## 3. `os.environ.setdefault()`, never `.update()`, in shared helper modules
 
-## 3. `os.environ.setdefault()`, never `.update()`, in any shared helper module
+An unconditional `os.environ.update(...)` in a helper (e.g. `pyosg_repl.py`)
+clobbers a caller's already-set `OSG_WINDOW`/`OSG_THREADING`/etc. back to the
+helper's defaults. `Viewer::realize()` doesn't read `OSG_WINDOW` until the
+first `frame()` call, so this can look like an unrelated timing/display bug
+well after import. Use `setdefault()`.
 
-If a helper (like `pyosg_repl.py`) is imported *after* the caller has already
-set its own `OSG_WINDOW`/`OSG_THREADING`/etc., an unconditional
-`os.environ.update(...)` in the helper silently clobbers the caller's values
-back to the helper's own defaults -- and since `osgViewer::Viewer::realize()`
-doesn't read `OSG_WINDOW` until the *first* `frame()` call, this can happen
-well after the import, making it look like an unrelated timing/display bug.
-Use `setdefault()` so the helper only fills in values nothing else has set.
+## 4. Multi-line code sent through tmux is fragile
 
-## 4. Multi-line code sent through a tmux-backed session is fragile
+IPython's terminal autoindent stacks on top of pasted indentation and can
+cascade into `IndentationError`, or silently corrupt a triple-quoted string.
 
-IPython's terminal autoindent adds its own indentation on top of whatever the
-pasted text already has, and can cascade into `IndentationError`s that get
-worse with every subsequent line -- or, in a triple-quoted string, silently
-insert garbage whitespace that happens to be harmless for GLSL but would
-*not* be harmless in real code after the string closes.
+- Send `%autoindent off` as the first command in any tmux session, once.
+- Prefer single-line forms (lambdas, `exec("...")`) for anything defined live.
+- After a large block, call `capture()` again explicitly rather than trusting
+  `execute()`'s returned text, which can be a stale snapshot.
 
-- Send `%autoindent off` as the very first command in any tmux session before
-  sending multi-line `def`/`for`/`if` blocks. This is a permanent per-process
-  setting, set it once and forget it.
-- Prefer single-line forms (lambdas, `exec("...\n...")` wrapping a whole
-  block as one string) for anything defined live, especially callbacks.
-- After sending a large block, don't trust the `execute()` call's own
-  returned `text` -- it can be a stale mid-flight snapshot. Call `capture()`
-  again explicitly to see the true, settled state before concluding a block
-  succeeded or failed.
-
-**The most reliable way to run a nontrivial script live**: write it to a real
-file, then send exactly these two single-line statements (each safe from
-autoindent, since neither has an indented continuation):
+Most reliable way to run a nontrivial script live — two single-line
+statements, neither has an indented continuation:
 
 ```python
 p = "/absolute/path/to/script.py"
 exec(compile(open(p).read(), p, "exec"), locals())
 ```
 
-Two non-obvious requirements packed into that one line, both confirmed by
-hitting them directly (2026-07-22):
-
-- **Use the real absolute path as the `compile()` filename, never a fake
-  short name** like `"script.py"`. This embedded shell's `VerboseTB`
-  formatter uses `stack_data`/`executing` to introspect source by filename;
-  a name that doesn't resolve on disk makes `executing` itself throw
-  (`executing.executing.NotOneValueFound: Expected one value, found 0`),
-  which then **replaces the real traceback** with a confusing, wrong-looking
-  one (observed: a frame that appeared to be `aipython/integration.py`'s
-  shell-exit code, attributed to the wrong file/line entirely) --
-  wasted real debugging time before the actual cause (a plain `NameError` in
-  the executed script) was found. Once the filename is a real, readable
-  path, tracebacks are accurate: correct file, correct line, correct source
-  shown.
-- **Pass `locals()` explicitly as the exec globals dict.** In this embedded
-  shell, `globals() is locals()` is **False** at the top-level prompt --
-  almost certainly IPython's top-level-`await` support compiling each cell
-  as an async wrapper function, whose `f_locals` differs from its
-  `f_globals`. Everything `pyosg_repl.py`'s `from OpenSceneGraph import *`
-  put in the namespace (`osg`, `osgGA`, `viewer`, ...) lives in `locals()`,
-  not `globals()`. A bare top-level reference to `osg` still resolves fine
-  (`LOAD_NAME` checks locals then globals), but a bare `exec(code)` with no
-  explicit args uses `(globals(), locals())` of the calling frame -- so any
-  `def` executed that way gets `__globals__` bound to the globals-only dict,
-  which lacks `osg`, and calling that function later raises `NameError: name
-  'osg' is not defined` even though top-level statements in the very same
-  exec'd block worked fine. Passing `locals()` as the single explicit arg
-  makes exec use that (correct, `osg`-containing) dict for both globals and
-  locals of the executed code.
+Two requirements:
+- Use the real absolute path as the `compile()` filename — a fake name makes
+  `stack_data`/`executing` throw and replaces the real traceback with a wrong
+  one pointing at unrelated code.
+- Pass `locals()` explicitly. `globals() is locals()` is `False` at this
+  shell's top-level prompt (top-level-await wraps each cell in an async
+  function), so a bare `exec(code)` binds any `def`'s `__globals__` to a dict
+  missing `osg`/`viewer`/etc., raising `NameError` only when that function is
+  later called from elsewhere.
 
 ## 5. `help(x)` hangs the session
 
-Opens a pager; the tmux pane blocks waiting for pager input, showing
-`idle: false` forever. Send `"q"` to unstick it, then confirm recovery with a
-throwaway `execute()` before continuing. Prefer `x.__doc__` or introspecting
-`__init__`'s docstring directly instead.
+Opens a pager; the tmux pane blocks waiting for input (`idle: false` forever).
+Send `"q"` to unstick it, confirm recovery with a throwaway `execute()`.
+Prefer `x.__doc__` instead.
 
-## 6. Screenshots: use the controller's queued capture, not a bare `readPixels()`
+## 6. Screenshots: use the controller's queued capture, never bare `readPixels()`
 
 ```python
-# BROKEN from plain top-level/idle-prompt code -- the GL context is not
-# necessarily current on this thread between frame() calls, and readPixels()
-# will silently return all-zero (black) data with no exception:
+# BROKEN — the GL context isn't necessarily current here; silently returns
+# all-zero (black) data, no exception:
 img = osg.Image()
 img.readPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE)
 
-# WORKS -- queued into the render loop's own finalDrawCallback, where the
-# context is guaranteed current:
+# WORKS — queued into the render loop's own finalDrawCallback, context
+# guaranteed current:
 result = await _osg_repl_controller.capture_framebuffer("/tmp/shot.png")
 ```
 
-This looks like "the scene is broken/black" when it's actually just the
-capture method. If a screenshot comes back solid black, first rule out the
-capture path itself (e.g. by checking the window directly, or by confirming
-`_osg_repl_state["frames"]` is actually incrementing) before assuming the
-scene has a bug.
+If a screenshot comes back black, rule out the capture path first (check the
+window directly, check `_osg_repl_state["frames"]` is incrementing) before
+assuming the scene is broken. Confirmed reliable on the terminal/tmux backend;
+the ipykernel backend has crashed outright on this call — treat as unproven
+there.
 
-`capture_framebuffer()`/`capture_texture()` are confirmed reliable on the
-**terminal/tmux-embedded** `repl()` flavor. The **ipykernel/Jupyter-kernel**
-backend hit a hard crash (session died outright, `session has not been
-started` on the next call) on the exact same `await capture_framebuffer(...)`
-call in one session -- not yet root-caused, but treat kernel-backend
-screenshot capture as unproven until it's retested.
-
-### Model controls and video capture
-
-New sessions expose `_osg_repl_controls`, a model-facing facade over the
-controller. It deliberately keeps input ownership, viewer pacing, and video
-sampling as separate controls:
+### Model controls facade
 
 ```python
 controls = _osg_repl_controls
 
 controls.input.locked = True       # swallow human mouse/keyboard input
-controls.frames.target_fps = None  # uncapped viewer frame pump
-controls.frames.target_fps = 30    # best-effort viewer pacing
-controls.frames.paused = True      # stop the frame pump
+controls.frames.target_fps = None  # uncapped — never "lock the user out"
+controls.frames.target_fps = 30
+controls.frames.paused = True
 print(controls.status)
 ```
 
-`target_fps=None` means **uncapped**, never "lock the user out." Use
-`controls.input.locked` (or `controls.input.locked_input()`) for explicit,
-cooperative input ownership. FRAME/resize/close events still pass through, so
-rendering continues while input is locked. `controls.window.always_on_top`
-uses `osgx.platform.alwaysOnTop()` when the native X11 window supports it.
-
-For a short MP4 with no intermediate image files, start the callback-driven
-recorder and let the viewer continue running:
+FRAME/resize/close events still pass through while input is locked.
+`controls.window.always_on_top` uses `osgx.platform.alwaysOnTop()`. For a
+short MP4 with no intermediate image files:
 
 ```python
 controls.capture.video("/tmp/take.mp4", fps=24, duration=5)
 print(controls.capture.video_status)
 ```
 
-The recorder samples in the final-draw callback with a monotonic wall-clock
-schedule, streams RGB bytes directly to FFmpeg, and returns immediately so a
-user can keep manipulating the viewer. Confirmed live at 800x600: a 120-frame
-five-second H.264 take completed at about 23 real-time fps. Pass
-`lock_input=True` only when the capture must be deterministic; otherwise it
-would block the user's manipulator. A resize during a take changes the
-framebuffer dimensions and currently fails that capture rather than producing
-a malformed stream.
-
-The GPU readback is still **synchronous**: `osg.Image.readPixels()` runs in
-the draw callback, then the result is written to FFmpeg. The facade's
-asynchronous-looking behavior only means the video continues after the REPL
-call returns; it is not a PBO/fence-backed async GPU transfer yet.
+Samples in the final-draw callback on a monotonic wall-clock schedule and
+streams RGB directly to FFmpeg; the call returns immediately. Pass
+`lock_input=True` only when the capture must be deterministic. Readback is
+still synchronous `readPixels()` in the draw callback, not yet PBO/fence-backed.
+A resize during a take fails that capture.
 
 ## 7. Backend choice: tmux vs. kernel
 
-- **tmux**: visible, attachable (`tmux attach -t <name>`), and the flavor
-  `pyosg_repl.repl()`'s screenshot capture is actually confirmed working on.
-  Model-loading and other slow calls can appear to "hang" in the `execute()`
-  tool's returned text (it can be a stale snapshot) even though the
-  underlying command finished fine -- always `capture()` again to check
-  ground truth before assuming something is stuck.
-- **kernel**: structured JSON results, better for programmatic
-  inspection/completion -- but slow-to-return `execute()` calls have been
-  observed hanging for 120s+ on things that complete quickly via tmux (e.g.
-  glTF model loading), and the async screenshot-capture path crashed the
-  session outright once. Treat as less proven for this project's live-viewer
-  workflow than tmux, currently.
+- **tmux**: visible, attachable (`tmux attach -t <name>`), the only backend
+  screenshot capture is confirmed on. `execute()`'s returned text can be a
+  stale snapshot for slow calls — always `capture()` again before assuming
+  something is stuck.
+- **kernel**: structured JSON, better for programmatic inspection — but slow
+  calls have hung 120s+ on things that finish quickly via tmux, and async
+  screenshot capture has crashed the session outright. Less proven for this
+  project's live-viewer workflow.
 
-If a session using either backend appears completely frozen (no window
-response, capture requests never resolving), check rule 2 first -- it's the
+If a session looks frozen on either backend, check rule 2 first — it's the
 most common actual cause, not a backend bug.
 
-## 8. Replacing a live scene graph could abort the whole process (fixed 2026-07-22, verify it's still fixed)
+## 8. `viewer.frame()` doesn't release the GIL under `SingleThreaded`
 
-`viewer.frame()`'s binding used to release the GIL unconditionally for the
-whole call. OSG defers actual GL-object teardown (dropping the last
-`ref_ptr` on an old `Program`/`Uniform`/etc. after a scene-graph replacement)
-to a flush pass that can run *inside* a later `frame()` call -- if that drop
-is the last reference to a pybind11-tracked Python-wrapped object, its
-destructor needs the GIL to deregister the wrapper, which wasn't held. This
-aborted the entire process (`pybind11::handle::dec_ref() ... PyGILState_Check()
-failure`, `Aborted (core dumped)`) -- not a Python exception, the whole tmux
-session and viewer window die, no traceback to work from unless you already
-suspect this.
+Deliberate: OSG can drop the last `ref_ptr` on a GL-tracked object during
+`frame()`'s own flush pass, and that pybind11 wrapper's destructor needs the
+GIL to deregister. Releasing the GIL during `frame()` under `SingleThreaded`
+(this project's standing default) aborts the process
+(`PyGILState_Check()` failure, no Python traceback) the moment a live scene
+graph is replaced while already running. `pyosg/pyosgViewer.cpp`'s `frame()`
+binding only releases the GIL when `threadingModel != SingleThreaded` — don't
+"fix" this by releasing it unconditionally.
 
-**Trigger, confirmed via a from-scratch minimal repro**: attach a scene with
-a `Program`+`Uniform` to an already-running (already-`frame()`'d) viewer,
-replace it with a second such scene, keep calling `frame()` -- crashed
-reliably every time. Zero relation to what the replacing scene actually
-contains; purely "replace a live scene graph while already running," which
-every scripted example avoids by building the whole scene *before* the first
-`frame()` call. A REPL workflow -- build a scene, tweak it, rebuild and
-re-`exec()` the whole script again -- hits exactly this shape.
+## 9. OSG's matrix and quaternion multiplication order is reversed vs. GLSL
 
-**Fix**: `pyosg/pyosgViewer.cpp`'s `frame()` binding now only releases the
-GIL when `threadingModel != SingleThreaded`. Since this project's standing
-default is always `OSG_THREADING=SingleThreaded`, there's no concurrency
-benefit lost, only the hazard removed. **As of 2026-07-22 this fix exists
-only in a locally rebuilt, uncommitted tree** -- if a fresh checkout hits
-this exact abort, this is the first thing to check/reapply, not a new
-mystery to re-debug from scratch.
+OSG is row-vector (`v' = v * M`), GLSL is column-vector (`v' = M * v`). A
+chain that reads left-to-right in GLSL (`A * B * C_vec`, apply `C` first)
+must be written reversed in Python/OSG (`C_vec_source * B * A`). Translation
+lives in **row 3**, not column 3. See [`ai/context-core.md`](../ai/context-core.md)
+for the full derivation.
 
-## 9. OSG's matrix AND quaternion multiplication order is reversed vs. how you'd naturally write it
-
-Bites something in nearly every session that composes transforms by hand
-(shadow matrices, MVP, procedural rotations) -- see
-[`ai/context-core.md`](../ai/context-core.md)'s "OSG matrix convention"
-section for the full writeup: OSG is row-vector (`v' = v * M`), GLSL is
-column-vector (`v' = M * v`), so a chain that reads naturally left-to-right
-in GLSL (`A * B * C_vec`, apply `C` first) must be written **reversed** in
-Python/OSG (`C_vec_source * B * A`) to produce the same result once uploaded.
-Translation also lives in **row 3**, not column 3.
-
-**`osg.Quat` has the exact same reversed convention -- confirmed empirically
-2026-08-08** while composing `pyosg-dice.py`'s target roll orientation (a
-"which local die face points at world +Z" quat times a "spin around the
-vertical axis" quat): `q1 * q2` applied to a vector applies `q1` **first**,
-then `q2` (`(q1 * q2) * v == q2 * (q1 * v)`) -- the opposite of the standard
-Hamilton quaternion product convention, where the *rightmost* factor applies
-first. Writing the composition in the mathematically "normal" order
-(`spin * face_align`) silently produced a wrong-axis result with no error;
-`face_align * spin` (align first, spin second, written in that
-apply-order) was correct.
-
-**Don't extend the Matrix rule to a new case by analogy and trust it --
-verify empirically**, the same diagnostic habit as
-[`15-shader-hotswap.md`](15-shader-hotswap.md)'s live-GPU-visualization
-preference over hand-reimplemented math:
+`osg.Quat` has the same reversed convention: `q1 * q2` applied to a vector
+applies `q1` first, then `q2` — opposite of the standard Hamilton product.
+Don't extend this rule to a new case by analogy; verify empirically:
 
 ```python
-# Cheaper than getting composition order wrong live -- apply the combined
-# transform/rotation to a KNOWN vector and check where it actually lands,
-# rather than reasoning about multiplication order "by feel":
 combined = a * b
 print(combined * known_vector)  # does this match "apply a, then b", or the reverse?
 ```
 
-## 10. `MatrixTransform.matrix` is a live C++ alias, not a Python snapshot
+## 10. `MatrixTransform.matrix` is a live C++ alias, not a snapshot
 
-`osg::MatrixTransform::getMatrix()` returns `const osg::Matrix&`. pyosg
-intentionally preserves that low-copy C++ contract: reading `.matrix` gives a
-live reference to the transform's native matrix, tied to the transform's
-lifetime. It is useful when inspecting current state, but it is **not** safe
-as a saved baseline for later transform composition:
-
-```python
-live = transform.matrix                 # aliases the native matrix
-snapshot = osg.Matrix(transform.matrix) # independent value copy
-```
-
-This matters in any callback that rebuilds a pose from rest each frame. This
-looks reasonable but compounds the rotation on every update because `rest`
-aliases the matrix being assigned:
+`getMatrix()` returns `const osg::Matrix&`; reading `.matrix` aliases the
+transform's native matrix. Rebuilding a pose from "rest" each frame using a
+bare read compounds every update:
 
 ```python
 rest = transform.matrix
-transform.matrix = osg.Matrix.rotate(angle, axis) * rest  # WRONG as a repeated update
+transform.matrix = osg.Matrix.rotate(angle, axis) * rest  # WRONG — rest aliases the live matrix
 ```
 
-Take the explicit `osg.Matrix(...)` copy once instead:
+Take an explicit copy once:
 
 ```python
 rest = osg.Matrix(transform.matrix)
@@ -374,7 +198,18 @@ def update(node, nv):
 	return True
 ```
 
-This was found while driving a glTF G1 skeleton from MotionBricks: a fixed
-0.5-radian knee bend visibly accumulated into a rapid 360-degree windmill.
-`test/osg_Transform.py::test_matrixtransform_matrix_is_a_live_reference`
-locks down both the alias and explicit-snapshot behavior.
+`test/osg_Transform.py::test_matrixtransform_matrix_is_a_live_reference` locks
+this down.
+
+## 11. Title any extra debug `osgViewer.Viewer()` window
+
+Any REPL-created `osgViewer.Viewer()` beyond the user's primary session
+viewer should be titled immediately after `realize()`, before pumping visible
+frames — otherwise identical-looking windows become impossible to tell apart:
+
+```python
+osgx.platform.setWindowTitle(viewer, "SOME-DESCRIPTIVE-LABEL")
+```
+
+Pick a label describing what's different about this one. Close throwaway
+windows explicitly (`viewer.close()`) once done.

@@ -1,56 +1,33 @@
 # Reflective PBR/IBL for ordinary OSG geometry
 
-`osgx.gltf.pbribl.createPBRIBLScene()` is not limited to glTF-loaded nodes.
-It works with an ordinary `osg.ShapeDrawable`, provided the drawable supplies
-the small glTF-material interface the renderer expects: a material UBO and
-its two alpha uniforms.
-
-This was verified live on 2026-08-06 with a `Sphere`/`ShapeDrawable`, a
-metallic gold material, and the pre-baked Papermill environment. The captured
-frame showed a clear indoor environment reflection.
+`osgx.gltf.pbribl.PBRIBLScene.create()` is not limited to glTF-loaded nodes —
+it works with an ordinary `osg.ShapeDrawable`, provided the drawable carries
+an `osgx.pbr.Material` (see [`29-material.md`](29-material.md)) — a real
+`StateAttribute` — so there's a real `osgx_gltf_Material` buffer for the
+renderer to read. This file covers the environment-loading and IBL-scene
+side. `PBRIBLEnvironment`/`PBRIBLScene` are classes with static factory
+methods (`.load()`/`.prepare()`/`.create()`), not free functions.
 
 ## Minimal live REPL setup
-
-Start from the empty `examples/pyosg_repl.py` session. Before sending a
-multi-line block through tmux, run `%autoindent off`; see `01-core.md`.
 
 ```python
 import osgx
 
-osg.DisplaySettings.instance.numMultiSamples = 8
-
-hints = osg.TessellationHints()
-hints.detailRatio = 2.0
-
 sphere = osg.Sphere(osg.Vec3(0.0, 0.0, 0.0), 2.0)
-drawable = osg.ShapeDrawable(sphere, hints)
+drawable = osg.ShapeDrawable(sphere, osg.TessellationHints(detailRatio=2.0))
 geode = osg.Geode(drawables=(drawable,))
 
-# std140 osgGLTF_Material layout:
-# baseColor RGBA, roughness, metallic, then four texture-presence flags,
-# then two padding floats. All flags are zero because this is factor-only.
-material_data = osg.FloatArray([
-	0.95, 0.55, 0.12, 1.0,
-	0.12, 1.0,
-	0.0, 0.0, 0.0, 0.0,
-	0.0, 0.0,
-])
-material_data.bufferObject = osg.UniformBufferObject()
+material = osgx.pbr.Material()
+material.baseColor = osg.Vec4(0.95, 0.55, 0.12, 1.0)
+material.roughness = 0.12
+material.metallic = 1.0
+drawable.stateSet.attributes.append(material)
 
-drawable.stateSet.setAttributeAndModes(
-	osg.UniformBufferBinding(0, material_data, 0, material_data.totalDataSize),
-	osg.StateAttribute.ON,
-)
-drawable.stateSet.uniforms["osgGLTF_alphaMode"] = 0.0
-drawable.stateSet.uniforms["osgGLTF_alphaCutoff"] = 0.5
-
-environment = osgx.gltf.pbribl.loadPBRIBLEnvironment(
+environment = osgx.gltf.pbribl.PBRIBLEnvironment.load(
 	"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/env/papermill.gltf",
 )
-pbr = osgx.gltf.pbribl.createPBRIBLScene(
-	geode,
-	environment,
-	iblIntensity=1.0,
+pbr = osgx.gltf.pbribl.PBRIBLScene.create(
+	geode, environment, iblDiffuseIntensity=1.0, iblSpecularIntensity=1.0
 )
 
 if not environment.valid() or not pbr.valid():
@@ -68,19 +45,15 @@ viewer.camera.clearColor = osg.Vec4(48.0 / 255.0, 53.0 / 255.0, 66.0 / 255.0, 1.
 viewer.cameraManipulator = osgGA.TrackballManipulator()
 ```
 
-The manifest references its matching pre-baked specular and diffuse KTX2
-cubemaps. Use `preparePBRIBLEnvironment("environment.hdr")` only when the
-entire environment should be baked dynamically from one HDR source.
-
 ## Use a pre-baked `osgx_pbribl` environment manifest
 
 The `.gltf` files in `osgx`'s build `env/` directory are not ordinary scene
-models: they are small manifests carrying the custom `osgx_pbribl` extension.
-They point at the matching pre-baked specular and diffuse KTX2 cubemaps beside
-the manifest. Load one directly instead of preparing from HDR:
+models: they carry the custom `osgx_pbribl` extension pointing at matching
+pre-baked specular and diffuse KTX2 cubemaps beside the manifest. Load one
+directly instead of preparing from HDR:
 
 ```python
-environment = osgx.gltf.pbribl.loadPBRIBLEnvironment(
+environment = osgx.gltf.pbribl.PBRIBLEnvironment.load(
 	"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/env/papermill.gltf",
 )
 
@@ -88,29 +61,30 @@ if not environment.valid():
 	raise RuntimeError("failed to load PBR/IBL environment")
 ```
 
-This path was verified live with `papermill.gltf` on 2026-08-06. It printed
-`loaded pre-baked environment manifest`, and the resulting sphere reflected
-Papermill's bright indoor lighting. The manifest's built-in BRDF-LUT is still
-created by the environment root; include that root in the rendered graph as
-normal.
+Use `PBRIBLEnvironment.prepare("environment.hdr", lutSize=1024)` only when
+the entire environment should be baked dynamically from one HDR source — it
+bakes diffuse irradiance, GGX-prefiltered specular, and the BRDF LUT live
+from that one source; add `environment.root` to the rendered graph so its
+`PRE_RENDER` passes can populate the generated textures. The helper is
+IBL-only and does not invent authored/direct lights; generic light rigs are
+`osgx.pbr` (see [`40-typed-lights-gizmos.md`](40-typed-lights-gizmos.md)),
+and glTF-authored camera/`KHR_lights_punctual` support is separate loader
+work.
 
 ### Switch a running scene
 
-Given the `geode`, `viewer`, and `osgx` variables from the setup above, this
-reapplies the renderer with the new textures and replaces the rendered root:
+Given the `geode`/`viewer` variables from the setup above:
 
 ```python
-environment = osgx.gltf.pbribl.loadPBRIBLEnvironment(
+environment = osgx.gltf.pbribl.PBRIBLEnvironment.load(
 	"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/env/Cannon_Exterior.gltf",
 )
 
 if not environment.valid():
 	raise RuntimeError("failed to load PBR/IBL environment")
 
-pbr = osgx.gltf.pbribl.createPBRIBLScene(
-	geode,
-	environment,
-	iblIntensity=1.0,
+pbr = osgx.gltf.pbribl.PBRIBLScene.create(
+	geode, environment, iblDiffuseIntensity=1.0, iblSpecularIntensity=1.0
 )
 
 if not pbr.valid():
@@ -125,32 +99,54 @@ root.children.append(pbr.node)
 viewer.sceneData = root
 ```
 
-Do not merely replace `environment.root`: `createPBRIBLScene()` owns the
+Do not merely replace `environment.root`: `PBRIBLScene.create()` owns the
 program state and its environment texture bindings, so call it again for the
-new environment. The material UBO remains on `drawable` and does not need to
-be rebuilt.
+new environment. The material attached to `drawable` does not need to be
+rebuilt.
 
-## Material values
+## Extra `PBRIBLScene.create()` options
 
-The 12-float UBO is exactly the `osgGLTF_Material` std140 block expected by
-the one-call shader:
+`create(node, environment, iblDiffuseIntensity=1.0, iblSpecularIntensity=1.0,
+diagnostics=False, shadowMap=None, hooks=[])`:
 
-| Float range | Meaning |
-|---|---|
-| `0:4` | `baseColorFactor` RGBA |
-| `4` | `roughnessFactor` (`0.12` is strongly reflective) |
-| `5` | `metallicFactor` (`1.0` is metal) |
-| `6:10` | Base-color, metallic-roughness, occlusion, and normal-map flags |
-| `10:12` | Required std140 padding |
+- `diagnostics=True` builds `pbr.debugMode` for switching between
+  combined/diffuse/specular/normal/roughness/diffuse-IBL-only visualizations
+  (`examples/pyosg-khronos-viewer.py`'s `Diagnostics` event handler cycles
+  it with number keys).
+- `shadowMap` accepts an `osgx.shadow.ShadowMap` (see
+  [`10-rtt.md`](10-rtt.md)) to shadow the light at `LightSet` index
+  `shadowMap.casterIndex`; omit it for unshadowed direct light.
+- `hooks` is a plain list of `(osgx.Hook, osg.Shader)` pairs
+  substituting one of this Program's built-in shader slots (`osgx.Hook.Skinning`,
+  `osgx.Hook.Tonemap`). Each hook *replaces* the built-in definition (GLSL
+  allows one body per function; adding a second is a link error, not an
+  override) — `osgx.gltf.shader.SKINNING_HOOK_LINEAR_BLEND` (wrapped in
+  `osgx.gltf.pbribl.resolveShaderLibs()`) enables real joint-matrix skinning
+  in place of the identity-passthrough default.
 
-For a texture-free material, leave the four flags at `0.0`; the renderer then
-uses the color, roughness, and metallic factors directly. To add textures,
-the relevant sampler units and UV arrays must also follow `osgx.gltf.shader`'s
-glTF interface, so a hand-assembled shader is usually the clearer path.
+There is also a deferred, G-buffer-split path for scenes with many lights —
+`PBRIBLGBuffer.create(node, width, height)` (material-only geometry pass) →
+`PBRIBLLightingScene.create(gbuffer, environment, mainCamera, ...)`
+(lighting pass reading the G-buffer) — not covered in the minimal setup
+above; reach for it only once a scene's light count/overdraw makes the
+single-pass `PBRIBLScene` genuinely too expensive.
 
-The Program and IBL textures attach to `geode`; the material UBO attaches to
+## Hand-assembled shader (no `osgx.pbr.Material`)
+
+`osgx.pbr.Material` is the supported way to populate the material data (see
+[`29-material.md`](29-material.md)) — it's a real `StateAttribute`, not
+something worth hand-rolling. If assembling a shader by hand regardless, the
+buffer is `#pragma osgx::gltf MATERIAL_INPUTS`'s `osgx_gltf_Material`: a
+`std430` SSBO (`baseColorFactor` vec4, `roughnessFactor`, `metallicFactor`,
+then four map-presence float flags), plus a separate `GLTFTextures`
+sampler-struct uniform and `osgx_gltf_alphaMode`/`osgx_gltf_alphaCutoff`
+uniforms for texture-backed materials. Sampler units and UV arrays must
+follow `osgx.gltf.shader`'s glTF interface — at that point
+`osgx.pbr.Material` is almost always the clearer path.
+
+The Program and IBL textures attach to `geode`; the material attaches to
 `drawable`. That split lets one PBR scene contain several drawables with
-independent factor-only materials.
+independent materials.
 
 ## Verify a live result
 
@@ -161,6 +157,6 @@ the REPL controller instead:
 await _osg_repl_controller.capture_framebuffer("/tmp/pbr-sphere.png")
 ```
 
-The sphere should show the environment reflected across its surface. Increase
-roughness (float 4) toward `1.0` for a blurrier reflection; lower metallic
-(float 5) toward `0.0` for a dielectric surface with a diffuse IBL term.
+The sphere should show the environment reflected across its surface.
+Increase roughness toward `1.0` for a blurrier reflection; lower metallic
+toward `0.0` for a dielectric surface with a diffuse IBL term.
