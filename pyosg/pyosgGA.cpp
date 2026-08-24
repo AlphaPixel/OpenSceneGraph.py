@@ -96,6 +96,16 @@ void bind(py::module_& m) {
 		.export_values()
 	;
 
+	// Was entirely unbound -- ea.button/ea.buttonMask (both already bound above) returned a raw
+	// int with no Python-side names to compare against, forcing callers to hardcode magic numbers
+	// (LEFT=1, MIDDLE=2, RIGHT=4) to check which button an event carries.
+	py::enum_<osgGA::GUIEventAdapter::MouseButtonMask>(gea, "MouseButtonMask")
+		.value("LEFT_MOUSE_BUTTON", osgGA::GUIEventAdapter::LEFT_MOUSE_BUTTON)
+		.value("MIDDLE_MOUSE_BUTTON", osgGA::GUIEventAdapter::MIDDLE_MOUSE_BUTTON)
+		.value("RIGHT_MOUSE_BUTTON", osgGA::GUIEventAdapter::RIGHT_MOUSE_BUTTON)
+		.export_values()
+	;
+
 	gea
 		// TODO: Should this ACTUALLy be `eventType` instead?
 		.def_property(
