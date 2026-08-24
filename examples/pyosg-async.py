@@ -22,6 +22,8 @@ from enum import Enum
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
+import pyosg_async
+
 class EventType(Enum):
 	PROGRESS = 1
 	COMPLETE = 2
@@ -95,39 +97,25 @@ async def task_cpp_example(queue, job_id, seconds):
 		raise
 
 def run(viewer):
-	loop = asyncio.new_event_loop()
 	queue = asyncio.Queue()
-
-	asyncio.set_event_loop(loop)
+	t = time.time()
 
 	# This DOES NOT USE the `queue` above!
 	async def heartbeat():
-		try:
-			while not viewer.done:
-				print("heartbeat tick")
-
-				await asyncio.sleep(1.0)
-
-		except asyncio.CancelledError:
-			print("heartbeat cancelled")
-
-			raise
-
-	tasks = [
-		loop.create_task(heartbeat()),
-		loop.create_task(task_py_example(queue, 0, 2)),
-		loop.create_task(task_cpp_example(queue, 1, 5))
-	]
-
-	t = time.time()
-
-	try:
 		while not viewer.done:
-			viewer.frame()
+			print("heartbeat tick")
 
-			# pump asyncio (non-blocking)
-			loop.run_until_complete(asyncio.sleep(0))
+			await asyncio.sleep(1.0)
 
+	# The queue-draining half of the OLD push-based pattern (queue.put() -> call_soon_threadsafe
+	# -> queue.get_nowait()) is still exactly right for THIS kind of event -- irregular,
+	# Python-shaped values a C++ background thread genuinely needs to hand back, not a hot
+	# native loop's numeric progress ticks. Contrast with osgx.gltf.AsyncProgress (see
+	# pyosg-async-gltf.py), which polls instead of pushing because its update shape is simple
+	# enough not to need the GIL-crossing queue machinery at all. Both are legitimate; pick the
+	# one that matches what's actually being reported.
+	async def drain_queue():
+		while not viewer.done:
 			try:
 				while True:
 					ev = queue.get_nowait()
@@ -156,24 +144,19 @@ def run(viewer):
 			except asyncio.QueueEmpty:
 				pass
 
-	finally:
-		for task in tasks:
-			task.cancel()
+			await asyncio.sleep(0)
 
-		try:
-			for task in tasks:
-				loop.run_until_complete(task)
+	async def main():
+		await asyncio.gather(
+			heartbeat(),
+			drain_queue(),
+			task_py_example(queue, 0, 2),
+			task_cpp_example(queue, 1, 5)
+		)
 
-		except asyncio.CancelledError:
-			pass
+	asyncio.run(pyosg_async.run(viewer, main()))
 
-		# Flush pending callbacks from C++, if any.
-		loop.run_until_complete(asyncio.sleep(0))
-
-		loop.stop()
-		loop.close()
-
-		print("loop closed")
+	print("loop closed")
 
 if __name__ == "__main__":
 	SEVERITY_MAP = {
