@@ -94,9 +94,13 @@ struct pyx::MappingTraits<osg::StateSet, pyosg::detail::UniformsTag> {
 			return;
 		}
 
-		// CASE 2: Tuple handling...
-		if(py::isinstance<py::tuple>(h)) {
-			auto t = h.cast<py::tuple>();
+		// CASE 2: Tuple/list handling -- list accepted alongside tuple (not any py::sequence: osg's
+		// own Vec2/Vec3/Vec4 bindings implement __len__/__getitem__ too, so a bare structural
+		// sequence check would wrongly treat `uniforms["x"] = osg.Vec3(...)` as an array-of-floats
+		// assignment instead of a scalar Vec3 uniform) so `uniforms["iblAxis"] = [v0, v1, v2]` works
+		// the same as the tuple form already below, off the exact same make_uniform_array_infer().
+		if(py::isinstance<py::tuple>(h) || py::isinstance<py::list>(h)) {
+			auto t = py::reinterpret_borrow<py::sequence>(h);
 
 			if(!t.size()) throw py::type_error("Cannot assign empty tuple as Uniform value");
 
