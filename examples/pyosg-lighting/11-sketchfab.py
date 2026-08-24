@@ -5,37 +5,41 @@
 #
 # This step used to hand-build its OWN deferred G-buffer + composite lighting pass (the same PBR/
 # IBL/shadow math 09-ibl.py's single-pass shader had, just split across two passes) -- osgx's
-# header for createPBRIBLGeometryPass()/createPBRIBLLightingPass() says outright that split was
+# header for PBRIBLGBuffer.create()/PBRIBLLightingScene.create() says outright that split was
 # "hand-built and validated pixel-for-pixel against Sketchfab's own renderer" against THIS file,
 # so re-deriving it by hand a second time here would just be re-teaching a solved problem. This
 # step pivots the G-buffer + lighting-pass math to those two calls, exactly like 09/10 pivoted the
-# single-pass shader to createPBRIBLScene() -- everything downstream of the lighting pass (SSAO
-# generation, bloom, the tonemap-comparison/post-fx final pass) stays 100% hand-rolled Python,
-# since osgx deliberately does NOT standardize SSAO/bloom generation (too taste-dependent -- see
-# PBRIBLLightingPassOptions.aoTexture's own doc comment) and this step's whole teaching point is
-# comparing tonemap curves live, which doesn't fit the (link-time-only) osgx_Tonemap() hook.
+# single-pass shader to PBRIBLScene.create() -- everything downstream of the lighting pass (bloom,
+# the tonemap-comparison/post-fx final pass) stays 100% hand-rolled Python, since osgx deliberately
+# does NOT standardize bloom generation (too taste-dependent) and this step's whole teaching point
+# is comparing tonemap curves live, which doesn't fit the (link-time-only) osgx_Tonemap() hook. SSAO
+# itself is a SECOND, smaller pivot (2026-08-21, after osgx.gbuffer.SSAO shipped, ported straight
+# from this file's own proven-live hand-rolled version) -- no longer hand-rolled Python either, see
+# the "--- SSAO ---" section below and PBRIBLLightingPassOptions.aoTexture's own doc comment.
 #
 # Real, human-visible tradeoffs from this pivot, called out up front rather than discovered later:
 # - The 0-9 raw-channel/lighting-term debug views are gone, replaced by a smaller 0-6 set (see
-#   "Visualize Mode" below). createPBRIBLLightingPass()'s own diagnostics option exists but isn't
+#   "Visualize Mode" below). PBRIBLLightingScene.create()'s own diagnostics option exists but isn't
 #   wired up to anything in its shader yet (a real osgx gap, not something this file works around
 #   by hand-rolling a second lighting shader) -- direct-only/IBL-only/shadow-only isolation would
 #   need that ported first. What's left (albedo/normal/material/emissive/depth/AO) is exactly what
 #   a raw texture blit CAN show without any new shader math.
-# - --msaa and the "Debug Tint (red)" shadow-strength aid are both gone -- createPBRIBLGeometryPass()
+# - --msaa and the "Debug Tint (red)" shadow-strength aid are both gone -- PBRIBLGBuffer.create()
 #   doesn't expose a G-buffer MSAA knob, and there's no hook to tint the shared lighting shader's
 #   output. The room/grid backdrop is a much clearer way to judge shadow softness/strength anyway.
 # - The light rig is a single directional key light via osgx.pbr.LightSet (unchanged from what
 #   this file already simplified to on 2026-07-11 -- fill lights were dropped THEN, not by this
-#   pivot). It's now interactively draggable via the SAME osgx.shadow.repositionDirectionalShadowMap()
+#   pivot). It's now interactively draggable via the SAME ShadowMap.reposition()
 #   this session's osgx-shadow.cpp/osgx-gbuffer.cpp proofs already validated live.
 #
 # Pipeline shape:
 # shadow_map.camera -> gbuffer.camera (MRT: albedo+ao/normal/material/emissive/position) ->
-# ssao_cam -> ssao_blur_cam -> lighting.node (re-targeted to PRE_RENDER, writes LINEAR HDR, no
-# tonemap) -> bloom_threshold_cam -> bloom_blur_h_cam -> bloom_blur_v_cam -> final_cam (bloom add,
-# tonemap, gamma, vignette/grain/CA/sharpen/color-balance -> window) -> debug_cam (raw G-buffer
-# blit, only visible when Visualize Mode != 0) -> gizmo overlay (always on top).
+# ssao.rawCamera -> ssao.blurCamera (osgx.gbuffer.SSAO -- generic hemisphere-kernel SSAO, not
+# hand-rolled here anymore, see the "--- SSAO ---" section below) -> lighting.node (re-targeted to
+# PRE_RENDER, writes LINEAR HDR, no tonemap) -> bloom_threshold_cam -> bloom_blur_h_cam ->
+# bloom_blur_v_cam -> final_cam (bloom add, tonemap, gamma, vignette/grain/CA/sharpen/color-balance
+# -> window) -> debug_cam (raw G-buffer blit, only visible when Visualize Mode != 0) -> gizmo
+# overlay (always on top).
 
 import sys
 import os
@@ -52,8 +56,6 @@ os.environ.update({
 	"OSG_GL_CONTEXT_VERSION": "4.6",
 })
 
-import numpy as np
-
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
@@ -63,12 +65,6 @@ W, H = 1169, 768
 
 THIS_DIR = pathlib.Path(__file__).resolve().parent
 DATA_DIR = THIS_DIR / "data"
-
-# Not in OpenSceneGraph.GL's hand-curated allowlist.
-GL_R8 = 0x8229
-
-SSAO_KERNEL_SIZE = 16
-SSAO_NOISE_SIZE = 4
 
 # Initial light direction only -- interactively draggable from here via the "Light Direction"
 # ImGui section (LightOrbit below), unlike 08/09/10's fixed key light.
@@ -104,46 +100,6 @@ def resolve_asset(value, suffix):
 	return osgx.findDataFile(value, (), suffix) or None
 
 # --------------------------------------------------------------------------- #
-# SSAO kernel + noise (Python-side setup -- real numpy/RNG work, no osgx
-# equivalent; see PBRIBLLightingPassOptions.aoTexture's own doc comment)
-# --------------------------------------------------------------------------- #
-
-def generate_ssao_kernel(n=SSAO_KERNEL_SIZE, seed=0):
-	"""Hemisphere-oriented sample kernel, quadratically clustered toward the origin --
-	the standard SSAO kernel shape (Crysis-era; still the baseline technique today)."""
-	rng = np.random.default_rng(seed)
-	kernel = []
-
-	for i in range(n):
-		v = np.array([rng.uniform(-1.0, 1.0), rng.uniform(-1.0, 1.0), rng.uniform(0.05, 1.0)])
-		v /= np.linalg.norm(v)
-		v *= rng.uniform(0.0, 1.0)
-
-		scale = 0.1 + 0.9 * (i / n) ** 2
-
-		kernel.append(osg.Vec3(*(v * scale)))
-
-	return kernel
-
-def make_ssao_noise_texture(size=SSAO_NOISE_SIZE, seed=1):
-	"""Tiny tiled texture of random tangent-space rotation vectors -- removes the visible
-	banding a fixed kernel would otherwise leave (every pixel sampling identical relative
-	directions)."""
-	rng = np.random.default_rng(seed)
-
-	img = osg.Image()
-	img.allocateImage(size, size, 1, GL_RGB, GL_FLOAT)
-
-	arr = np.asarray(img)
-	arr[..., 0] = rng.uniform(-1.0, 1.0, (size, size))
-	arr[..., 1] = rng.uniform(-1.0, 1.0, (size, size))
-	arr[..., 2] = 0.0
-
-	tex = osg.Texture2D(image=img, filter=osg.Texture.NEAREST, wrap=osg.Texture.REPEAT)
-
-	return tex
-
-# --------------------------------------------------------------------------- #
 # Shaders
 # --------------------------------------------------------------------------- #
 
@@ -169,7 +125,7 @@ void main() {
 }
 """
 
-# The grid room writes a complete G-buffer record (NOT createPBRIBLGeometryPass()'s glTF-material
+# The grid room writes a complete G-buffer record (NOT PBRIBLGBuffer.create()'s glTF-material
 # shader -- a procedural grid has none of that data) so it shares the model's real depth buffer
 # and receives its shadow, added as an extra child of the geometry pass's own camera -- same
 # pattern osgx-gbuffer.cpp's own floor addition already proved out. Channel layout matches
@@ -266,97 +222,6 @@ void main() {
 	gMaterial = vec4(1.0, 0.0, 0.0, 0.0);
 	gEmissive = vec4(frameColor, 1.0);
 	gPosition = vec4(vPosition, 1.0);
-}
-"""
-
-# SSAO pass: hemisphere-kernel screen-space ambient occlusion, reading the G-buffer's
-# normal+position directly (no separate depth-texture dependency -- gPosition already carries
-# real view-space depth in its .z, so there's nothing gDepth would add here). Outputs a single
-# raw (noisy) occlusion value; ssao_blur_cam denoises it before the lighting pass consumes it via
-# PBRIBLLightingPassOptions.aoTexture.
-SSAO_FRAGMENT_SHADER = """
-#version 460 core
-
-#define NUM_SAMPLES 16
-
-uniform sampler2D gNormal;   // unit 0
-uniform sampler2D ssaoNoise; // unit 1
-uniform sampler2D gPosition; // unit 2: real view-space position
-
-uniform mat4 projectionMatrix; // forward -- projects hemisphere samples back to screen space.
-                                // Near/far-agnostic (see the module docstring's design note):
-                                // for a symmetric frustum, the x/y terms used below reduce to
-                                // 1/tan(fovy/2 or fovx/2) with the near-plane distance canceling
-                                // out algebraically -- only fovy/aspect matter.
-
-uniform vec3 samples[NUM_SAMPLES];
-uniform float ssaoRadius;
-uniform float ssaoBias;
-
-in vec2 vUV;
-
-out vec4 fragColor;
-
-void main() {
-	vec3 rawN = texture(gNormal, vUV).rgb;
-
-	// An unwritten pixel has a zero-length normal; normalize(0) would produce NaN, and there's
-	// no real geometry to occlude anyway, so just report "no occlusion" immediately.
-	if (dot(rawN, rawN) < 0.0001) {
-		fragColor = vec4(1.0, 0.0, 0.0, 1.0);
-
-		return;
-	}
-
-	vec3 N = normalize(rawN);
-	vec3 fragPos = texture(gPosition, vUV).xyz;
-
-	vec2 noiseScale = vec2(textureSize(gPosition, 0)) / float(textureSize(ssaoNoise, 0).x);
-	vec3 rvec = texture(ssaoNoise, vUV * noiseScale).xyz;
-	vec3 tangent = normalize(rvec - N * dot(rvec, N));
-	vec3 bitangent = cross(N, tangent);
-	mat3 TBN = mat3(tangent, bitangent, N);
-
-	float occlusion = 0.0;
-
-	for (int i = 0; i < NUM_SAMPLES; i++) {
-		vec3 samplePos = fragPos + (TBN * samples[i]) * ssaoRadius;
-
-		vec4 offset = projectionMatrix * vec4(samplePos, 1.0);
-		offset.xyz /= offset.w;
-		offset.xyz = offset.xyz * 0.5 + 0.5;
-
-		float sampleDepth = texture(gPosition, offset.xy).z;
-		float rangeCheck = smoothstep(0.0, 1.0, ssaoRadius / max(abs(fragPos.z - sampleDepth), 0.0001));
-
-		occlusion += (sampleDepth >= samplePos.z + ssaoBias ? 1.0 : 0.0) * rangeCheck;
-	}
-
-	fragColor = vec4(vec3(1.0 - occlusion / float(NUM_SAMPLES)), 1.0);
-}
-"""
-
-# Small fixed-radius box blur to denoise the hemisphere-kernel noise -- deliberately NOT the
-# two-pass separable Gaussian bloom uses below; a small fixed radius doesn't benefit from
-# separability the way a large-radius bloom blur does.
-SSAO_BLUR_FRAGMENT_SHADER = """
-#version 460 core
-
-uniform sampler2D aoRawTex;
-
-in vec2 vUV;
-
-out vec4 fragColor;
-
-void main() {
-	vec2 texel = 1.0 / vec2(textureSize(aoRawTex, 0));
-	float sum = 0.0;
-
-	for (int x = -2; x < 2; x++)
-		for (int y = -2; y < 2; y++)
-			sum += texture(aoRawTex, vUV + vec2(x, y) * texel).r;
-
-	fragColor = vec4(vec3(sum / 16.0), 1.0);
 }
 """
 
@@ -649,64 +514,6 @@ def make_fullscreen_rtt_pass(textures, output_tex, frag_shader, w, h, name="Post
 
 	return cam
 
-def create_ssao_camera(normal_tex, noise_tex, position_tex, samples_u, projection_u, radius, bias=0.02, w=W, h=H):
-	ao_raw_tex = osg.Texture2D(
-		size=(w, h),
-		internalFormat=GL_R8,
-		sourceFormat=GL_RED,
-		sourceType=GL_UNSIGNED_BYTE,
-		filter=(osg.Texture.LINEAR, osg.Texture.LINEAR),
-		dataVariance=osg.Object.DYNAMIC,
-	)
-
-	cam = make_fullscreen_rtt_pass(
-		textures={
-			0: (normal_tex, "gNormal"),
-			1: (noise_tex, "ssaoNoise"),
-			2: (position_tex, "gPosition"),
-		},
-		output_tex=ao_raw_tex,
-		frag_shader=SSAO_FRAGMENT_SHADER,
-		w=w, h=h,
-		name="SSAO",
-		order=2,
-		# projection_u is a real osg.Uniform (not a bare matrix) so the caller can keep the
-		# reference and update .value every frame -- v.camera.projectionMatrix isn't meaningfully
-		# established until the window is actually realized/sized, well after this camera is
-		# built, so a one-time snapshot taken here would bake in whatever default/unrealized
-		# aspect ratio the viewer happened to start with.
-		extra_uniforms={
-			"ssaoRadius": radius,
-			"ssaoBias": bias,
-			"projectionMatrix": projection_u,
-		}
-	)
-
-	cam.stateSet.uniforms.extend((samples_u,))
-
-	return cam, ao_raw_tex
-
-def create_ssao_blur_camera(ao_raw_tex, w=W, h=H):
-	ao_tex = osg.Texture2D(
-		size=(w, h),
-		internalFormat=GL_R8,
-		sourceFormat=GL_RED,
-		sourceType=GL_UNSIGNED_BYTE,
-		filter=(osg.Texture.LINEAR, osg.Texture.LINEAR),
-		dataVariance=osg.Object.DYNAMIC,
-	)
-
-	cam = make_fullscreen_rtt_pass(
-		textures={0: (ao_raw_tex, "aoRawTex")},
-		output_tex=ao_tex,
-		frag_shader=SSAO_BLUR_FRAGMENT_SHADER,
-		w=w, h=h,
-		name="SSAOBlur",
-		order=3,
-	)
-
-	return cam, ao_tex
-
 # Bloom: threshold-extract -> horizontal blur -> vertical blur. Single-scale two-pass blur, not a
 # downsample/upsample mip pyramid -- the sanctioned simplification for a teaching example.
 def create_bloom_cameras(hdr_color_tex, w=W, h=H):
@@ -764,7 +571,7 @@ def create_bloom_cameras(hdr_color_tex, w=W, h=H):
 	return threshold_cam, blur_h_cam, blur_v_cam, blur_b_tex
 
 # Final LDR pass -- draws straight to the window (no renderTargetImplementation set).
-def create_final_camera(hdr_color_tex, bloom_tex, ao_tex, w=W, h=H):
+def create_final_camera(hdr_color_tex, bloom_tex, ssao_tex, w=W, h=H):
 	cam = osg.Camera(
 		referenceFrame=osg.Transform.ABSOLUTE_RF,
 		renderOrder=osg.Camera.POST_RENDER,
@@ -788,7 +595,7 @@ def create_final_camera(hdr_color_tex, bloom_tex, ao_tex, w=W, h=H):
 	ss.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
 	ss.textureAttributes[0] = hdr_color_tex
 	ss.textureAttributes[1] = bloom_tex
-	ss.textureAttributes[2] = ao_tex
+	ss.textureAttributes[2] = ssao_tex
 	ss.uniforms["hdrColorTex"] = 0
 	ss.uniforms["bloomTex"] = 1
 	ss.uniforms["aoTex"] = 2
@@ -966,7 +773,7 @@ class LightOrbit:
 	Azimuth (around Z) and elevation (up from the XY plane), both in radians here and shown in
 	degrees by the ImGui section. A directional light has no position and no distance -- osgx
 	discards magnitude at both consumers (PBR.hpp's osgx_DirectionalLightRadiance() does
-	`L = -normalize(direction)`, and Shadow.cpp's repositionDirectionalShadowMap() normalizes
+	`L = -normalize(direction)`, and Shadow.cpp's ShadowMap::reposition() normalizes
 	before building its frustum), so only the direction's ORIENTATION can ever have an effect.
 
 	This deliberately replaces an earlier cylindrical (azimuth / orbit-radius / height)
@@ -979,7 +786,7 @@ class LightOrbit:
 	every distinct slider position is a distinct result.
 
 	Every _sync() call pushes the new direction into BOTH the live LightSet (so direct lighting
-	updates immediately) and osgx.shadow.repositionDirectionalShadowMap() (so the shadow tracks
+	updates immediately) and ShadowMap.reposition() (so the shadow tracks
 	it) -- the same two-call pattern this session's osgx-shadow.cpp/osgx-gbuffer.cpp proofs
 	already validated live, just driven by ImGui sliders here instead of SliderFloat3.
 	"""
@@ -1010,8 +817,8 @@ class LightOrbit:
 
 		self.lights.setDirectional(0, direction, self.color, self.intensity)
 
-		osgx.shadow.repositionDirectionalShadowMap(
-			self.shadow_map, direction, self.bound_center, self.bound_radius, self.shadow_options
+		self.shadow_map.reposition(
+			direction, self.bound_center, self.bound_radius, self.shadow_options
 		)
 
 if __name__ == "__main__":
@@ -1062,7 +869,7 @@ if __name__ == "__main__":
 	# unusual local origins.
 	args.floor = args.floor_z is not None or args.floor_size is not None
 
-	osg.setNotifyLevel(osg.NotifySeverity.INFO)
+	# osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
 	path = resolve_model(args.path or "BoomBox")
 
@@ -1071,7 +878,7 @@ if __name__ == "__main__":
 
 	model = osgDB.readNodeFile(path)
 
-	# Created early (before any of the deferred-pipeline cameras below) -- createPBRIBLLightingPass()
+	# Created early (before any of the deferred-pipeline cameras below) -- PBRIBLLightingScene.create()
 	# needs a real v.camera to rotate the G-buffer's view-space values into world space, same
 	# reasoning osgx-gbuffer.cpp creates its own viewer this early for.
 	v = osgViewer.Viewer()
@@ -1104,7 +911,7 @@ if __name__ == "__main__":
 		if not hdr_path:
 			sys.exit(f"Cannot find HDR {args.hdr!r} -- check pyosg-lighting/data/ or OSG_FILE_PATH")
 
-		environment = osgx.gltf.pbribl.preparePBRIBLEnvironment(hdr_path, lutSize=1024)
+		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepare(hdr_path, lutSize=1024)
 
 	else:
 		env_path = resolve_asset(args.env, "gltf")
@@ -1112,13 +919,13 @@ if __name__ == "__main__":
 		if not env_path:
 			sys.exit(f"Cannot find environment manifest {args.env!r}")
 
-		environment = osgx.gltf.pbribl.loadPBRIBLEnvironment(env_path)
+		environment = osgx.gltf.pbribl.PBRIBLEnvironment.load(env_path)
 
 	if not environment.valid():
 		sys.exit("Failed to prepare/load the PBR/IBL environment")
 
 	# --- G-buffer geometry pass -------------------------------------------------- #
-	gbuffer = osgx.gltf.pbribl.createPBRIBLGeometryPass(model, W, H)
+	gbuffer = osgx.gltf.pbribl.PBRIBLGBuffer.create(model, W, H)
 
 	if not gbuffer.valid():
 		sys.exit("Failed to build the G-buffer geometry pass")
@@ -1142,26 +949,47 @@ if __name__ == "__main__":
 		shadow_options.extent = max(bound_radius * shadow_options.margin, args.floor_size)
 
 	if args.lights:
-		shadow_map = osgx.shadow.createDirectionalShadowMap(
+		shadow_map = osgx.shadow.ShadowMap.create(
 			KEY_LIGHT_DIR, bound_center, bound_radius, shadow_options
 		)
 
 		shadow_map.camera.children.append(model)
+
+	# --- SSAO ---------------------------------------------------------------------------- #
+	# Built BEFORE lighting_options/PBRIBLLightingScene.create() specifically so aoTexture can be
+	# set on lighting_options normally below -- osgx.gbuffer.SSAO replaces the hand-rolled kernel/
+	# noise/RTT-pass code this step used to carry (generate_ssao_kernel()/make_ssao_noise_texture()/
+	# create_ssao_camera()/create_ssao_blur_camera(), all removed). Reads gbuffer's normal/position
+	# directly -- both already exist once the geometry pass above is built.
+	#
+	# ssao_projection_u is a real osg.Uniform (not a bare matrix) so it can be kept and refreshed
+	# every frame below -- v.camera.projectionMatrix isn't meaningfully established until the
+	# window is actually realized/sized, well after this call, and can change every frame besides
+	# (see osgx.gbuffer.SSAO.create()'s own doc comment).
+	ssao_projection_u = osg.Uniform("projectionMatrix", osg.Matrixf.identity())
+	ssao_radius = max(0.05, bound_radius * 0.15)
+	ssao = osgx.gbuffer.SSAO.create(
+		gbuffer.normalTexture, gbuffer.positionTexture, ssao_projection_u, W, H, ssao_radius
+	)
+
+	if not ssao.valid():
+		sys.exit("Failed to build the SSAO pass")
 
 	# --- Deferred lighting pass -------------------------------------------------- #
 	lighting_options = osgx.gltf.pbribl.PBRIBLLightingPassOptions()
 
 	lighting_options.tonemap = False # bloom needs pre-tonemap linear HDR; final_cam tonemaps
 	lighting_options.shadowMap = shadow_map
+	lighting_options.aoTexture = ssao.aoTexture
 
-	lighting = osgx.gltf.pbribl.createPBRIBLLightingPass(
+	lighting = osgx.gltf.pbribl.PBRIBLLightingScene.create(
 		gbuffer, environment, v.camera, args.ibl_diffuse, args.ibl_specular, lighting_options
 	)
 
 	if not lighting.valid():
 		sys.exit("Failed to build the lighting pass")
 
-	# createPBRIBLLightingPass() returns a POST_RENDER camera drawing straight to the backbuffer
+	# PBRIBLLightingScene.create() returns a POST_RENDER camera drawing straight to the backbuffer
 	# by default (the "pipeline ends here" shape options.tonemap=True implies) -- re-target it to
 	# an offscreen texture ourselves so bloom/final can chain after it, exactly as its own doc
 	# comment in PBRIBL.hpp says to.
@@ -1183,7 +1011,8 @@ if __name__ == "__main__":
 	# --- Lights: single directional key light via osgx.pbr.LightSet, live on the lighting
 	# pass camera's own StateSet -- that's where osgx_DirectLighting() actually runs; the
 	# geometry pass has no lighting math to feed it to. ---------------------------------- #
-	lights = osgx.pbr.LightSet.create(lighting_cam.stateSet)
+	lights = osgx.pbr.LightSet()
+	lighting_cam.stateSet.attributes.append(lights)
 
 	if args.lights:
 		lights.setCount(1)
@@ -1195,36 +1024,15 @@ if __name__ == "__main__":
 		lights, shadow_map, shadow_options, bound_center, bound_radius, KEY_LIGHT_COLOR, KEY_LIGHT_INTENSITY
 	) if args.lights else None
 
-	# --- SSAO ---------------------------------------------------------------------------- #
-	ssao_kernel_u = osg.Uniform(osg.Uniform.Type.FLOAT_VEC3, "samples", tuple(generate_ssao_kernel()))
-	ssao_noise_tex = make_ssao_noise_texture()
-	ssao_radius = max(0.05, bound_radius * 0.15)
-	# Real value refreshed every frame below (see update_ssao_projection()) -- v.camera's
-	# projection isn't meaningfully established yet at this point in startup.
-	ssao_projection_u = osg.Uniform("projectionMatrix", osg.Matrixf.identity())
-
-	ssao_cam, ao_raw_tex = create_ssao_camera(
-		gbuffer.normalTexture, ssao_noise_tex, gbuffer.positionTexture,
-		ssao_kernel_u, ssao_projection_u, ssao_radius, w=W, h=H
-	)
-	ssao_blur_cam, ao_tex = create_ssao_blur_camera(ao_raw_tex, W, H)
-
-	# aoTexture wired in by hand, after the fact -- PBRIBLLightingPassOptions.aoTexture only
-	# accepts a texture the caller has already built, and SSAO's own output didn't exist yet when
-	# lighting_options was constructed above. Replicates exactly what createPBRIBLLightingPass()
-	# itself does internally when options.aoTexture IS set at call time (PBRIBL.cpp): bind unit 8,
-	# add the "aoTex" sampler uniform, and set the OSGX_PBRIBL_AO shader define the lighting
-	# shader's own `#ifdef OSGX_PBRIBL_AO` gates its aoTex sample on. Unit 8 is otherwise unused
-	# here (only reserved internally when options.aoTexture is non-null at construction time).
-	lighting_cam.stateSet.textureAttributes[8] = ao_tex
-	lighting_cam.stateSet.uniforms["aoTex"] = 8
-	lighting_cam.stateSet.defines["OSGX_PBRIBL_AO"] = osg.StateAttribute.ON
-
 	# --- Bloom ----------------------------------------------------------------------------- #
 	bloom_threshold_cam, bloom_blur_h_cam, bloom_blur_v_cam, bloom_blur_b_tex = create_bloom_cameras(hdr_color_tex, W, H)
 
 	# --- Final LDR pass ---------------------------------------------------------------------- #
-	final_cam = create_final_camera(hdr_color_tex, bloom_blur_b_tex, ao_tex, W, H)
+	# ssao.aoTexture is ALREADY the aoTex the lighting pass reads (wired via lighting_options.aoTexture
+	# above, at real PBRIBLLightingScene.create() call time -- no hand-wiring workaround needed
+	# anymore) -- sampled a second time here purely for this pass's own grainAOBoost effect, unrelated
+	# to the lighting pass's own use of it.
+	final_cam = create_final_camera(hdr_color_tex, bloom_blur_b_tex, ssao.aoTexture, W, H)
 
 	fc_ss = final_cam.stateSet
 	fc_ss.uniforms["tonemapMode"] = 1 # ACES (Narkowicz) -- preferred over PBR Neutral by eye
@@ -1268,7 +1076,7 @@ if __name__ == "__main__":
 		("3: Material", gbuffer.materialTexture, 0),
 		("4: Emissive", gbuffer.emissiveTexture, 3),
 		("5: Depth", gbuffer.positionTexture, 4),
-		("6: AO", ao_tex, 2),
+		("6: SSAO", ssao.aoTexture, 2),
 	)
 
 	# A single-element list, not a bare variable -- select_visualize_mode()/draw_visualize_mode()
@@ -1315,16 +1123,16 @@ if __name__ == "__main__":
 	if environment.root is not None:
 		root.children.append(environment.root)
 
-	# Combined per-frame update: the lighting pass's view-matrix uniforms (updatePBRIBLLightingPass())
+	# Combined per-frame update: the lighting pass's view-matrix uniforms (PBRIBLLightingScene.update())
 	# plus SSAO's own forward projection matrix (see ssao_projection_u's own comment -- neither is
 	# meaningfully established until well after the cameras that need them are built). Installed on
 	# whichever camera is the FIRST PRE_RENDER camera in this scene graph (add-order breaks the tie
 	# between shadow_map.camera and gbuffer.gbuffer.camera, both default order 0) -- see
-	# updatePBRIBLLightingPass()'s own comment for why it must NOT be v.camera's own preDrawCallback
+	# PBRIBLLightingScene.update()'s own comment for why it must NOT be v.camera's own preDrawCallback
 	# or application code after v.frame() returns, both of which hand the lighting pass a
 	# one-frame-stale matrix relative to what the geometry pass just rendered with.
 	def update_per_frame(ri):
-		osgx.gltf.pbribl.updatePBRIBLLightingPass(lighting, v.camera)
+		lighting.update(v.camera)
 
 		ssao_projection_u.value = osg.Matrixf(v.camera.projectionMatrix)
 
@@ -1339,8 +1147,8 @@ if __name__ == "__main__":
 		gbuffer.gbuffer.camera.preDrawCallback = update_per_frame
 
 	root.children.append(gbuffer.gbuffer.camera)
-	root.children.append(ssao_cam)
-	root.children.append(ssao_blur_cam)
+	root.children.append(ssao.rawCamera)
+	root.children.append(ssao.blurCamera)
 	root.children.append(lighting_cam)
 	root.children.append(bloom_threshold_cam)
 	root.children.append(bloom_blur_h_cam)
@@ -1407,6 +1215,19 @@ if __name__ == "__main__":
 
 		gui.addSection("IBL", draw_ibl_knobs, closed_section)
 
+		# ssao.radius/ssao.bias are real live osg.Uniforms (osgx.gbuffer.SSAO.create()) -- no pass
+		# rebuild needed, same shape every other slider here already uses.
+		def draw_ssao_knobs(ri):
+			changed, value = osgx.imgui.slider_float("Radius", ssao.radius.value, 0.01, 2.0)
+
+			if changed: ssao.radius.value = value
+
+			changed, value = osgx.imgui.slider_float("Bias", ssao.bias.value, 0.0, 0.1)
+
+			if changed: ssao.bias.value = value
+
+		gui.addSection("SSAO", draw_ssao_knobs, closed_section)
+
 		def draw_exposure_knobs(ri):
 			changed, value = osgx.imgui.slider_float(
 				"Exposure##slider", exposure_u.value, -8.0, 8.0, "%.2f EV"
@@ -1460,7 +1281,7 @@ if __name__ == "__main__":
 					h._sync()
 
 				# Clamped short of +-90: straight down/up is a degenerate lookAt inside
-				# repositionDirectionalShadowMap() (its up vector is world +Y, so the poles that
+				# ShadowMap.reposition() (its up vector is world +Y, so the poles that
 				# actually break it are +-Y, but a light exactly on the Z axis still produces a
 				# shadow frustum with no useful orientation).
 				changed, value = osgx.imgui.slider_float(

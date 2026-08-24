@@ -10,19 +10,19 @@
 # second time here would be re-teaching a solved problem, not teaching a new one, so this step pivots
 # to consuming it directly:
 #
-# osgx.gltf.pbribl.preparePBRIBLEnvironment(hdrPath) -- bakes diffuse irradiance, the BRDF LUT, and
+# osgx.gltf.pbribl.PBRIBLEnvironment.prepare(hdrPath) -- bakes diffuse irradiance, the BRDF LUT, and
 # a GGX-prefiltered specular cubemap all LIVE from one equirectangular .hdr, via a handful of
 # PRE_RENDER passes added to the scene graph (environment.root). No .ktx2 pre-bake step needed
 # anymore -- that's what this step's numpy/cv2 SH compute + --ktx2 loading used to stand in for.
 #
-# osgx.gltf.pbribl.createPBRIBLScene(node, environment, ..., shadowMap=...) -- wires the whole
+# osgx.gltf.pbribl.PBRIBLScene.create(node, environment, ..., shadowMap=...) -- wires the whole
 # thing (material + IBL + optional direct lights + optional shadow) onto node's own StateSet with
 # one call. Direct lights still come from osgx.pbr.LightSet exactly as Step 8 introduced; passing
-# a shadowMap here is the same osgx.shadow.ShadowMap Step 8 built, just handed to createPBRIBLScene
+# a shadowMap here is the same osgx.shadow.ShadowMap Step 8 built, just handed to PBRIBLScene.create
 # instead of wired by hand.
 #
 # The floor is NOT glTF -- it's still a hand-rolled osgx_Material + osgx_DirectLighting() call
-# (identical shape to Step 8's floor), since createPBRIBLScene() is specifically the glTF-material
+# (identical shape to Step 8's floor), since PBRIBLScene.create() is specifically the glTF-material
 # convenience path and a flat quad has no glTF material to feed it.
 
 import sys
@@ -134,7 +134,7 @@ void main() {
 }
 """
 
-# 1/2/3 cycle createPBRIBLScene()'s debugMode (combined/diffuse-only/specular-only) when
+# 1/2/3 cycle PBRIBLScene.create()'s debugMode (combined/diffuse-only/specular-only) when
 # --diagnostics is passed -- isolates what IBL's two independent intensity knobs are each
 # actually contributing.
 class Diagnostics(osgGA.GUIEventHandler):
@@ -214,7 +214,7 @@ if __name__ == "__main__":
 		if not hdr_path:
 			sys.exit(f"Cannot find HDR {args.hdr!r} -- check pyosg-lighting/data/ or OSG_FILE_PATH")
 
-		environment = osgx.gltf.pbribl.preparePBRIBLEnvironment(hdr_path, lutSize=1024)
+		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepare(hdr_path, lutSize=1024)
 
 	else:
 		env_path = resolve_asset(args.env, "gltf")
@@ -222,7 +222,7 @@ if __name__ == "__main__":
 		if not env_path:
 			sys.exit(f"Cannot find environment manifest {args.env!r}")
 
-		environment = osgx.gltf.pbribl.loadPBRIBLEnvironment(env_path)
+		environment = osgx.gltf.pbribl.PBRIBLEnvironment.load(env_path)
 
 	if not environment.valid():
 		sys.exit("Failed to prepare/load the PBR/IBL environment")
@@ -231,7 +231,8 @@ if __name__ == "__main__":
 	main_group = osg.Group()
 	mg_ss = main_group.stateSet
 
-	lights = osgx.pbr.LightSet.create(mg_ss)
+	lights = osgx.pbr.LightSet()
+	mg_ss.attributes.append(lights)
 
 	if args.lights:
 		lights.setCount(3)
@@ -251,12 +252,12 @@ if __name__ == "__main__":
 		bound = model.bound
 		light_dir = (bound.center - KEY_LIGHT_POS).normalized()
 
-		shadow_map = osgx.shadow.createDirectionalShadowMap(light_dir, bound.center, bound.radius)
+		shadow_map = osgx.shadow.ShadowMap.create(light_dir, bound.center, bound.radius)
 
 		shadow_map.camera.children.append(model)
 
 	# --- glTF PBR/IBL scene ---------------------------------------------------- #
-	pbr = osgx.gltf.pbribl.createPBRIBLScene(
+	pbr = osgx.gltf.pbribl.PBRIBLScene.create(
 		model,
 		environment,
 		iblDiffuseIntensity=args.ibl_diffuse,
@@ -289,7 +290,7 @@ if __name__ == "__main__":
 
 	# --- Scene graph ------------------------------------------------------------ #
 	# Shadow uniforms/texture live on main_group's StateSet so the hand-rolled floor shader sees
-	# them by inheritance -- createPBRIBLScene() already wired them directly onto model's own
+	# them by inheritance -- PBRIBLScene.create() already wired them directly onto model's own
 	# StateSet above, so this is redundant (but harmless) for the model itself.
 	if shadow_map is not None:
 		mg_ss.textureAttributes[4] = shadow_map.depthTexture

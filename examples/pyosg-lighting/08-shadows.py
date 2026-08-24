@@ -29,7 +29,7 @@
 #
 # The shadow matrix is WORLD space (not eye space, unlike the old hand-rolled version this
 # replaced) -- osgx_DirectLighting()/osgx_ShadowFactor() both work in world space, so
-# createDirectionalShadowMap() only has to compose lightView*lightProj once at setup. Since
+# ShadowMap.create() only has to compose lightView*lightProj once at setup. Since
 # the key light is static here, that's the only computation needed -- no per-frame
 # preDrawCallback recomputing the shadow matrix off the orbiting viewer camera.
 
@@ -344,7 +344,8 @@ if __name__ == "__main__":
 	# falloff (no artificial radius-based cutoff, unlike the old hand-rolled atten() formula) --
 	# these intensities aren't a straight port of the old lightColor/lightRadius values, tune to
 	# taste.
-	lights = osgx.pbr.LightSet.create(mg_ss)
+	lights = osgx.pbr.LightSet()
+	mg_ss.attributes.append(lights)
 
 	lights.setCount(3)
 	lights.setPoint(0, KEY_LIGHT_POS, osg.Vec3(1.0, 0.9, 0.7), 1.6)
@@ -359,7 +360,7 @@ if __name__ == "__main__":
 	bound = model.bound
 	light_dir = (bound.center - KEY_LIGHT_POS).normalized()
 
-	shadow_map = osgx.shadow.createDirectionalShadowMap(light_dir, bound.center, bound.radius)
+	shadow_map = osgx.shadow.ShadowMap.create(light_dir, bound.center, bound.radius)
 
 	shadow_map.camera.children.append(model)
 

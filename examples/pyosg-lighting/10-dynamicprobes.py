@@ -4,7 +4,7 @@
 # Step 10 -- Dynamic Probes
 #
 # Step 9 (09-ibl.py) bakes its whole environment (diffuse + specular + BRDF LUT) ONCE at startup
-# via osgx.gltf.pbribl.preparePBRIBLEnvironment(). This step demonstrates that the specular half
+# via osgx.gltf.pbribl.PBRIBLEnvironment.prepare(). This step demonstrates that the specular half
 # of that environment can be REBAKED LIVE: press 'r' to replace the entire reflection environment
 # with a synthetic one -- each of the 6 cube faces filled with a fresh checkerboard of random/
 # palette colors (see paint_random_faces()) -- and rebake the specular cubemap from it on the fly,
@@ -17,10 +17,10 @@
 # dynamically, even if it's not perfect or async."
 #
 # Diffuse (SH/Lambertian) irradiance and the BRDF LUT are intentionally left static, baked once at
-# startup by preparePBRIBLEnvironment() -- only the specular prefiltered cubemap rebakes live.
+# startup by PBRIBLEnvironment.prepare() -- only the specular prefiltered cubemap rebakes live.
 #
-# Unlike Step 9, the live-rebake mechanism itself (osgx.ibl.createGGXPrefilterScene /
-# rebakeGGXPrefilterScene / finishGGXPrefilter) is NOT something this pivot needed to touch -- it
+# Unlike Step 9, the live-rebake mechanism itself (osgx.ibl.GGXPrefilterScene.create /
+# GGXPrefilterScene.rebake() / GGXPrefilterReadback.finish()) is NOT something this pivot needed to touch -- it
 # was already real osgx, not hand-rolled math, before this rewrite. What pivots here is everything
 # this step has in common with Step 9: the static half of the environment bake and the whole
 # glTF PBR/IBL material shader, both now osgx.gltf.pbribl exactly as in 09-ibl.py. The
@@ -92,7 +92,7 @@ FILL_LIGHT_POS_1 = osg.Vec3( 0.0, -0.6, 0.2) # warm back/rim
 # +Z, -Z) -- see _equirect_face_uv() below.
 FACE_NAMES = ("+X", "-X", "+Y", "-Y", "+Z", "-Z")
 
-# HDR magnitude for a fully-saturated (1.0) color channel. NOTE: createPBRIBLScene()'s specular
+# HDR magnitude for a fully-saturated (1.0) color channel. NOTE: PBRIBLScene.create()'s specular
 # term samples envMap directly and is NOT scaled by --ibl-diffuse -- only --ibl-specular affects
 # it -- so this has to sit near a real HDR's own peak magnitude (photographed HDRs like
 # papermill.hdr are typically ~0.5-3), not just "however bright looks fun" -- too high and every
@@ -234,7 +234,7 @@ def do_rebake(v, root, model_ss, base_image, color_source, prefilter_size, bake_
 	"""
 	Bake a new specular prefiltered cubemap from a freshly-repainted copy of `base_image` (see
 	paint_random_faces()) and swap it onto texture unit 5 of `model_ss` -- the StateSet
-	createPBRIBLScene() bound envMap to. Blocks the caller for a handful of frames (sync/stalling
+	PBRIBLScene.create() bound envMap to. Blocks the caller for a handful of frames (sync/stalling
 	bake, see module docstring) -- safe to call from the main loop, not from inside an event
 	handler callback (would re-enter viewer.frame()).
 	"""
@@ -249,7 +249,7 @@ def do_rebake(v, root, model_ss, base_image, color_source, prefilter_size, bake_
 		options.readbackFrame = 2
 		bake_state["options"] = options
 
-		bake_scene = osgx.ibl.createGGXPrefilterScene(baked_image, options)
+		bake_scene = osgx.ibl.GGXPrefilterScene.create(baked_image, options)
 		bake_scene.root.nodeMask = 0
 		root.children.append(bake_scene.root)
 		bake_state["scene"] = bake_scene
@@ -257,7 +257,7 @@ def do_rebake(v, root, model_ss, base_image, color_source, prefilter_size, bake_
 		bake_scene = bake_state["scene"]
 		options = bake_state["options"]
 
-		if not osgx.ibl.rebakeGGXPrefilterScene(bake_scene, baked_image):
+		if not bake_scene.rebake(baked_image):
 			print("[dynamicprobes] failed to reset bake scene, keeping previous environment", flush=True)
 
 			return
@@ -279,7 +279,7 @@ def do_rebake(v, root, model_ss, base_image, color_source, prefilter_size, bake_
 
 		return
 
-	cubemap = osgx.ibl.finishGGXPrefilter(bake_scene.readback)
+	cubemap = bake_scene.readback.finish()
 
 	# GPU-baked mips are already embedded per-face (see GGXPrefilter.hpp) -- don't let OSG
 	# regenerate them, same as the static-environment path in 09-ibl.py.
@@ -395,7 +395,7 @@ if __name__ == "__main__":
 	model = osgDB.readNodeFile(path)
 
 	# --- IBL environment: diffuse/BRDF LUT static, specular gets replaced by the live rebake ---- #
-	environment = osgx.gltf.pbribl.preparePBRIBLEnvironment(hdr_path, lutSize=1024)
+	environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepare(hdr_path, lutSize=1024)
 
 	if not environment.valid():
 		sys.exit("Failed to prepare the PBR/IBL environment")
@@ -404,7 +404,8 @@ if __name__ == "__main__":
 	main_group = osg.Group()
 	mg_ss = main_group.stateSet
 
-	lights = osgx.pbr.LightSet.create(mg_ss)
+	lights = osgx.pbr.LightSet()
+	mg_ss.attributes.append(lights)
 
 	if args.lights:
 		lights.setCount(3)
@@ -422,12 +423,12 @@ if __name__ == "__main__":
 		bound = model.bound
 		light_dir = (bound.center - KEY_LIGHT_POS).normalized()
 
-		shadow_map = osgx.shadow.createDirectionalShadowMap(light_dir, bound.center, bound.radius)
+		shadow_map = osgx.shadow.ShadowMap.create(light_dir, bound.center, bound.radius)
 
 		shadow_map.camera.children.append(model)
 
 	# --- glTF PBR/IBL scene ---------------------------------------------------- #
-	pbr = osgx.gltf.pbribl.createPBRIBLScene(
+	pbr = osgx.gltf.pbribl.PBRIBLScene.create(
 		model,
 		environment,
 		iblDiffuseIntensity=args.ibl_diffuse,
@@ -461,7 +462,7 @@ if __name__ == "__main__":
 
 	# --- Scene graph ------------------------------------------------------------ #
 	# Shadow uniforms/texture live on main_group's StateSet so the hand-rolled floor shader sees
-	# them by inheritance -- createPBRIBLScene() already wired them directly onto model's own
+	# them by inheritance -- PBRIBLScene.create() already wired them directly onto model's own
 	# StateSet above, so this is redundant (but harmless) for the model itself.
 	if shadow_map is not None:
 		mg_ss.textureAttributes[4] = shadow_map.depthTexture
