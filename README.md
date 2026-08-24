@@ -2,6 +2,17 @@
   <img src="logo.png" alt="OpenSceneGraph.py logo" width="220">
 </p>
 
+<div align="center">
+
+[![PyPI](https://img.shields.io/pypi/v/openscenegraph?style=for-the-badge&logo=pypi&logoColor=white)](https://pypi.org/project/openscenegraph/)
+[![Python](https://img.shields.io/badge/Python-%E2%89%A53.9-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Linux wheel](https://img.shields.io/github/actions/workflow/status/AlphaPixel/OpenSceneGraph.py/wheels.yml?branch=cubicool-wip&style=for-the-badge&logo=githubactions&logoColor=white&label=Linux%20wheel)](https://github.com/AlphaPixel/OpenSceneGraph.py/actions/workflows/wheels.yml)
+[![MIT License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
+[![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/20)
+[![OpenSceneGraph](https://img.shields.io/badge/OpenSceneGraph-3.6.5-0080ff?style=for-the-badge)](https://github.com/openscenegraph/OpenSceneGraph)
+
+</div>
+
 # Key Features (July, 2026)
 
 - Covers most of the core `osg` namespace, as well as significant portions of
