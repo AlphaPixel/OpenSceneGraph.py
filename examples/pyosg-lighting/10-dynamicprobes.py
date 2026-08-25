@@ -19,7 +19,7 @@
 # Diffuse (SH/Lambertian) irradiance and the BRDF LUT are intentionally left static, baked once at
 # startup by PBRIBLEnvironment.prepare() -- only the specular prefiltered cubemap rebakes live.
 #
-# Unlike Step 9, the live-rebake mechanism itself (osgx.ibl.GGXPrefilterScene.create /
+# Unlike Step 9, the live-rebake mechanism itself (osgx.GGXPrefilterScene.create /
 # GGXPrefilterScene.rebake() / GGXPrefilterReadback.finish()) is NOT something this pivot needed to touch -- it
 # was already real osgx, not hand-rolled math, before this rewrite. What pivots here is everything
 # this step has in common with Step 9: the static half of the environment bake and the whole
@@ -243,13 +243,13 @@ def do_rebake(v, root, model_ss, base_image, color_source, prefilter_size, bake_
 	baked_image = paint_random_faces(base_image, color_source)
 
 	if bake_state["scene"] is None:
-		options = osgx.ibl.GGXPrefilterOptions()
+		options = osgx.GGXPrefilterOptions()
 		options.prefilterSize = prefilter_size
 		options.maxFrames = 8
 		options.readbackFrame = 2
 		bake_state["options"] = options
 
-		bake_scene = osgx.ibl.GGXPrefilterScene.create(baked_image, options)
+		bake_scene = osgx.GGXPrefilterScene.create(baked_image, options)
 		bake_scene.root.nodeMask = 0
 		root.children.append(bake_scene.root)
 		bake_state["scene"] = bake_scene
@@ -404,7 +404,7 @@ if __name__ == "__main__":
 	main_group = osg.Group()
 	mg_ss = main_group.stateSet
 
-	lights = osgx.pbr.LightSet()
+	lights = osgx.LightSet()
 	mg_ss.attributes.append(lights)
 
 	if args.lights:
@@ -423,7 +423,7 @@ if __name__ == "__main__":
 		bound = model.bound
 		light_dir = (bound.center - KEY_LIGHT_POS).normalized()
 
-		shadow_map = osgx.shadow.ShadowMap.create(light_dir, bound.center, bound.radius)
+		shadow_map = osgx.ShadowMap.create(light_dir, bound.center, bound.radius)
 
 		shadow_map.camera.children.append(model)
 
@@ -452,7 +452,7 @@ if __name__ == "__main__":
 		floor_geode = osg.Geode()
 		floor_geode.drawables.append(floor_quad)
 
-		hook_shader = osgx.shadow.makeShadowedDirectLightingHookShader()
+		hook_shader = osgx.makeShadowedDirectLightingHookShader()
 		floor_p = osg.Program(name="floor_ibl", shaders=(
 			osg.Shader(osg.Shader.VERTEX, FLOOR_VERTEX),
 			osg.Shader(osg.Shader.FRAGMENT, osgx.resolveShaderLibs(FLOOR_FRAGMENT)),

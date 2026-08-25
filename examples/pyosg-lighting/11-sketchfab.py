@@ -13,7 +13,7 @@
 # the tonemap-comparison/post-fx final pass) stays 100% hand-rolled Python, since osgx deliberately
 # does NOT standardize bloom generation (too taste-dependent) and this step's whole teaching point
 # is comparing tonemap curves live, which doesn't fit the (link-time-only) osgx_Tonemap() hook. SSAO
-# itself is a SECOND, smaller pivot (2026-08-21, after osgx.gbuffer.SSAO shipped, ported straight
+# itself is a SECOND, smaller pivot (2026-08-21, after osgx.SSAO shipped, ported straight
 # from this file's own proven-live hand-rolled version) -- no longer hand-rolled Python either, see
 # the "--- SSAO ---" section below and PBRIBLLightingPassOptions.aoTexture's own doc comment.
 #
@@ -27,14 +27,14 @@
 # - --msaa and the "Debug Tint (red)" shadow-strength aid are both gone -- PBRIBLGBuffer.create()
 #   doesn't expose a G-buffer MSAA knob, and there's no hook to tint the shared lighting shader's
 #   output. The room/grid backdrop is a much clearer way to judge shadow softness/strength anyway.
-# - The light rig is a single directional key light via osgx.pbr.LightSet (unchanged from what
+# - The light rig is a single directional key light via osgx.LightSet (unchanged from what
 #   this file already simplified to on 2026-07-11 -- fill lights were dropped THEN, not by this
 #   pivot). It's now interactively draggable via the SAME ShadowMap.reposition()
 #   this session's osgx-shadow.cpp/osgx-gbuffer.cpp proofs already validated live.
 #
 # Pipeline shape:
 # shadow_map.camera -> gbuffer.camera (MRT: albedo+ao/normal/material/emissive/position) ->
-# ssao.rawCamera -> ssao.blurCamera (osgx.gbuffer.SSAO -- generic hemisphere-kernel SSAO, not
+# ssao.rawCamera -> ssao.blurCamera (osgx.SSAO -- generic hemisphere-kernel SSAO, not
 # hand-rolled here anymore, see the "--- SSAO ---" section below) -> lighting.node (re-targeted to
 # PRE_RENDER, writes LINEAR HDR, no tonemap) -> bloom_threshold_cam -> bloom_blur_h_cam ->
 # bloom_blur_v_cam -> final_cam (bloom add, tonemap, gamma, vignette/grain/CA/sharpen/color-balance
@@ -497,7 +497,7 @@ def make_fullscreen_rtt_pass(textures, output_tex, frag_shader, w, h, name="Post
 			ss.uniforms[k] = val
 
 	p = osg.Program(name=f"{name}_program", shaders=(
-		osg.Shader(osg.Shader.VERTEX, osgx.ibl.FULLSCREEN_VERT),
+		osg.Shader(osg.Shader.VERTEX, osgx.FULLSCREEN_VERT),
 		osg.Shader(osg.Shader.FRAGMENT, frag_shader),
 	))
 
@@ -601,7 +601,7 @@ def create_final_camera(hdr_color_tex, bloom_tex, ssao_tex, w=W, h=H):
 	ss.uniforms["aoTex"] = 2
 
 	p = osg.Program(name="final_post", shaders=(
-		osg.Shader(osg.Shader.VERTEX, osgx.ibl.FULLSCREEN_VERT),
+		osg.Shader(osg.Shader.VERTEX, osgx.FULLSCREEN_VERT),
 		osg.Shader(osg.Shader.FRAGMENT, FINAL_FRAGMENT_SHADER),
 	))
 
@@ -636,7 +636,7 @@ def create_debug_camera(depth_scale, w=W, h=H):
 	ss.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
 
 	p = osg.Program(name="debug_blit", shaders=(
-		osg.Shader(osg.Shader.VERTEX, osgx.ibl.FULLSCREEN_VERT),
+		osg.Shader(osg.Shader.VERTEX, osgx.FULLSCREEN_VERT),
 		osg.Shader(osg.Shader.FRAGMENT, DEBUG_BLIT_FRAGMENT_SHADER),
 	))
 
@@ -763,7 +763,7 @@ def create_grid_room(bound_center, bound_radius, floor_z, room_size):
 	return room, (floor, back_wall, right_wall)
 
 # --------------------------------------------------------------------------- #
-# Light orbit -- drives BOTH osgx.pbr.LightSet and the shadow map now (was a
+# Light orbit -- drives BOTH osgx.LightSet and the shadow map now (was a
 # raw uniform + a per-frame shadow_cam.viewMatrix recompute in update_uniforms())
 # --------------------------------------------------------------------------- #
 
@@ -941,7 +941,7 @@ if __name__ == "__main__":
 
 	# --- Shadow map (Step 8's rig, now orthographic/depth-only-override/repositionable) --- #
 	shadow_map = None
-	shadow_options = osgx.shadow.ShadowMapOptions()
+	shadow_options = osgx.ShadowMapOptions()
 
 	if args.floor:
 		# A room needs the shadow frustum to cover more than the model's own casting bound, or
@@ -949,7 +949,7 @@ if __name__ == "__main__":
 		shadow_options.extent = max(bound_radius * shadow_options.margin, args.floor_size)
 
 	if args.lights:
-		shadow_map = osgx.shadow.ShadowMap.create(
+		shadow_map = osgx.ShadowMap.create(
 			KEY_LIGHT_DIR, bound_center, bound_radius, shadow_options
 		)
 
@@ -957,7 +957,7 @@ if __name__ == "__main__":
 
 	# --- SSAO ---------------------------------------------------------------------------- #
 	# Built BEFORE lighting_options/PBRIBLLightingScene.create() specifically so aoTexture can be
-	# set on lighting_options normally below -- osgx.gbuffer.SSAO replaces the hand-rolled kernel/
+	# set on lighting_options normally below -- osgx.SSAO replaces the hand-rolled kernel/
 	# noise/RTT-pass code this step used to carry (generate_ssao_kernel()/make_ssao_noise_texture()/
 	# create_ssao_camera()/create_ssao_blur_camera(), all removed). Reads gbuffer's normal/position
 	# directly -- both already exist once the geometry pass above is built.
@@ -965,10 +965,10 @@ if __name__ == "__main__":
 	# ssao_projection_u is a real osg.Uniform (not a bare matrix) so it can be kept and refreshed
 	# every frame below -- v.camera.projectionMatrix isn't meaningfully established until the
 	# window is actually realized/sized, well after this call, and can change every frame besides
-	# (see osgx.gbuffer.SSAO.create()'s own doc comment).
+	# (see osgx.SSAO.create()'s own doc comment).
 	ssao_projection_u = osg.Uniform("projectionMatrix", osg.Matrixf.identity())
 	ssao_radius = max(0.05, bound_radius * 0.15)
-	ssao = osgx.gbuffer.SSAO.create(
+	ssao = osgx.SSAO.create(
 		gbuffer.normalTexture, gbuffer.positionTexture, ssao_projection_u, W, H, ssao_radius
 	)
 
@@ -1008,10 +1008,10 @@ if __name__ == "__main__":
 	lighting_cam.clearMask = GL_COLOR_BUFFER_BIT
 	lighting_cam.attach(osg.Camera.COLOR_BUFFER0, hdr_color_tex)
 
-	# --- Lights: single directional key light via osgx.pbr.LightSet, live on the lighting
+	# --- Lights: single directional key light via osgx.LightSet, live on the lighting
 	# pass camera's own StateSet -- that's where osgx_DirectLighting() actually runs; the
 	# geometry pass has no lighting math to feed it to. ---------------------------------- #
-	lights = osgx.pbr.LightSet()
+	lights = osgx.LightSet()
 	lighting_cam.stateSet.attributes.append(lights)
 
 	if args.lights:
@@ -1215,7 +1215,7 @@ if __name__ == "__main__":
 
 		gui.addSection("IBL", draw_ibl_knobs, closed_section)
 
-		# ssao.radius/ssao.bias are real live osg.Uniforms (osgx.gbuffer.SSAO.create()) -- no pass
+		# ssao.radius/ssao.bias are real live osg.Uniforms (osgx.SSAO.create()) -- no pass
 		# rebuild needed, same shape every other slider here already uses.
 		def draw_ssao_knobs(ri):
 			changed, value = osgx.imgui.slider_float("Radius", ssao.radius.value, 0.01, 2.0)

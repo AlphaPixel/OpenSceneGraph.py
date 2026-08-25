@@ -17,8 +17,8 @@
 #
 # osgx.gltf.pbribl.PBRIBLScene.create(node, environment, ..., shadowMap=...) -- wires the whole
 # thing (material + IBL + optional direct lights + optional shadow) onto node's own StateSet with
-# one call. Direct lights still come from osgx.pbr.LightSet exactly as Step 8 introduced; passing
-# a shadowMap here is the same osgx.shadow.ShadowMap Step 8 built, just handed to PBRIBLScene.create
+# one call. Direct lights still come from osgx.LightSet exactly as Step 8 introduced; passing
+# a shadowMap here is the same osgx.ShadowMap Step 8 built, just handed to PBRIBLScene.create
 # instead of wired by hand.
 #
 # The floor is NOT glTF -- it's still a hand-rolled osgx_Material + osgx_DirectLighting() call
@@ -231,7 +231,7 @@ if __name__ == "__main__":
 	main_group = osg.Group()
 	mg_ss = main_group.stateSet
 
-	lights = osgx.pbr.LightSet()
+	lights = osgx.LightSet()
 	mg_ss.attributes.append(lights)
 
 	if args.lights:
@@ -252,7 +252,7 @@ if __name__ == "__main__":
 		bound = model.bound
 		light_dir = (bound.center - KEY_LIGHT_POS).normalized()
 
-		shadow_map = osgx.shadow.ShadowMap.create(light_dir, bound.center, bound.radius)
+		shadow_map = osgx.ShadowMap.create(light_dir, bound.center, bound.radius)
 
 		shadow_map.camera.children.append(model)
 
@@ -280,7 +280,7 @@ if __name__ == "__main__":
 		floor_geode = osg.Geode()
 		floor_geode.drawables.append(floor_quad)
 
-		hook_shader = osgx.shadow.makeShadowedDirectLightingHookShader()
+		hook_shader = osgx.makeShadowedDirectLightingHookShader()
 		floor_p = osg.Program(name="floor_ibl", shaders=(
 			osg.Shader(osg.Shader.VERTEX, FLOOR_VERTEX),
 			osg.Shader(osg.Shader.FRAGMENT, osgx.resolveShaderLibs(FLOOR_FRAGMENT)),

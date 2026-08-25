@@ -8,11 +8,11 @@
 # whether the fragment is in shadow.
 #
 # Unlike steps 0-7, the direct-lighting math and the shadow test are NOT hand-rolled here --
-# both come from osgx (osgx.pbr.LightSet for the lights, osgx.shadow for the shadow camera +
+# both come from osgx (osgx.LightSet for the lights, osgx for the shadow camera +
 # the shadowed osgx_DirectLighting() hook). That's a deliberate choice specific to this step:
 # by now (Step 6 already taught the underlying Cook-Torrance math), re-deriving it a second
 # time just to add shadows would be re-teaching, not teaching -- see the fragment shaders
-# below for how little is left once osgx.pbr/osgx.shadow do the actual lighting work.
+# below for how little is left once osgx/osgx do the actual lighting work.
 #
 # Scene-graph structure (avoids texture feedback loops):
 #
@@ -109,8 +109,8 @@ void main() {
 # Only material reading (baseColor/normal/ORM/emissive) and the TBN reconstruction are
 # hand-rolled here -- that's Step 4/5/6 material, already taught. Direct lighting is one call:
 # osgx_DirectLighting(N, V, worldPos, mat), declared by DIRECT_LIGHTING_DECL and DEFINED by a
-# separate shader object added in __main__ below (osgx.shadow.makeShadowedDirectLightingHookShader()
-# instead of osgx.pbr's unshadowed default -- same call site either way, see PBR.hpp's
+# separate shader object added in __main__ below (osgx.makeShadowedDirectLightingHookShader()
+# instead of osgx's unshadowed default -- same call site either way, see PBR.hpp's
 # DIRECT_LIGHTING_DECL/DIRECT_LIGHTING_HOOK_DEFAULT comment for why that swap needs nothing else
 # to change here).
 FRAGMENT_SHADER = """
@@ -290,7 +290,7 @@ if __name__ == "__main__":
 	# One shader object defines osgx_DirectLighting() for BOTH programs below (model and floor)
 	# -- osg.Shader objects can be shared/attached to more than one Program, same as any other
 	# osgx hook shader.
-	hook_shader = osgx.shadow.makeShadowedDirectLightingHookShader()
+	hook_shader = osgx.makeShadowedDirectLightingHookShader()
 
 	p = osg.Program(name="pbr_shadow", shaders=(
 		osg.Shader(osg.Shader.VERTEX, VERTEX_SHADER),
@@ -340,11 +340,11 @@ if __name__ == "__main__":
 	if args.floor:
 		main_group.children.append(floor_geode)
 
-	# --- Lights: same 3-point rig as before, now via osgx.pbr.LightSet. Pure inverse-square
+	# --- Lights: same 3-point rig as before, now via osgx.LightSet. Pure inverse-square
 	# falloff (no artificial radius-based cutoff, unlike the old hand-rolled atten() formula) --
 	# these intensities aren't a straight port of the old lightColor/lightRadius values, tune to
 	# taste.
-	lights = osgx.pbr.LightSet()
+	lights = osgx.LightSet()
 	mg_ss.attributes.append(lights)
 
 	lights.setCount(3)
@@ -360,7 +360,7 @@ if __name__ == "__main__":
 	bound = model.bound
 	light_dir = (bound.center - KEY_LIGHT_POS).normalized()
 
-	shadow_map = osgx.shadow.ShadowMap.create(light_dir, bound.center, bound.radius)
+	shadow_map = osgx.ShadowMap.create(light_dir, bound.center, bound.radius)
 
 	shadow_map.camera.children.append(model)
 
