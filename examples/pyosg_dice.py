@@ -36,7 +36,6 @@ import pathlib
 import time
 
 from OpenSceneGraph import osg, osgAnimation, osgGA
-from OpenSceneGraph.GL import GL_RGBA, GL_UNSIGNED_BYTE
 import osgx
 
 DECAL_VALUES_LOCATION = 13
@@ -98,6 +97,7 @@ uniform sampler2D numberAtlas;
 uniform int digitCount;
 uniform float decalHalf;
 uniform vec3 bodyColor;
+uniform vec3 ink;
 
 out vec4 fragColor;
 
@@ -138,9 +138,11 @@ void main() {
 				(decalValue + (lu * 0.5 + 0.5)) / float(digitCount),
 				lv * 0.5 + 0.5
 			);
-			vec4 glyph = texture(numberAtlas, atlasUV);
+			// osgx.PixelText.createAtlas() is a coverage-only (single-channel) atlas -- the
+			// ink color is no longer baked into the image, so it comes from this uniform.
+			float coverage = texture(numberAtlas, atlasUV).r;
 
-			color = mix(color, glyph.rgb, glyph.a);
+			color = mix(color, ink, coverage);
 		}
 	}
 
@@ -174,6 +176,7 @@ uniform sampler2D numberAtlas;
 uniform int digitCount;
 uniform float decalHalf;
 uniform vec3 bodyColor;
+uniform vec3 ink;
 
 uniform samplerCube envMap;
 uniform sampler2D brdfLUT;
@@ -239,9 +242,11 @@ void main() {
 				(decalValue + (lu * 0.5 + 0.5)) / float(digitCount),
 				lv * 0.5 + 0.5
 			);
-			vec4 glyph = texture(numberAtlas, atlasUV);
+			// osgx.PixelText.createAtlas() is a coverage-only (single-channel) atlas -- the
+			// ink color is no longer baked into the image, so it comes from this uniform.
+			float coverage = texture(numberAtlas, atlasUV).r;
 
-			albedo = mix(albedo, glyph.rgb, glyph.a);
+			albedo = mix(albedo, ink, coverage);
 		}
 	}
 
@@ -419,26 +424,11 @@ void main() {
 }
 """
 
-# Standard 5x7 pixel font -- see pyosg-d4.py's module docstring for why
-# procedural (no PIL/baked font asset).
-FONT_5X7 = {
-	"1": ("..#..", ".##..", "..#..", "..#..", "..#..", "..#..", ".###."),
-	"2": (".###.", "#...#", "....#", "...#.", "..#..", ".#...", "#####"),
-	"3": ("####.", "....#", "...#.", "..##.", "....#", "....#", "####."),
-	"4": ("...#.", "..##.", ".#.#.", "#..#.", "#####", "...#.", "...#."),
-	"5": ("#####", "#....", "####.", "....#", "....#", "#...#", ".###."),
-	"6": ("..##.", ".#...", "#....", "####.", "#...#", "#...#", ".###."),
-	"7": ("#####", "....#", "...#.", "..#..", ".#...", ".#...", ".#..."),
-	"8": (".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."),
-	"9": (".###.", "#...#", "#...#", ".####", "....#", "...#.", ".##.."),
-	"0": (".###.", "#...#", "#..##", "#.#.#", "##..#", "#...#", ".###."),
-}
-ATLAS_CELL = 64
-FONT_PIXEL = 7
-# Smaller per-character scale used only for 2-character cells (D12's 10/11/
-# 12) so both glyphs plus a gap fit inside the same fixed ATLAS_CELL width
-# as every 1-character cell -- see build_number_atlas()'s docstring.
-FONT_PIXEL_MULTI = 5
+# The atlas itself is now built by osgx.PixelText.createAtlas() (see make_die()/create_scene()
+# callers) -- osgx generalized this module's own procedural 5x7 font/atlas builder into a
+# reusable primitive, so it no longer needs to live here. INK stays: the atlas osgx builds is
+# coverage-only (no baked color), so the ink color is supplied as a shader uniform instead --
+# see FRAGMENT_SHADER/FRAGMENT_SHADER_IBL above.
 INK = (0.08, 0.07, 0.07)
 
 class FaceInfo:
@@ -786,77 +776,6 @@ def corner_decal_scheme(vertex_values, inset=0.34):
 
 	return decals_for_face
 
-def build_number_atlas(values):
-	"""A `len(values) * ATLAS_CELL` x `ATLAS_CELL` RGBA image, one VALUE
-	per column -- filled via the plain buffer protocol (memoryview +
-	cast-to-1D + per-row slice assignment), not PIL/numpy. `values` is a
-	sequence of 1-or-2-character strings, each key(s) into FONT_5X7, e.g.
-	("1", ..., "9", "0", "10", "11", "12"). A 2-character value renders
-	both glyphs side by side (at FONT_PIXEL_MULTI's smaller scale, so they
-	still fit the same fixed cell width as a 1-character value), centered
-	as one block within the cell -- same placement math either way, just a
-	different character count and per-character pixel scale."""
-	atlas_w, atlas_h = ATLAS_CELL * len(values), ATLAS_CELL
-	img = osg.Image()
-
-	img.allocateImage(atlas_w, atlas_h, 1, GL_RGBA, GL_UNSIGNED_BYTE)
-
-	view = memoryview(img)
-	flat = view.cast("B")
-	row_stride = view.strides[0]
-	channels = view.shape[2]
-	ink_bytes = bytes(int(round(c * 255)) for c in INK) + bytes([255])
-
-	# Per-cell layout: pixel scale, one glyph's width, the gap between
-	# glyphs, and the margins needed to center the whole (1 or 2 char)
-	# block within ATLAS_CELL -- computed once per cell, reused per row.
-	layouts = []
-
-	for value in values:
-		pixel = FONT_PIXEL if len(value) == 1 else FONT_PIXEL_MULTI
-		char_w = 5 * pixel
-		gap = pixel
-		block_w = len(value) * char_w + (len(value) - 1) * gap
-		block_h = 7 * pixel
-
-		layouts.append((pixel, char_w, gap, (ATLAS_CELL - block_w) // 2, (ATLAS_CELL - block_h) // 2, block_w, block_h))
-
-	for y in range(atlas_h):
-		row_bytes = bytearray(atlas_w * channels)
-
-		for cell_index, value in enumerate(values):
-			pixel, char_w, gap, margin_x, margin_y, block_w, block_h = layouts[cell_index]
-			row_in_block = y - margin_y
-			font_row = row_in_block // pixel if 0 <= row_in_block < block_h else None
-
-			if font_row is None:
-				continue
-
-			for x_in_cell in range(ATLAS_CELL):
-				col_in_block = x_in_cell - margin_x
-
-				if not (0 <= col_in_block < block_w):
-					continue
-
-				char_slot, col_in_char = divmod(col_in_block, char_w + gap)
-
-				if char_slot >= len(value) or col_in_char >= char_w:
-					continue
-
-				font_col = col_in_char // pixel
-
-				if FONT_5X7[value[char_slot]][font_row][font_col] == "#":
-					offset = (cell_index * ATLAS_CELL + x_in_cell) * channels
-
-					row_bytes[offset:offset + channels] = ink_bytes
-
-		dest_row = atlas_h - 1 - y
-		start = dest_row * row_stride
-
-		flat[start:start + len(row_bytes)] = row_bytes
-
-	return img
-
 def build_polyhedron_geometry(polyhedron, decals_for_face):
 	"""Add dice-decal streams to an ``osgx.Polyhedron``.
 
@@ -1065,3 +984,80 @@ DIE_SPECS = {
 
 def make_die(name, position=None, orientation=None, node_name=None, display_mode="normal"):
 	return DIE_SPECS[name].make_instance(position, orientation, node_name, display_mode)
+
+# ---------------------------------------------------------------------------------------------
+# Dice-sum probability -- exact, not sampled/estimated. Prompted by "what's the safer bet, 1d20
+# or 2d10" while balancing a game idea: same max (20) and similar mean, but 2d10's stdev is
+# ~30% smaller, because summing more (smaller) dice concentrates probability toward the middle
+# (many more ways to roll an 11 on 2d10 than a 20) while a single die stays flat -- every face
+# equally likely. Pure math, no scene-graph/rendering involvement; kept in this module only
+# because "how do these numbers add up" is the same question the dice mesh/roll system exists to
+# animate, not because it needs anything else here.
+# ---------------------------------------------------------------------------------------------
+
+def dice_distribution(dice):
+	"""Exact probability of every reachable total when rolling `dice` (one integer per die, its
+	side count -- e.g. (20,) for 1d20, (10, 10) for 2d10, (4, 6, 8, 10, 12, 20) for pyosg-dice.py's
+	own full set). Computed by convolving each die's uniform distribution -- equivalent to
+	multiplying together one polynomial per die (x^1 + x^2 + ... + x^sides) and reading off each
+	term's coefficient -- so it's exact even in the tails, unlike a normal-distribution estimate
+	(which is exactly where two options with similar means, like 1d20 vs 2d10, actually differ).
+	Returns {total: probability}, covering every total from len(dice) to sum(dice)."""
+	dist = {0: 1}
+
+	for sides in dice:
+		next_dist = {}
+
+		for total, count in dist.items():
+			for face in range(1, sides + 1):
+				next_dist[total + face] = next_dist.get(total + face, 0) + count
+
+		dist = next_dist
+
+	total_outcomes = sum(dist.values())
+
+	return {total: count / total_outcomes for total, count in sorted(dist.items())}
+
+def dice_stats(dice, coverage=0.8):
+	"""Game-balance-friendly summary for `dice` (see dice_distribution()): min/max/mean/stdev,
+	plus `typical_range` -- the narrowest band of totals covering at least `coverage` (default
+	80%) of outcomes, found by trimming from whichever end currently has less probability mass
+	until `coverage` would be broken. Two abilities can share the same mean and max and still
+	play very differently if one has a much wider typical_range (swingy/high-variance, more
+	exciting but harder to plan around) than the other (consistent/low-variance) -- that's
+	usually the more useful number for balancing than max damage alone."""
+	pmf = dice_distribution(dice)
+	mean = sum(total * p for total, p in pmf.items())
+	variance = sum(p * (total - mean) ** 2 for total, p in pmf.items())
+	totals = sorted(pmf)
+	lo, hi = 0, len(totals) - 1
+	mass = 1.0
+
+	while lo < hi:
+		left_p, right_p = pmf[totals[lo]], pmf[totals[hi]]
+
+		if mass - min(left_p, right_p) < coverage:
+			break
+
+		if left_p <= right_p:
+			mass -= left_p
+			lo += 1
+
+		else:
+			mass -= right_p
+			hi -= 1
+
+	return {
+		"dice": tuple(dice),
+		"min": totals[0],
+		"max": totals[-1],
+		"mean": mean,
+		"stdev": variance ** 0.5,
+		"typical_range": (totals[lo], totals[hi]),
+	}
+
+def dice_chance_above(dice, threshold):
+	"""P(sum of `dice` > threshold) -- e.g. "how often does this ability's roll beat the
+	target's defense score" or "how many rolls, on average, before a HUD roll-total display
+	like pyosg-dice.py's crosses X" (expected rolls = 1 / this)."""
+	return sum(p for total, p in dice_distribution(dice).items() if total > threshold)

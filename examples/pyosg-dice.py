@@ -71,6 +71,7 @@ uniform sampler2D numberAtlas;
 uniform int digitCount;
 uniform float decalHalf;
 uniform vec3 bodyColor;
+uniform vec3 ink;
 uniform int activeFaceMask;
 uniform int activeDecalValue;
 
@@ -115,11 +116,13 @@ void main() {
 				(decalValue + (lu * 0.5 + 0.5)) / float(digitCount),
 				lv * 0.5 + 0.5
 			);
-			vec4 glyph = texture(numberAtlas, atlasUV);
+			// osgx.PixelText.createAtlas() is a coverage-only (single-channel) atlas -- the
+			// ink color is no longer baked into the image, so it comes from the ink uniform.
+			float coverage = texture(numberAtlas, atlasUV).r;
 			bool activeDecal = activeFace && int(decalValue + 0.5) == activeDecalValue;
-			vec3 glyphColor = activeDecal ? vec3(0.95, 0.92, 0.82) : glyph.rgb;
+			vec3 glyphColor = activeDecal ? vec3(0.95, 0.92, 0.82) : ink;
 
-			color = mix(color, glyphColor, glyph.a);
+			color = mix(color, glyphColor, coverage);
 		}
 	}
 
@@ -149,6 +152,7 @@ uniform sampler2D numberAtlas;
 uniform int digitCount;
 uniform float decalHalf;
 uniform vec3 bodyColor;
+uniform vec3 ink;
 uniform int activeFaceMask;
 uniform int activeDecalValue;
 
@@ -210,11 +214,13 @@ void main() {
 				(decalValue + (lu * 0.5 + 0.5)) / float(digitCount),
 				lv * 0.5 + 0.5
 			);
-			vec4 glyph = texture(numberAtlas, atlasUV);
+			// osgx.PixelText.createAtlas() is a coverage-only (single-channel) atlas -- the
+			// ink color is no longer baked into the image, so it comes from the ink uniform.
+			float coverage = texture(numberAtlas, atlasUV).r;
 			bool activeDecal = activeFace && int(decalValue + 0.5) == activeDecalValue;
-			vec3 glyphColor = activeDecal ? vec3(0.95, 0.92, 0.82) : glyph.rgb;
+			vec3 glyphColor = activeDecal ? vec3(0.95, 0.92, 0.82) : ink;
 
-			albedo = mix(albedo, glyphColor, glyph.a);
+			albedo = mix(albedo, glyphColor, coverage);
 		}
 	}
 
@@ -262,7 +268,7 @@ def create_scene(die_names, environment=None, roughness=0.45, metallic=0.0):
 		))
 
 	atlas_tex = osg.Texture2D(
-		image=dice.build_number_atlas(ATLAS_DIGITS),
+		image=osgx.PixelText.createAtlas(ATLAS_DIGITS),
 		filter=(osg.Texture.NEAREST, osg.Texture.NEAREST),
 		wrap=(osg.Texture.CLAMP_TO_EDGE, osg.Texture.CLAMP_TO_EDGE),
 	)
@@ -310,6 +316,7 @@ def create_scene(die_names, environment=None, roughness=0.45, metallic=0.0):
 			osg.Uniform("digitCount", len(ATLAS_DIGITS)),
 			osg.Uniform("decalHalf", spec.decal_half),
 			osg.Uniform("bodyColor", osg.Vec3(*spec.body_color)),
+			osg.Uniform("ink", osg.Vec3(*dice.INK)),
 			active_face_uniform,
 			active_decal_uniform,
 		))
@@ -394,10 +401,50 @@ if __name__ == "__main__":
 	rng = random.Random()
 	rolling = [False] * len(rollable_dice)
 	r_held = [False]
+	# 0 until a die's first roll completes, so the total is always the sum of whatever's
+	# currently showing -- populated by highlight_result() below, same per-die "which value did
+	# THIS die land on" data DiceRollCallback already threads through result_callback for the
+	# highlight uniforms above; this was already tracked, just not summed/displayed anywhere.
+	roll_totals = [0] * len(rollable_dice)
+
+	# A screen-aligned running-total HUD, top-left -- same POST_RENDER/ABSOLUTE_RF overlay-camera
+	# shape pyosg_async.Progress already uses for a screen-space indicator, just a pixel-space
+	# ortho (0..W, 0..H) projection instead of Progress' identity/clip-space one, since
+	# osgx.PixelText expects local-space units in screen pixels, not NDC. W/H are fixed for this
+	# script (no window-resize handling elsewhere), so the projection is set once, not tracked
+	# live the way examples/osgx-pixel-text.cpp's makeHudLabel() has to for a resizable window.
+	hud_margin = 12.0
+	hud_cell_size = osgx.PixelText.GLYPH_ROWS * 3.0
+	total_label = osgx.PixelText("TOTAL: 0", hud_cell_size)
+	total_geode = osg.Geode(name="roll-total-label")
+
+	total_label.ink = osg.Vec4(1.0, 1.0, 1.0, 1.0)
+
+	total_geode.drawables.append(total_label)
+
+	total_transform = osg.MatrixTransform(
+		osg.Matrix.translate(hud_margin, H - hud_margin - hud_cell_size, 0.0)
+	)
+
+	total_transform.children.append(total_geode)
+
+	hud_camera = osg.Camera(name="roll-total-camera", children=[total_transform])
+
+	hud_camera.referenceFrame = osg.Transform.ABSOLUTE_RF
+	hud_camera.renderOrder = osg.Camera.POST_RENDER
+	hud_camera.clearMask = 0
+	hud_camera.viewMatrix = osg.Matrix.identity()
+	hud_camera.projectionMatrix = osg.Matrix.ortho2D(0, W, 0, H)
+	hud_camera.allowEventFocus = False
+	hud_camera.stateSet.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF
+
+	scene.children.append(hud_camera)
 
 	def highlight_result(index, value, active_faces):
 		active_face_uniforms[index].value = sum(1 << face_index for face_index in active_faces)
 		active_decal_uniforms[index].value = dice.atlas_column(value)
+		roll_totals[index] = value
+		total_label.text = f"TOTAL: {sum(roll_totals)}"
 
 	def clear_result(index):
 		active_face_uniforms[index].value = 0
