@@ -56,7 +56,7 @@ bound matching your *visible* geometry, not something enormous or offset.
 Any RTT/shadow-style camera with its own independent view should be
 `ABSOLUTE_RF` (matches `osgx::shadow::ShadowMap::create()`, `~/dev/osgx/src/Shadow.cpp`,
 which sets it on its own `camera` — the Lighting Series' `08-shadows.py` builds
-its shadow pass via `osgx.shadow.ShadowMap.create()` rather than a hand-rolled
+its shadow pass via `osgx.ShadowMap.create()` rather than a hand-rolled
 `osg.Camera()`).
 
 ## A fullscreen-quad pass re-targeted to an FBO renders a single flat color

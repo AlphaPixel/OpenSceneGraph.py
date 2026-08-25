@@ -1,6 +1,6 @@
-# osgx.pbr.Material — one PBR material as a real StateAttribute
+# osgx.Material — one PBR material as a real StateAttribute
 
-`osgx.pbr.Material` is a real `osg.StateAttribute` subclass: construct one,
+`osgx.Material` is a real `osg.StateAttribute` subclass: construct one,
 set its properties, attach it to a `StateSet` like any other attribute. This
 replaces hand-building a material UBO (`osg.FloatArray` +
 `osg.UniformBufferBinding`) yourself.
@@ -8,7 +8,7 @@ replaces hand-building a material UBO (`osg.FloatArray` +
 ```python
 import osgx
 
-material = osgx.pbr.Material()
+material = osgx.Material()
 
 material.baseColor = osg.Vec4(0.95, 0.55, 0.12, 1.0)
 material.roughness = 0.12
@@ -84,7 +84,7 @@ variation through a per-vertex attribute feeding a shader-side branch/array
 yourself — `pyosg-glsl-lab.py`'s `GLITTER_MATERIAL_COMBOS` is the working
 example of the second approach, and deliberately hand-rolls its own
 `osgx_Material` struct from vertex data rather than using
-`osgx.pbr.Material`.
+`osgx.Material`.
 
 ## `StateAttribute::Type` and dedup
 

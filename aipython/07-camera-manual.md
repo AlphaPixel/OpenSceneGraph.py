@@ -65,7 +65,7 @@ though:
   position) instead, which is genuinely view-independent. See
   `pyosg-noise.py`'s `VERTEX_SHADER`/`FRAGMENT_SHADER_NOISE` (`vPos`) for the
   pattern.
-- **`osgx.picking` needs the main camera's viewport origin subtracted from
+- **`osgx` needs the main camera's viewport origin subtracted from
   window-absolute mouse coordinates.** `PickReadback::setWindowOrigin(x, y)`
   (alongside `setWindowSize(w, h)`) is refreshed every frame by
   `PickCameraSync` from the live viewport; both the pick1x1 sub-frustum math
@@ -85,4 +85,4 @@ bounds (see [`05-camera-manipulator.md`](05-camera-manipulator.md)'s "There
 is no `viewer.home()`"); a fixed camera has no equivalent, the view is
 hand-computed. Rules 1–2 apply identically whether or not a manipulator is
 attached; a manipulator doesn't make viewport-offset picking correct either —
-that fix lives in `osgx.picking` regardless of what drives the camera.
+that fix lives in `osgx` regardless of what drives the camera.

@@ -1,4 +1,4 @@
-# osgx typed direct lights (`osgx.pbr.LightSet`) + light gizmos
+# osgx typed direct lights (`osgx.LightSet`) + light gizmos
 
 Check `git log -1 -- src/osgx/PBR.hpp` in the configured osgx source dir (see
 the repo's `CLAUDE.md` on `PYOSG_OSGX_SOURCE_DIR`) if anything here looks
@@ -8,8 +8,8 @@ in some checkouts.
 ## What this is
 
 `osgx::pbr::LightSet` (C++: `src/osgx/PBR.hpp`/`src/PBR.cpp`, Python:
-`osgx.pbr.LightSet`) is a typed direct-light rig. Per-light data
-(`osgx.pbr.MAX_LIGHTS` == 6 slots) lives in a single `std430` Shader Storage
+`osgx.LightSet`) is a typed direct-light rig. Per-light data
+(`osgx.MAX_LIGHTS` == 6 slots) lives in a single `std430` Shader Storage
 Buffer Object (`osgx_LightBuffer`/`osgx_lights[]`, binding 3 — C++
 `osgx::LIGHT_BINDING`, not currently exposed to Python) plus one
 `osgx_lightCount` uniform — not parallel flat uniform arrays. Three real
@@ -18,18 +18,18 @@ fourth type: it's `setPoint(..., sourceRadius>0)`, see below.
 
 Every consumer shader reaches the light array through one hook call,
 **`osgx_DirectLighting(N, V, worldPos, mat)`** — declared by
-`osgx.pbr.DIRECT_LIGHTING_DECL` (splice into your fragment shader's
+`osgx.DIRECT_LIGHTING_DECL` (splice into your fragment shader's
 `#pragma osgx::pbr ...` line, alongside `MATERIAL_STRUCT`) and defined by
-`osgx.pbr.DIRECT_LIGHTING_HOOK_DEFAULT`, a second self-contained FRAGMENT
+`osgx.DIRECT_LIGHTING_HOOK_DEFAULT`, a second self-contained FRAGMENT
 shader object added to the same `Program`.
-`osgx.pbr.makeDirectLightingHookShader()` returns that shader object ready
+`osgx.makeDirectLightingHookShader()` returns that shader object ready
 to append:
 
 ```python
 program = osg.Program(name="my-shader", shaders=(
 	osg.Shader(osg.Shader.VERTEX, vertex_source),
 	osg.Shader(osg.Shader.FRAGMENT, osgx.resolveShaderLibs(fragment_source)),
-	osgx.pbr.makeDirectLightingHookShader(),
+	osgx.makeDirectLightingHookShader(),
 ))
 ```
 
@@ -45,14 +45,14 @@ exactly one place instead of being hand-copied into every consumer's
 `osgx`, not a `gizmo` submodule) are the matching debug visualization: real
 depth-tested marker geometry for point/sphere/spot, plus a non-depth-tested
 overlay for directional (which has no position to place a marker at). Both
-take a live `osgx.pbr.LightSet` directly and read it through its typed
+take a live `osgx.LightSet` directly and read it through its typed
 accessors (`getCount`/`getType`/`getPosIntensity`/`getColor`/`getDirection`/
 `getSpotAngles`/`getSourceRadius`).
 
 ## Minimal live REPL setup
 
 ```python
-lights = osgx.pbr.LightSet.create(root.stateSet)  # allocates the SSBO buffer (size MAX_LIGHTS, zero-initialized) + osgx_lightCount on root.stateSet
+lights = osgx.LightSet.create(root.stateSet)  # allocates the SSBO buffer (size MAX_LIGHTS, zero-initialized) + osgx_lightCount on root.stateSet
 
 lights.setCount(1)  # how many of the 6 slots osgx_DirectLighting()'s loop actually reads this frame
 
@@ -82,13 +82,13 @@ lights.getType(0), lights.getPosIntensity(0), lights.getColor(0), lights.getSour
 `LightSet.create()` REPLACES the SSBO buffer + `osgx_lightCount` on that
 StateSet — don't call it twice on the same live StateSet if you've already
 populated lights there, or you'll zero it out. To WRAP an already-populated
-StateSet's LightSet instead, construct `osgx.pbr.LightSet()` and set `.ss`
+StateSet's LightSet instead, construct `osgx.LightSet()` and set `.ss`
 directly — `LightSet` has exactly one field (`ss`); the setters/getters
 mutate the SSBO/uniforms that `ss` already carries, there is no separate
 `.lights` handle to assign:
 
 ```python
-lights = osgx.pbr.LightSet()
+lights = osgx.LightSet()
 lights.ss = already_populated_stateset
 ```
 
@@ -96,8 +96,8 @@ A rig-building helper (`pyosg-match4-dice.py`'s `add_torch_rig()`):
 
 ```python
 def add_torch_rig(stateset, torches):
-	"""Build an osgx.pbr.LightSet on `stateset` from (position, intensity, color) tuples."""
-	lights = osgx.pbr.LightSet.create(stateset)
+	"""Build an osgx.LightSet on `stateset` from (position, intensity, color) tuples."""
+	lights = osgx.LightSet.create(stateset)
 
 	for i, (pos, intensity, color) in enumerate(torches):
 		lights.setPoint(i, osg.Vec3(*pos), osg.Vec3(*color), intensity)
@@ -197,7 +197,7 @@ def point_section(ri):  # addSection()'s callback always takes one osg.RenderInf
 # Cone (deg), Source Radius, and clamps inner < outer so GLSL's
 # smoothstep(cos(outer), cos(inner), ...) stays well-formed).
 
-lights = osgx.pbr.LightSet.create(root.stateSet)
+lights = osgx.LightSet.create(root.stateSet)
 gizmos = osgx.LightGizmos(lights, root, 0.4, 10.0)
 root.children.append(gizmos)
 

@@ -8,7 +8,7 @@ boundary is:
   units, `configureProgram()`/`configureStateSet()`).
 - `osgx.gltf.pbribl` provides glTF-specific material/shading GLSL snippets and the optional
   one-call renderer (`PBRIBLEnvironment`/`PBRIBLScene`).
-- `osgx.pbr` and `osgx.ibl` provide generic rendering and environment-processing facilities.
+- `osgx` and `osgx` provide generic rendering and environment-processing facilities.
 - `osgx.resolveShaderLibs()` expands generic catalogs (`osgx::pbr`, `osgx::ibl`, `osgx::shadow`).
 - `osgx.gltf.pbribl.resolveShaderLibs()` registers and expands the `osgx::gltf` catalog together
   with those generic osgx catalogs, in one call.
@@ -113,7 +113,7 @@ root.children.append(scene.node)
 The environment root must participate in the rendered scene graph when the manifest uses a built-in
 LUT. For a fully dynamic setup, use `PBRIBLEnvironment.prepare("environment.hdr")`; it bakes
 specular, diffuse, and the BRDF LUT from that one source. The helper is IBL-only and does not
-invent authored/direct lights. Generic light rigs remain in `osgx.pbr` (see
+invent authored/direct lights. Generic light rigs remain in `osgx` (see
 [`40-typed-lights-gizmos.md`](40-typed-lights-gizmos.md)); glTF-authored camera and
 `KHR_lights_punctual` support are separate loader work.
 

@@ -1,8 +1,8 @@
-# `osgx.picking` + `osgx.imgui`: the mouse-capture race
+# `osgx` + `osgx.imgui`: the mouse-capture race
 
 Sibling to [`07-camera-manual.md`](07-camera-manual.md)'s Rule 3, which
 covers a different, earlier picking fix (window-origin subtraction). This
-file is about `osgx.picking` coexisting with an `osgx.imgui.Widget` panel in
+file is about `osgx` coexisting with an `osgx.imgui.Widget` panel in
 the same window: three independent guards, all in `~/dev/osgx`
 (`Picking.cpp`/`Picking.hpp`) — needs a rebuild to take effect; check
 `PYOSG_OSGX_SOURCE_DIR` in your build dir's `CMakeCache.txt` first (see the
