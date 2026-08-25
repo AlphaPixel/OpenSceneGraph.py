@@ -22,6 +22,7 @@ void bind_Shape(py::module_& m) {
 	py::enum_<osg::TessellationHints::TessellationMode>(th, "TessellationMode")
 		.value("USE_SHAPE_DEFAULTS", osg::TessellationHints::TessellationMode::USE_SHAPE_DEFAULTS)
 		.value("USE_TARGET_NUM_FACES", osg::TessellationHints::TessellationMode::USE_TARGET_NUM_FACES)
+		.export_values()
 	;
 
 	th

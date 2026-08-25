@@ -42,6 +42,7 @@ void bind_NodeVisitor(py::module_& m) {
 		.value("TRAVERSE_PARENTS", osg::NodeVisitor::TRAVERSE_PARENTS)
 		.value("TRAVERSE_ALL_CHILDREN", osg::NodeVisitor::TRAVERSE_ALL_CHILDREN)
 		.value("TRAVERSE_ACTIVE_CHILDREN", osg::NodeVisitor::TRAVERSE_ACTIVE_CHILDREN)
+		.export_values()
 	;
 
 	py::enum_<osg::NodeVisitor::VisitorType>(nv, "VisitorType")
@@ -51,6 +52,7 @@ void bind_NodeVisitor(py::module_& m) {
 		.value("COLLECT_OCCLUDER_VISITOR", osg::NodeVisitor::COLLECT_OCCLUDER_VISITOR)
 		.value("CULL_VISITOR", osg::NodeVisitor::CULL_VISITOR)
 		.value("INTERSECTION_VISITOR", osg::NodeVisitor::INTERSECTION_VISITOR)
+		.export_values()
 	;
 
 	nv

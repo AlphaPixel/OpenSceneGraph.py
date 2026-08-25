@@ -22,6 +22,7 @@ void bind_Array(py::module_& m) {
 		.value("Vec2ArrayType", osg::Array::Vec2ArrayType)
 		.value("Vec3ArrayType", osg::Array::Vec3ArrayType)
 		.value("Vec4ArrayType", osg::Array::Vec4ArrayType)
+		.export_values()
 	;
 
 	py::enum_<osg::Array::Binding>(arr, "Binding")

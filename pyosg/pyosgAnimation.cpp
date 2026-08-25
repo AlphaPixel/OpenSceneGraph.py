@@ -103,6 +103,7 @@ void bind(py::module_& m) {
 	py::enum_<osgAnimation::Motion::TimeBehaviour>(motion, "TimeBehaviour")
 		.value("CLAMP", osgAnimation::Motion::CLAMP)
 		.value("LOOP", osgAnimation::Motion::LOOP)
+		.export_values()
 	;
 
 	detail::bind_Motion<osgAnimation::LinearMotion>(m, "LinearMotion");

@@ -345,6 +345,7 @@ void bind(py::module_& m) {
 		)
 		.value("ThreadPerCamera", osgViewer::ViewerBase::ThreadPerCamera)
 		.value("AutomaticSelection", osgViewer::ViewerBase::AutomaticSelection)
+		.export_values()
 	;
 
 	vb
