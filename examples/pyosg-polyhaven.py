@@ -542,7 +542,7 @@ def run_hdr(args):
 	v.camera.clearColor = osg.Vec4(0.05, 0.05, 0.05, 1.0)
 
 	# The bake needs a real GL context (PRE_RENDER FBO cameras), so realize
-	# one frame of nothing before touching osgx.ibl -- same ordering
+	# one frame of nothing before touching osgx -- same ordering
 	# 10-dynamicprobes.py uses for its first live bake.
 	v.frame()
 
@@ -556,14 +556,14 @@ def run_hdr(args):
 		f"({args.prefilter_size}x{args.prefilter_size}, {args.samples} samples)..."
 	)
 
-	options = osgx.ibl.GGXPrefilterOptions()
+	options = osgx.GGXPrefilterOptions()
 
 	options.prefilterSize = args.prefilter_size
 	options.sampleCount = args.samples
 	options.maxFrames = args.max_frames
 	options.readbackFrame = 2
 
-	bake_scene = osgx.ibl.GGXPrefilterScene.create(image, options)
+	bake_scene = osgx.GGXPrefilterScene.create(image, options)
 
 	root.children.append(bake_scene.root)
 	v.camera.postDrawCallback = bake_scene.readback

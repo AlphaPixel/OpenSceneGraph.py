@@ -6,7 +6,7 @@ picking", item 5). Two layers in this one file:
 
   - Board: pure-Python game state, no OSG/osgx dependency -- grid, match
     detection, swap/resolve, constructive deal. Reusable/importable standalone.
-  - __main__: the OSG scene + osgx.picking interaction on top of it -- one
+  - __main__: the OSG scene + osgx interaction on top of it -- one
     sphere per cell, full-window SYNC click picking (same wiring as
     pyosg-picking.py). First cut, proof-of-concept only: click a piece, click
     an adjacent piece, and it swaps if that creates a match (reverts silently
@@ -527,7 +527,7 @@ class Board:
 		self._fill()
 
 # ================================================================================================
-# OSG scene + osgx.picking interaction -- everything above this line is pure Python and
+# OSG scene + osgx interaction -- everything above this line is pure Python and
 # importable without OSG; everything below requires it.
 # ================================================================================================
 
@@ -852,14 +852,14 @@ if __name__ == "__main__":
 
 	pick_image.allocateImage(1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE)
 
-	pick_cam = osgx.picking.makePickCamera(1, 1, pick_image)
+	pick_cam = osgx.makePickCamera(1, 1, pick_image)
 
 	pick_cam.children.append(scene)
 
-	rb = osgx.picking.PickReadbackSync(
+	rb = osgx.PickReadbackSync(
 		1, pick_image, W, H,
-		rule=osgx.picking.PickRule.SPIRAL,
-		mode=osgx.picking.PickReadbackSync.Mode.CONTINUOUS,
+		rule=osgx.PickRule.SPIRAL,
+		mode=osgx.PickReadbackSync.Mode.CONTINUOUS,
 	)
 
 	# Two-click select-then-swap, same game logic as the first pass, now layered with
@@ -980,7 +980,7 @@ if __name__ == "__main__":
 		# PickReadbackSync fires onPick(id, HOVER) on every hover transition too (not just
 		# reportClick() -> CLICK) -- ignore those, or hovering alone drives the whole
 		# select/swap state machine instead of requiring a real click.
-		if action != osgx.picking.ActionType.CLICK:
+		if action != osgx.ActionType.CLICK:
 			return
 
 		if animating[0]:
@@ -1046,8 +1046,8 @@ if __name__ == "__main__":
 	rb.onEnter = on_enter
 	rb.onLeave = on_leave
 
-	sync = osgx.picking.PickCameraSync(viewer.camera, True, W, H, rb)
-	hover = osgx.picking.PickHoverCallback(rb)
+	sync = osgx.PickCameraSync(viewer.camera, True, W, H, rb)
+	hover = osgx.PickHoverCallback(rb)
 
 	# Order matters: sync (aim sub-frustum) -> hover (fire onEnter/onLeave from last
 	# frame's lastID()) -> rb (sample this frame's 1x1 readback). See pyosg-hover.py.
@@ -1059,7 +1059,7 @@ if __name__ == "__main__":
 	root.children.append(scene)
 
 	viewer.sceneData = root
-	viewer.eventHandlers.append(osgx.picking.PickHandler(rb, True))
+	viewer.eventHandlers.append(osgx.PickHandler(rb, True))
 
 	while not viewer.done:
 		viewer.frame()
