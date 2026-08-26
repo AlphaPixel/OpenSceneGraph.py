@@ -23,6 +23,8 @@ Read the others situationally:
 | [`08-lighting.md`](08-lighting.md) | Getting PBR/IBL lighting going via `osgx`'s `#pragma osgx::*` shader-library system — fastest path to a lit glTF model, plus the full IBL pipeline. |
 | [`09-picking.md`](09-picking.md) | Wiring `osgx` (hover/click) into a scene that ALSO has an `osgx.imgui.Widget` panel — three independent guards needed to block picking near/under ImGui. |
 | [`10-rtt.md`](10-rtt.md) | Building a render-to-texture / multi-camera scene graph live. **Read before debugging any fullscreen pass that outputs one flat color** — fullscreen quads must disable `GL_DEPTH_TEST` or they break silently once re-targeted to an FBO. |
+| [`11-mrt.md`](11-mrt.md) | Reading/writing multiple render targets, linearizing RTT depth with the actual effective camera projection, or combining pass callbacks with `osgx.imgui.Widget`. |
+| [`12-gbuffer.md`](12-gbuffer.md) | Designing a generic G-buffer or composing deferred/NPR post-process passes from canonical color, normal, and depth data. |
 | [`15-shader-hotswap.md`](15-shader-hotswap.md) | Debugging shader-side logic live by patching GLSL and hot-swapping a `Program`, or when a live variable reassignment "has no effect." |
 | [`17-particles.md`](17-particles.md) | Building a one-shot, GPU-only instanced particle/burst effect (fire, explosions, debris) driven by `osg_SimulationTime` + a `triggerTime` uniform, or wiring an `osgx.imgui` live-tuning panel on top of one. |
 | [`18-deterministic-captures.md`](18-deterministic-captures.md) | Capturing a precise, repeatable animation state by freezing an effect-local elapsed-time uniform instead of racing the realtime frame loop. |
