@@ -19,10 +19,8 @@ permissions:
 jobs:
   linux-x86_64-cp312:
     name: Linux x86-64 / CPython 3.12 / manylinux_2_28
-    # Temporary Windows bring-up fast path: branch pushes exercise only the
-    # hosted Windows build. Manual runs and version tags still build Linux;
-    # tags therefore retain the existing Linux-wheel PyPI publication path.
-    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v')
+    # Temporarily disabled while the first native ARM64 wheel is brought up.
+    if: false
     runs-on: [self-hosted, linux, x64]
 
     steps:
@@ -90,8 +88,69 @@ jobs:
           path: wheelhouse/*.whl
           if-no-files-found: error
 
+  linux-aarch64-cp312:
+    name: Linux ARM64 / CPython 3.12 / manylinux_2_28
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # osgx is part of the pinned wheel dependency graph.
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up cibuildwheel host Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.11 - 3.14"
+
+      - name: Build and test repaired wheel
+        uses: pypa/cibuildwheel@v3.4.1
+        with:
+          output-dir: ${{ github.workspace }}/wheelhouse
+        env:
+          CIBW_BUILD: cp312-manylinux_aarch64
+          CIBW_ARCHS_LINUX: aarch64
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
+          CIBW_BEFORE_ALL: >-
+            dnf install -y libXrandr-devel libjpeg-turbo-devel libpng-devel libtiff-devel
+          CIBW_REPAIR_WHEEL_COMMAND: >-
+            auditwheel repair -w {dest_dir} {wheel} &&
+            python /project/etc/scripts/compact-wheel-libraries.py {dest_dir}
+          CIBW_TEST_COMMAND: >-
+            python -c "import OpenSceneGraph;
+            from OpenSceneGraph.osg import Node;
+            from OpenSceneGraph.GL import GL_RGBA;
+            assert Node is OpenSceneGraph.osg.Node, 'osg.Node identity mismatch';
+            assert GL_RGBA == OpenSceneGraph.GL.GL_RGBA, 'GL_RGBA identity mismatch';
+            registry = OpenSceneGraph.osgDB.Registry.instance();
+            extensions = ('osg', 'obj', 'stl', 'bmp', 'dds', 'hdr', 'jpeg',
+            'jpg', 'pnm', 'png', 'rgb', 'tga', 'tif', 'tiff', 'gltf', 'ktx2');
+            missing = [extension for extension in extensions
+            if not registry.getReaderWriterForExtension(extension)];
+            assert not missing, f'missing osgDB plugins: {missing}';
+            import osgx"
+
+      - name: Inspect repaired wheel dependencies
+        run: |
+          wheel="$(find "${{ github.workspace }}/wheelhouse" -maxdepth 1 -name '*.whl' -print -quit)"
+          test -n "$wheel"
+          docker run --rm \
+            --volume "${{ github.workspace }}/wheelhouse:/wheelhouse:ro" \
+            quay.io/pypa/manylinux_2_28_aarch64 \
+            auditwheel show "/wheelhouse/$(basename "$wheel")"
+
+      - name: Upload repaired wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenSceneGraph-cp312-manylinux_2_28-aarch64
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
   windows-x86_64-cp312:
     name: Windows x86-64 / CPython 3.12
+    # Temporarily disabled while the first native ARM64 wheel is brought up.
+    if: false
     runs-on: windows-latest
 
     steps:
@@ -147,22 +206,3 @@ jobs:
           name: OpenSceneGraph-cp312-win-amd64
           path: wheelhouse/*.whl
           if-no-files-found: error
-
-  publish:
-    name: Publish to PyPI
-    # Branch pushes and manual test runs produce an artifact only. Publishing
-    # requires an explicit versioned release tag, e.g. v0.1.1.
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux-x86_64-cp312]
-    runs-on: [self-hosted, linux, x64]
-    environment:
-      name: pypi
-      url: https://pypi.org/project/openscenegraph/
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: OpenSceneGraph-cp312-manylinux_2_28-x86_64
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
