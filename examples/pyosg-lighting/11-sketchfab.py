@@ -158,16 +158,12 @@ void main() {
 GRID_ROOM_FRAGMENT = """
 #version 460 core
 
+#pragma osgx::grid GRID
+
 in vec2 vGridPos;
 in vec3 vNormal;
 in vec3 vPosition;
 
-uniform float u_gridInterval;
-uniform float u_gridIntervalStrong;
-uniform float u_lineWidthPx;
-uniform vec4 u_colorBg;
-uniform vec4 u_colorLine;
-uniform vec4 u_colorLineStrong;
 uniform float roomRoughness;
 uniform float roomMetallic;
 
@@ -177,22 +173,8 @@ layout(location = 2) out vec4 gMaterial;
 layout(location = 3) out vec4 gEmissive;
 layout(location = 4) out vec4 gPosition;
 
-float gridLine(vec2 pos, float interval, float widthPx) {
-	vec2 cells = pos / interval;
-	vec2 pixelDistance = abs(fract(cells - 0.5) - 0.5) / fwidth(cells);
-	float distanceToNearestLine = min(pixelDistance.x, pixelDistance.y);
-	return 1.0 - smoothstep(widthPx - 0.5, widthPx + 0.5, distanceToNearestLine);
-}
-
 void main() {
-	float line = gridLine(vGridPos, u_gridInterval, u_lineWidthPx);
-	float strong = u_gridIntervalStrong > 0.0
-		? gridLine(vGridPos, u_gridIntervalStrong, u_lineWidthPx * 1.5)
-		: 0.0;
-	float coverage = max(line, strong);
-
-	vec3 gridColor = mix(u_colorLine.rgb, u_colorLineStrong.rgb, strong);
-	vec3 albedo = mix(u_colorBg.rgb, gridColor, coverage);
+	vec3 albedo = osgx_GridColor(vGridPos).rgb;
 
 	gAlbedo = vec4(albedo, 1.0); // a = ambient occlusion (none baked in)
 	gNormal = vec4(normalize(vNormal), 0.0);
@@ -665,9 +647,10 @@ def create_grid_room(bound_center, bound_radius, floor_z, room_size):
 	center_x, center_y = bound_center.x, bound_center.y
 	frame_width = max(bound_radius * 0.035, room_size * 0.008)
 
+	osgx.Grid.registerShaderLibs()
 	grid_program = osg.Program(name="grid_room_gbuffer", shaders=(
 		osg.Shader(osg.Shader.VERTEX, GRID_ROOM_VERTEX),
-		osg.Shader(osg.Shader.FRAGMENT, GRID_ROOM_FRAGMENT),
+		osg.Shader(osg.Shader.FRAGMENT, osgx.resolveShaderLibs(GRID_ROOM_FRAGMENT)),
 	))
 	frame_program = osg.Program(name="grid_room_frame_gbuffer", shaders=(
 		osg.Shader(osg.Shader.VERTEX, UNLIT_GBUFFER_VERTEX),
@@ -689,11 +672,8 @@ def create_grid_room(bound_center, bound_radius, floor_z, room_size):
 			grid_program,
 			osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE
 		)
-		# Grid's normal forward-rendered state enables alpha blending so transparent background
-		# pixels reveal the framebuffer behind it. In the G-buffer that would blend the normal
-		# target with its zero alpha and leave it cleared; composite then mistakes an actual grid
-		# line for sky. Discard handles the transparent parts here, so deferred rendering must
-		# write every attachment without blending.
+		# The G-buffer must write every attachment without blending, including the grid's opaque
+		# background, rather than blending normals with the cleared targets.
 		grid.stateSet.modes[GL_BLEND] = osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
 
 		return grid
