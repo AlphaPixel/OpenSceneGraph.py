@@ -1,9 +1,9 @@
 name: Build wheels
 
 on:
-  # Temporary ARM bring-up: pushing this branch runs the one enabled ARM job.
-  push:
-    branches: [cubicool-wip]
+  # Temporary ARM bring-up trigger - restore when CI runs are wanted again.
+  # push:
+  #   branches: [cubicool-wip]
   workflow_dispatch:
 
 # The workflow only needs to read the repository and upload its wheel artifact.
@@ -84,6 +84,8 @@ jobs:
 
   linux-aarch64-cp312:
     name: Linux ARM64 / CPython 3.12 / manylinux_2_28
+    # Temporarily disabled until the branch is synchronized again.
+    if: false
     runs-on: ubuntu-24.04-arm
 
     steps:
