@@ -1,15 +1,9 @@
 name: Build wheels
 
-# Automatic CI trigger; restore this block when push/tag builds are wanted:
-# on:
-#   push:
-#     branches: [cubicool-wip]
-#     # Release tags build the same wheel, then unlock the publish job below.
-#     tags: ["v*"]
-#   workflow_dispatch:
-
-# Temporarily manual-only while commits are being synchronized.
 on:
+  # Temporary ARM bring-up: pushing this branch runs the one enabled ARM job.
+  push:
+    branches: [cubicool-wip]
   workflow_dispatch:
 
 # The workflow only needs to read the repository and upload its wheel artifact.
