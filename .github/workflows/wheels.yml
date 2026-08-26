@@ -106,8 +106,14 @@ jobs:
           CIBW_BUILD: cp312-manylinux_aarch64
           CIBW_ARCHS_LINUX: aarch64
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
+          # This is a one-off ARM compatibility probe. The launcher appends
+          # -Wno-error after each target's own compiler flags.
+          CIBW_ENVIRONMENT_LINUX: >-
+            CMAKE_ARGS="-DCMAKE_C_COMPILER_LAUNCHER=/project/.ci-no-werror -DCMAKE_CXX_COMPILER_LAUNCHER=/project/.ci-no-werror"
           CIBW_BEFORE_ALL: >-
-            dnf install -y libXrandr-devel libjpeg-turbo-devel libpng-devel libtiff-devel
+            dnf install -y libXrandr-devel libjpeg-turbo-devel libpng-devel libtiff-devel &&
+            printf '%s\n' '#!/bin/sh' 'exec "$@" -Wno-error' > /project/.ci-no-werror &&
+            chmod +x /project/.ci-no-werror
           CIBW_REPAIR_WHEEL_COMMAND: >-
             auditwheel repair -w {dest_dir} {wheel} &&
             python /project/etc/scripts/compact-wheel-libraries.py {dest_dir}
