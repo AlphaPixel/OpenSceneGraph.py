@@ -12,7 +12,7 @@ OSGX_ENABLE_WARNINGS
 
 #include <sstream>
 
-#include "pybind11x.hpp"
+#include "pybind11x-osg.hpp"
 
 namespace pyx = pybind11x;
 

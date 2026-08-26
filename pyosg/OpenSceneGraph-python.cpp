@@ -5,7 +5,7 @@
 #include "pyosgGA.hpp"
 #include "pyosgViewer.hpp"
 
-#include "pybind11x.hpp"
+#include "pybind11x-osg.hpp"
 
 #include <osg/Version>
 

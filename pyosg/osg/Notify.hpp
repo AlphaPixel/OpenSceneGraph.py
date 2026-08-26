@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../pyosg.hpp"
+#include "pybind11x.hpp"
 
 OSGX_DISABLE_WARNINGS
 
@@ -43,6 +44,8 @@ namespace detail {
 	public:
 		explicit NotifyHandler(py::object cb):
 		_cb(std::move(cb)) {}
+
+		~NotifyHandler() override { pybind11x::release_with_gil(_cb); }
 
 		void notify(osg::NotifySeverity sev, const char* msg) override {
 			py::gil_scoped_acquire gil;

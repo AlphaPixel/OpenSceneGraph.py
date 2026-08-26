@@ -4,10 +4,9 @@
 //
 // try_unpack_sequence -> "Try to unpack a py::object as an exact-length tuple of specific types."
 // kwargs_init -> "Chain a type's constructor-kwargs handling through its actual C++ bases."
-// kwargs_ctor -> "Build the `py::init([](kwargs){ ... })` lambda for a kwargs_init participant."
 // SlotCache -> "Don't recreate Python objects unless the underlying pointer changed."
-// ProxyStorage -> "Attach all Python views to the lifetime of the C++ object."
-// PropertySlots -> "Make fields behave like stable Python attributes."
+// ProxyStorage -> "Attach all Python views to a C++ object's lifetime."
+// BasicPropertySlots -> "Make fields behave like stable Python attributes."
 // SequenceProxy -> "Turn arbitrary C++ containers into Python lists."
 // MappingProxy -> "Turn arbitrary C++ containers into Python dicts."
 // ValueMappingProxy -> "Same, when the values are plain scalars, not objects - copied, not identity-tracked."
@@ -110,27 +109,6 @@ void kwargs_init(T& self, const py::kwargs& kwargs) {
 	kwargs_init_own(self, kwargs);
 }
 
-// The common `py::init([](Args... args, py::kwargs kwargs) { auto obj = new T(args...);
-// kwargs_init(*obj, kwargs); return obj; })` pattern - `Args...` are T's REAL leading positional
-// constructor parameter types (empty for the plain default-constructible case, e.g.
-// `kwargs_ctor<osg::Node>()`; e.g. `kwargs_ctor<osg::MatrixTransform, const osg::Matrix&>()` for
-// a type whose real constructor takes a required leading arg, letting `osg.MatrixTransform(m,
-// name=...)` work instead of forcing a separate `xform.name = ...` statement afterward). Each
-// `Args` parameter is necessarily positional-only from Python's side - pybind11 has no name to
-// match a keyword against an unnamed lambda parameter, so `py::kwargs` is the only way anything
-// past it can be passed. Types needing custom/aliased allocation (a Python-subclassing trampoline)
-// still write their own lambda and just call `kwargs_init(*obj, kwargs)` directly.
-template<typename T, typename... Args>
-auto kwargs_ctor() {
-	return [](Args... args, py::kwargs kwargs) {
-		osg::ref_ptr<T> obj = new T(args...);
-
-		kwargs_init(*obj, kwargs);
-
-		return obj;
-	};
-}
-
 namespace detail {
 	// The actual cast attempt, split out so the index pack (`Is...`) can be built from `Ts...`
 	// via `index_sequence_for` - expanding `seq[Is].cast<Ts>()` directly keeps each index tied
@@ -172,6 +150,19 @@ std::optional<std::tuple<Ts...>> try_unpack_sequence(const py::object& obj) {
 	if(seq.size() != sizeof...(Ts)) return std::nullopt;
 
 	return detail::try_unpack_sequence_impl<Ts...>(seq, std::index_sequence_for<Ts...>{});
+}
+
+// Releases a Python reference held by a C++ object which may be destroyed from a thread that does
+// not own the GIL. During interpreter shutdown, deliberately leak the reference: CPython can no
+// longer safely accept decrefs then.
+inline void release_with_gil(py::object& obj) {
+	auto owned = obj.release();
+
+	if(!owned || !Py_IsInitialized()) return;
+
+	py::gil_scoped_acquire gil;
+
+	Py_DECREF(owned.ptr());
 }
 
 // A single cache entry that ties a C++ pointer identity to a stable Python object wrapper. If the
@@ -316,54 +307,7 @@ struct ProxyStorage {
 	}
 };
 
-// Attaches `ProxyStorage` directly to an `osg::Object` via `UserDataContainer`. This solves the
-// problem of C++ objects being created anywhere (but you still want persistent Python-side state,
-// no matter WHO/WHAT created the instance).
-//
-// A kind of "sidecar" storage attached to the scene graph itself.
-template<typename T, typename... Proxies>
-struct ProxyStorageOSG: public osg::Object, public ProxyStorage<T, Proxies...> {
-	using base_type = ProxyStorage<T, Proxies...>;
-
-	OSGX_DISABLE_WARNINGS
-
-	META_Object(pyosg, ProxyStorageOSG)
-
-	OSGX_ENABLE_WARNINGS
-
-	ProxyStorageOSG(): osg::Object(), base_type() {
-		setName("pyosg.ProxyStorage");
-		// setName(std::string(libraryName()) + "." + className());
-	}
-
-	explicit ProxyStorageOSG(T* obj): osg::Object(), base_type(obj) {
-		setName("pyosg.ProxyStorage");
-	}
-
-	ProxyStorageOSG(
-		const ProxyStorageOSG& rhs,
-		const osg::CopyOp& copyop=osg::CopyOp::SHALLOW_COPY
-	):
-	osg::Object(rhs, copyop),
-	base_type() {
-	}
-
-	static ProxyStorageOSG* get(T& obj) {
-		auto* udc = obj.getOrCreateUserDataContainer();
-
-		for(unsigned int i = 0; i < udc->getNumUserObjects(); i++) {
-			if(auto* s = dynamic_cast<ProxyStorageOSG*>(udc->getUserObject(i))) return s;
-		}
-
-		auto* s = new ProxyStorageOSG(&obj);
-
-		udc->addUserObject(s);
-
-		return s;
-	}
-};
-
-// Equivalent idea to `ProxyStorageOSG`, designed for `std::shared_ptr`-managed objects. Uses a
+// Designed for `std::shared_ptr`-managed objects. Uses a
 // global registry with `std::weak_ptr` cleanup to ensure:
 //
 // - One storage per live object
@@ -436,21 +380,11 @@ struct ProxyStorageShared: public ProxyStorage<T, Proxies...> {
 
 // Abstracts how you "get the owner" from self.
 //
-// - OSG -> just Derived&
 // - shared_ptr -> recover shared_ptr<Derived> from Python
 //
 // This is necessary for `PropertySlots` work identically across both worlds.
 template<typename Derived, template<typename, typename...> typename Storage>
 struct OwnerAccess;
-
-template<typename Derived>
-struct OwnerAccess<Derived, ProxyStorageOSG> {
-	using owner_type = Derived&;
-
-	static owner_type from_self(Derived& self) {
-		return self;
-	}
-};
 
 template<typename Derived>
 struct OwnerAccess<Derived, ProxyStorageShared> {
@@ -480,21 +414,21 @@ struct OwnerAccess<Derived, ProxyStorageShared> {
 // `obj.prop = foo.Bar()` # No need for a foo.Bar() temporary
 // `obj.prop = foo.Baz()` # With keep_alive, the PREVIOUS instance is STILL alive
 //
-// If you want to support the concise syntax AND have predictable destruction, use `PropertySlots`.
+// If you want to support the concise syntax AND have predictable destruction, use `BasicPropertySlots`.
 template<
 	typename Derived,
 	size_t N,
-	template<typename, typename...> typename Storage = ProxyStorageOSG
+	template<typename, typename...> typename Storage
 >
-class PYOBJECT_INTERNAL PropertySlots: public SlotCache<VectorSlotStorage<size_t>> {
+class PYOBJECT_INTERNAL BasicPropertySlots: public SlotCache<VectorSlotStorage<size_t>> {
 public:
-	using slot_type = PropertySlots<Derived, N, Storage>;
+	using slot_type = BasicPropertySlots<Derived, N, Storage>;
 	using storage_type = Storage<Derived, slot_type>;
 	using owner_access_type = OwnerAccess<Derived, Storage>;
 
-	PropertySlots() = default;
+	BasicPropertySlots() = default;
 
-	explicit PropertySlots(Derived*) {}
+	explicit BasicPropertySlots(Derived*) {}
 
 	template<size_t I, typename Getter>
 	static auto getter(Getter getter_) {

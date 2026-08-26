@@ -12,7 +12,7 @@ OSGX_DISABLE_WARNINGS
 
 OSGX_ENABLE_WARNINGS
 
-#include "pybind11x.hpp"
+#include "pybind11x-osg.hpp"
 
 namespace pyx = pybind11x;
 
@@ -117,6 +117,8 @@ namespace detail {
 	class PYOSG_INTERNAL CallableGUIEventHandler: public osgGA::GUIEventHandler {
 	public:
 		explicit CallableGUIEventHandler(py::object fn): _fn(std::move(fn)) {}
+
+		~CallableGUIEventHandler() override { pyx::release_with_gil(_fn); }
 
 		bool handle(
 			const osgGA::GUIEventAdapter& ea,

@@ -8,7 +8,7 @@ OSGX_DISABLE_WARNINGS
 
 OSGX_ENABLE_WARNINGS
 
-#include "pybind11x.hpp"
+#include "pybind11x-osg.hpp"
 
 namespace pyx = pybind11x;
 
@@ -69,6 +69,8 @@ namespace detail {
 	>: public osg::Drawable::DrawCallback {
 	public:
 		explicit CallableCallback(py::object fn): _fn(std::move(fn)) {}
+
+		~CallableCallback() override { pyx::release_with_gil(_fn); }
 
 		void drawImplementation(osg::RenderInfo& ri, const osg::Drawable* d) const override {
 			py::gil_scoped_acquire gil;
