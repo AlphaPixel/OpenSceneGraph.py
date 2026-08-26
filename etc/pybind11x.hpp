@@ -176,10 +176,24 @@ std::optional<std::tuple<Ts...>> try_unpack_sequence(const py::object& obj) {
 
 // A single cache entry that ties a C++ pointer identity to a stable Python object wrapper. If the
 // underlying pointer changes, the Python object is invalidated and rebuilt.
+//
+// These caches are attached to OSG objects, so OSG may destroy one while unwinding a render-side
+// ref_ptr rather than from a Python call. py::object's ordinary destructor assumes the GIL; release
+// its owned reference explicitly under the GIL instead.
 struct PYOBJECT_INTERNAL IdentitySlot {
 	py::object py = py::none();
 
 	const void* ptr = nullptr;
+
+	~IdentitySlot() {
+		auto owned = py.release();
+
+		if(!owned || !Py_IsInitialized()) return;
+
+		py::gil_scoped_acquire gil;
+
+		Py_DECREF(owned.ptr());
+	}
 };
 
 // Defines the minimal interface for a storage backend (`slot(k), erase(k)`), letting you swap
