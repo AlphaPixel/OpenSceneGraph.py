@@ -134,6 +134,8 @@ void main() {
 GRID_ROOM_VERTEX = """
 #version 460 core
 
+#pragma osgx::grid INPUTS
+
 in vec4 osg_Vertex;
 in vec3 osg_Normal;
 in vec2 osg_MultiTexCoord0;
@@ -141,14 +143,12 @@ in vec2 osg_MultiTexCoord0;
 uniform mat4 osg_ModelViewProjectionMatrix;
 uniform mat4 osg_ModelViewMatrix;
 uniform mat3 osg_NormalMatrix;
-uniform vec2 u_canvasSize;
-
 out vec2 vGridPos;
 out vec3 vNormal;
 out vec3 vPosition;
 
 void main() {
-	vGridPos = osg_MultiTexCoord0 * u_canvasSize;
+	vGridPos = osg_MultiTexCoord0 * u_grid.canvasSize;
 	vNormal = normalize(osg_NormalMatrix * osg_Normal);
 	vPosition = (osg_ModelViewMatrix * osg_Vertex).xyz;
 	gl_Position = osg_ModelViewProjectionMatrix * osg_Vertex;
@@ -647,11 +647,18 @@ def create_grid_room(bound_center, bound_radius, floor_z, room_size):
 	center_x, center_y = bound_center.x, bound_center.y
 	frame_width = max(bound_radius * 0.035, room_size * 0.008)
 
-	osgx.Grid.registerShaderLibs()
+	grid_settings = osgx.GridSettings()
 	grid_program = osg.Program(name="grid_room_gbuffer", shaders=(
-		osg.Shader(osg.Shader.VERTEX, GRID_ROOM_VERTEX),
+		osg.Shader(osg.Shader.VERTEX, osgx.resolveShaderLibs(GRID_ROOM_VERTEX)),
 		osg.Shader(osg.Shader.FRAGMENT, osgx.resolveShaderLibs(GRID_ROOM_FRAGMENT)),
 	))
+	grid_settings.canvasSize = osg.Vec2(500.0, 500.0)
+	grid_settings.gridInterval = 50.0
+	grid_settings.gridIntervalStrong = 250.0
+	grid_settings.lineWidthPx = 1.0
+	grid_settings.colorBg = osg.Vec4(0.055, 0.070, 0.110, 1.0)
+	grid_settings.colorLine = osg.Vec4(0.20, 0.30, 0.48, 1.0)
+	grid_settings.colorLineStrong = osg.Vec4(0.52, 0.68, 0.90, 1.0)
 	frame_program = osg.Program(name="grid_room_frame_gbuffer", shaders=(
 		osg.Shader(osg.Shader.VERTEX, UNLIT_GBUFFER_VERTEX),
 		osg.Shader(osg.Shader.FRAGMENT, FRAME_GBUFFER_FRAGMENT),
@@ -659,13 +666,7 @@ def create_grid_room(bound_center, bound_radius, floor_z, room_size):
 
 	def make_grid(corner, width, height):
 		grid = osgx.Grid(corner, width, height)
-		grid.canvasSize = osg.Vec2(500.0, 500.0)
-		grid.gridInterval = 50.0
-		grid.gridIntervalStrong = 250.0
-		grid.lineWidthPx = 1.0
-		grid.colorBg = osg.Vec4(0.055, 0.070, 0.110, 1.0)
-		grid.colorLine = osg.Vec4(0.20, 0.30, 0.48, 1.0)
-		grid.colorLineStrong = osg.Vec4(0.52, 0.68, 0.90, 1.0)
+		grid.settings = grid_settings
 		grid.stateSet.uniforms["roomRoughness"] = 0.85
 		grid.stateSet.uniforms["roomMetallic"] = 0.0
 		grid.stateSet.attributes[osg.StateAttribute.PROGRAM] = (
