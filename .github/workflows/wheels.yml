@@ -1,9 +1,8 @@
 name: Build wheels
 
 on:
-  # Temporary ARM bring-up trigger - restore when CI runs are wanted again.
-  # push:
-  #   branches: [cubicool-wip]
+  push:
+    branches: [cubicool-wip]
   workflow_dispatch:
 
 # The workflow only needs to read the repository and upload its wheel artifact.
@@ -13,9 +12,12 @@ permissions:
 jobs:
   linux-x86_64-cp312:
     name: Linux x86-64 / CPython 3.12 / manylinux_2_28
-    # Temporarily disabled while the first native ARM64 wheel is brought up.
-    if: false
-    runs-on: [self-hosted, linux, x64]
+    # Toggle for future disabling.
+    if: true
+    # Self-hosted VPS build, kept for reference now that the repo is public
+    # and GitHub-hosted runners are usable without spend concerns.
+    # runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v6
@@ -84,8 +86,8 @@ jobs:
 
   linux-aarch64-cp312:
     name: Linux ARM64 / CPython 3.12 / manylinux_2_28
-    # Temporarily disabled until the branch is synchronized again.
-    if: false
+    # Toggle for future disabling.
+    if: true
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -151,8 +153,8 @@ jobs:
 
   windows-x86_64-cp312:
     name: Windows x86-64 / CPython 3.12
-    # Temporarily disabled while the first native ARM64 wheel is brought up.
-    if: false
+    # Toggle for future disabling.
+    if: true
     runs-on: windows-latest
 
     steps:
