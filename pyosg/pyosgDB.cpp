@@ -10,7 +10,12 @@ OSGX_ENABLE_WARNINGS
 namespace pyosgDB {
 
 void bind(py::module_& m) {
-	py::class_<osgDB::Registry, osg::Referenced, osg::ref_ptr<osgDB::Registry>>(m, "Registry")
+	py::class_<osgDB::Registry, osg::Referenced, osg::ref_ptr<osgDB::Registry>>(
+		m,
+		"Registry",
+		"The process-wide singleton owning every loaded ReaderWriter plugin, reached via "
+		"Registry.instance()."
+	)
 		.def_static(
 			"instance",
 			&osgDB::Registry::instance,
@@ -20,7 +25,12 @@ void bind(py::module_& m) {
 		.def("getReaderWriterForMimeType", &osgDB::Registry::getReaderWriterForMimeType)
 	;
 
-	auto opts = py::class_<osgDB::Options, osg::Object, osg::ref_ptr<osgDB::Options>>(m, "Options");
+	auto opts = py::class_<osgDB::Options, osg::Object, osg::ref_ptr<osgDB::Options>>(
+		m,
+		"Options",
+		"Per-call settings (caching, precision, plugin-specific strings) passed to a "
+		"ReaderWriter or the readXFile()/writeXFile() helpers."
+	);
 
 	py::enum_<osgDB::Options::CacheHintOptions>(opts, "CacheHintOptions", py::arithmetic())
 		.value("CACHE_NONE", osgDB::Options::CACHE_NONE)
@@ -68,7 +78,12 @@ void bind(py::module_& m) {
 		osgDB::ReaderWriter,
 		osg::Object,
 		osg::ref_ptr<osgDB::ReaderWriter>
-	>(m, "ReaderWriter")
+	>(
+		m,
+		"ReaderWriter",
+		"Base class for a file-format plugin (registered with Registry) that reads/writes "
+		"Objects, Nodes, and Images for a given extension."
+	)
 		.def(py::init<>())
 		.def(
 			"writeObject",

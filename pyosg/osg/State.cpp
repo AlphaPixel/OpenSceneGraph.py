@@ -3,7 +3,12 @@
 namespace pyosg {
 
 void bind_State(py::module_& m) {
-	py::class_<osg::FrameStamp, osg::Referenced, osg::ref_ptr<osg::FrameStamp>>(m, "FrameStamp")
+	py::class_<osg::FrameStamp, osg::Referenced, osg::ref_ptr<osg::FrameStamp>>(
+		m,
+		"FrameStamp",
+		"Timing information (frame number, reference/simulation/calendar time) for a single "
+		"traversal, shared by NodeVisitor and State."
+	)
 		.def(py::init<>())
 		.def(py::init<const osg::FrameStamp&>())
 		.def_property("frameNumber",
@@ -24,7 +29,12 @@ void bind_State(py::module_& m) {
 		)
 	;
 
-	py::class_<osg::State, osg::Referenced, osg::ref_ptr<osg::State>>(m, "State")
+	py::class_<osg::State, osg::Referenced, osg::ref_ptr<osg::State>>(
+		m,
+		"State",
+		"The per-GL-context render state (current matrices, contextID, FrameStamp) tracked "
+		"during a draw traversal."
+	)
 		.def_property_readonly("projectionMatrix",
 			&osg::State::getProjectionMatrix,
 			py::return_value_policy::reference_internal
@@ -57,7 +67,12 @@ void bind_State(py::module_& m) {
 		osg::StateAttribute,
 		osg::Object,
 		osg::ref_ptr<osg::StateAttribute>
-	>(m, "StateAttribute")
+	>(
+		m,
+		"StateAttribute",
+		"Base class for a single piece of OpenGL state (Texture, BlendFunc, Depth, Program, "
+		"etc.) that can be attached to a StateSet."
+	)
 		// .def(py::init<>())
 		// .def(py::init<const osg::StateAttribute&>())
 
@@ -173,7 +188,14 @@ void bind_State(py::module_& m) {
 		osg::StateSet,
 		osg::Object,
 		osg::ref_ptr<osg::StateSet>
-	>(m, "StateSet")
+	>(
+		m,
+		"StateSet",
+		"A collection of StateAttributes, GL modes, uniforms, and defines attached to a Node "
+		"or Drawable to control how it renders. .attributes/.textureAttributes/.uniforms/"
+		".modes/.defines are dict-like mapping proxies (e.g. stateSet.uniforms[\"name\"] = ...) "
+		"replacing the set/get/remove*Attribute()/*Uniform()/*Mode() method sprawl."
+	)
 		.def(py::init<>())
 		.def(py::init<const osg::StateSet&>())
 	;

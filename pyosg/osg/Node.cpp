@@ -26,7 +26,14 @@ namespace pybind11x {
 namespace pyosg {
 
 void bind_Node(py::module_& m) {
-	auto node = py::class_<osg::Node, osg::Object, osg::ref_ptr<osg::Node>>(m, "Node")
+	auto node = py::class_<osg::Node, osg::Object, osg::ref_ptr<osg::Node>>(
+		m,
+		"Node",
+		"Base class for every element of the scene graph -- leaf Drawables and the Group "
+		"nodes that hold them alike. .updateCallback/.eventCallback each accept either a "
+		"NodeCallback subclass instance or a plain Python callable, in place of OSG's "
+		"traditional set*Callback()/get*Callback() methods."
+	)
 		.def(py::init<>())
 		.def(py::init(pyx::kwargs_ctor<osg::Node>()))
 		.def_property(

@@ -61,7 +61,12 @@ void bind_Texture(py::module_& m) {
 		// detail::Texture
 		osg::StateAttribute,
 		osg::ref_ptr<osg::Texture>
-	>(m, "Texture");
+	>(
+		m,
+		"Texture",
+		"Base class for a StateAttribute wrapping a GL texture object, its image data, and "
+		"its wrap/filter/format parameters."
+	);
 
 	py::enum_<osg::Texture::WrapParameter>(tex, "WrapParameter")
 		.value("WRAP_S", osg::Texture::WRAP_S)
@@ -236,7 +241,12 @@ void bind_Texture(py::module_& m) {
 		osg::Texture2D,
 		osg::Texture,
 		osg::ref_ptr<osg::Texture2D>
-	>(m, "Texture2D")
+	>(
+		m,
+		"Texture2D",
+		"A 2D GL texture, the most common Texture used for surface color/normal/data maps "
+		"and 2D render targets."
+	)
 		.def(py::init<>())
 		.def(py::init([](size_t width, size_t height) {
 			auto* t = new osg::Texture2D();
@@ -273,7 +283,11 @@ void bind_Texture(py::module_& m) {
 		osg::TextureCubeMap,
 		osg::Texture,
 		osg::ref_ptr<osg::TextureCubeMap>
-	>(m, "TextureCubeMap")
+	>(
+		m,
+		"TextureCubeMap",
+		"A 6-faced cube map Texture, used for skyboxes and image-based lighting environments."
+	)
 		.def(py::init<>())
 		.def_property(
 			"size",

@@ -14,7 +14,13 @@ namespace pybind11x {
 namespace pyosg {
 
 void bind_Geode(py::module_& m) {
-	auto geode = py::class_<osg::Geode, osg::Group, osg::ref_ptr<osg::Geode>>(m, "Geode");
+	auto geode = py::class_<osg::Geode, osg::Group, osg::ref_ptr<osg::Geode>>(
+		m,
+		"Geode",
+		"A leaf node that groups one or more Drawable objects for rendering. Drawables are "
+		"exposed via the .drawables sequence proxy (indexing, iteration, append/extend) "
+		"rather than addDrawable()/removeDrawable()."
+	);
 
 	pyx::bind_proxy_property<detail::DrawablesProxy, osg::Geode, detail::DrawablesStorage>(
 		geode, "_Drawables", "drawables"

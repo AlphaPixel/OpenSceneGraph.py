@@ -20,7 +20,12 @@ namespace pybind11x {
 namespace pyosg {
 
 void bind_Drawable(py::module_& m) {
-	py::class_<osg::RenderInfo>(m, "RenderInfo")
+	py::class_<osg::RenderInfo>(
+		m,
+		"RenderInfo",
+		"Per-draw-call context (GL context id, osg.State, and current osg.View) passed to "
+		"draw and camera callbacks."
+	)
 		.def_property_readonly("contextID", &osg::RenderInfo::getContextID)
 		// TODO: Add setter support!?
 		.def_property_readonly("state",
@@ -39,7 +44,11 @@ void bind_Drawable(py::module_& m) {
 		detail::Drawable,
 		osg::Node,
 		osg::ref_ptr<osg::Drawable>
-	>(m, "Drawable");
+	>(
+		m,
+		"Drawable",
+		"Base class for anything that can be rendered directly, such as Geometry and ShapeDrawable."
+	);
 
 	py::class_<
 		osg::Drawable::DrawCallback,

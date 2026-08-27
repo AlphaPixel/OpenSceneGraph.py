@@ -18,7 +18,12 @@ void bind_StateAttributes(py::module_& m) {
 		osg::Viewport,
 		osg::StateAttribute,
 		osg::ref_ptr<osg::Viewport>
-	>(m, "Viewport")
+	>(
+		m,
+		"Viewport",
+		"A StateAttribute mapping normalized device coordinates to a pixel rectangle "
+		"(x, y, width, height) of the target framebuffer."
+	)
 		.def(py::init<>())
 		.def(py::init<
 			osg::Viewport::value_type,
@@ -64,7 +69,11 @@ void bind_StateAttributes(py::module_& m) {
 		osg::BlendFunc,
 		osg::StateAttribute,
 		osg::ref_ptr<osg::BlendFunc>
-	>(m, "BlendFunc")
+	>(
+		m,
+		"BlendFunc",
+		"A StateAttribute controlling glBlendFunc's source/destination blending factors."
+	)
 		.def(py::init<>())
 		.def(py::init<GLenum, GLenum>())
 		.def(py::init<GLenum, GLenum, GLenum, GLenum>())
@@ -74,7 +83,12 @@ void bind_StateAttributes(py::module_& m) {
 		osg::Depth,
 		osg::StateAttribute,
 		osg::ref_ptr<osg::Depth>
-	>(m, "Depth");
+	>(
+		m,
+		"Depth",
+		"A StateAttribute controlling the depth test function, near/far range, and depth "
+		"write mask."
+	);
 
 
 	py::enum_<osg::Depth::Function>(depth, "Function")
@@ -102,7 +116,12 @@ void bind_StateAttributes(py::module_& m) {
 		osg::BufferIndexBinding,
 		osg::StateAttribute,
 		osg::ref_ptr<osg::BufferIndexBinding>
-	>(m, "BufferIndexBinding")
+	>(
+		m,
+		"BufferIndexBinding",
+		"Base class for a StateAttribute that binds a BufferObject to an indexed GL binding "
+		"point (SSBO, UBO, etc.)."
+	)
 		// .def(py::init<GLenum, GLuint>())
 		// .def(py::init<GLenum, GLuint, osg::BufferData*, GLintptr, GLsizeiptr>(),
 		// 	"target"_a,
@@ -117,7 +136,12 @@ void bind_StateAttributes(py::module_& m) {
 		osg::ShaderStorageBufferBinding,
 		osg::BufferIndexBinding,
 		osg::ref_ptr<osg::ShaderStorageBufferBinding>
-	>(m, "ShaderStorageBufferBinding")
+	>(
+		m,
+		"ShaderStorageBufferBinding",
+		"A BufferIndexBinding that binds a ShaderStorageBufferObject to a shader's SSBO "
+		"binding point."
+	)
 		.def(py::init<GLuint, osg::BufferData*, GLintptr, GLsizeiptr>(),
 			"index"_a,
 			"bd"_a,
@@ -130,7 +154,11 @@ void bind_StateAttributes(py::module_& m) {
 		osg::UniformBufferBinding,
 		osg::BufferIndexBinding,
 		osg::ref_ptr<osg::UniformBufferBinding>
-	>(m, "UniformBufferBinding")
+	>(
+		m,
+		"UniformBufferBinding",
+		"A BufferIndexBinding that binds a UniformBufferObject to a shader's UBO binding point."
+	)
 		.def(py::init<GLuint, osg::BufferData*, GLintptr, GLsizeiptr>(),
 			"index"_a,
 			"bd"_a,

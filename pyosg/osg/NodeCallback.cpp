@@ -14,7 +14,13 @@ void bind_NodeCallback(py::module_& m) {
 		detail::Callback,
 		osg::Object,
 		osg::ref_ptr<osg::Callback>
-	>(m, "Callback");
+	>(
+		m,
+		"Callback",
+		"Base class for anything invoked during scene graph traversal (update, event, cull). "
+		".nestedCallbacks is a sequence proxy over the chained callback list, rather than "
+		"addNestedCallback()/removeNestedCallback()/getNestedCallback()."
+	);
 
 	// callback.nestedCallbacks -- list view over the singly-linked nestedCallback chain (see
 	// SequenceTraits<osg::Callback, NestedCallbacksTag> in NodeCallback.hpp): indexing, len(),
@@ -34,7 +40,12 @@ void bind_NodeCallback(py::module_& m) {
 		detail::NodeCallback,
 		osg::Callback,
 		osg::ref_ptr<osg::NodeCallback>
-	>(m, "NodeCallback")
+	>(
+		m,
+		"NodeCallback",
+		"A Callback specialized for Node.updateCallback/eventCallback, invoked once per "
+		"traversal of the node it's attached to."
+	)
 		.def(py::init<>())
 	;
 }

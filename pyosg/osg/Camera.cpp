@@ -91,7 +91,14 @@ void bind_Camera(py::module_& m) {
 		// TODO: Implement this!
 		// osg::CullSettings,
 		osg::ref_ptr<osg::Camera>
-	>(m, "Camera")
+	>(
+		m,
+		"Camera",
+		"A Transform node that renders its subgraph from its own view/projection matrices, "
+		"optionally into an off-screen render target (FBO, PBuffer, etc.). "
+		".initialDrawCallback/.preDrawCallback/.postDrawCallback/.finalDrawCallback each "
+		"accept either a DrawCallback subclass instance or a plain Python callable."
+	)
 		.def(py::init<>())
 		.def(py::init(pyx::kwargs_ctor<osg::Camera>()))
 	;

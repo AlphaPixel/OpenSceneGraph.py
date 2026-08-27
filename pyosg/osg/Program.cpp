@@ -18,7 +18,14 @@ void bind_Program(py::module_& m) {
 		osg::Program,
 		osg::StateAttribute,
 		osg::ref_ptr<osg::Program
-	>>(m, "Program")
+	>>(
+		m,
+		"Program",
+		"A StateAttribute wrapping a linked GLSL shader program, built from one or more "
+		"attached Shader objects. .shaders is a sequence proxy (append() instead of "
+		"addShader()); .bindAttribLocation/.bindFragDataLocation/.bindUniformBlock are "
+		"mapping proxies over the equivalent bind*() call pairs."
+	)
 		.def(py::init<>())
 		// .def(py::init<const osg::Program&>())
 		.def(py::init(pyx::kwargs_ctor<osg::Program>()))

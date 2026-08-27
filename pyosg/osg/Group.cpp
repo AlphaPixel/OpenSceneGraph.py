@@ -14,7 +14,13 @@ namespace pybind11x {
 namespace pyosg {
 
 void bind_Group(py::module_& m) {
-	auto group = py::class_<osg::Group, osg::Node, osg::ref_ptr<osg::Group>>(m, "Group");
+	auto group = py::class_<osg::Group, osg::Node, osg::ref_ptr<osg::Group>>(
+		m,
+		"Group",
+		"A node that owns an ordered list of child Nodes, forming the branches of the scene "
+		"graph. Children are exposed via the .children sequence proxy (indexing, iteration, "
+		"append/insert/remove) rather than addChild()/removeChild()/getChild()."
+	);
 
 	pyx::bind_proxy_property<detail::ChildrenProxy, osg::Group, detail::ChildrenStorage>(
 		group, "_Children", "children"

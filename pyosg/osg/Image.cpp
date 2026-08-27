@@ -22,7 +22,13 @@ void bind_Image(py::module_& m) {
 		// detail::Image
 		osg::BufferData,
 		osg::ref_ptr<osg::Image>
-	>(m, "Image", py::buffer_protocol())
+	>(
+		m,
+		"Image",
+		py::buffer_protocol(),
+		"Raw pixel data plus format/type metadata, used for textures, framebuffer readback, "
+		"and file I/O."
+	)
 		.def(py::init<>())
 		.def(
 			"allocateImage",

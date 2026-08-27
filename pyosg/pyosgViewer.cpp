@@ -192,7 +192,11 @@ namespace detail {
 }
 
 void bind(py::module_& m) {
-	py::class_<osgViewer::Scene, osg::Referenced, osg::ref_ptr<osgViewer::Scene>>(m, "Scene")
+	py::class_<osgViewer::Scene, osg::Referenced, osg::ref_ptr<osgViewer::Scene>>(
+		m,
+		"Scene",
+		"Wraps the scene graph data a View renders, shareable across multiple Views."
+	)
 		// NOT a straightforward PropertySlot conversion like the ones just done for
 		// osgViewer::View: pyx::ProxyStorageOSG needs getOrCreateUserDataContainer(), an
 		// osg::Object method, but osgViewer::Scene derives from osg::Referenced only. Needs a
@@ -222,7 +226,11 @@ void bind(py::module_& m) {
 		// does NOT support usage with `osg::ref_ptr` (and causes the pybind11 chain to explode).
 		// osgGA::GUIActionAdapter,
 		osg::ref_ptr<osgViewer::GraphicsWindow>
-	>(m, "GraphicsWindow")
+	>(
+		m,
+		"GraphicsWindow",
+		"A GraphicsContext backed by a real or embedded native window."
+	)
 		// setWindowName's base implementation is a no-op (just an OSG_NOTICE) on backends that
 		// don't have a native window at all (GraphicsWindowEmbedded, offscreen pbuffers); real
 		// windowed backends (X11 confirmed) override it to actually retitle the OS window.
@@ -237,11 +245,23 @@ void bind(py::module_& m) {
 		osgViewer::GraphicsWindowEmbedded,
 		osgViewer::GraphicsWindow,
 		osg::ref_ptr<osgViewer::GraphicsWindowEmbedded>
-	>(m, "GraphicsWindowEmbedded");
+	>(
+		m,
+		"GraphicsWindowEmbedded",
+		"A GraphicsWindow with no native window of its own, for embedding OSG rendering "
+		"inside a host toolkit's own widget (e.g. Qt's QOpenGLWidget)."
+	);
 
 	// osgGA::GUIActionAdapter is deliberately LEFT OUT of the base classes here! It doesn't use
 	// a `ref_ptr` as a "holder", and pybind can't "mix" them!
-	auto view = py::class_<osgViewer::View, osg::View, osg::ref_ptr<osgViewer::View>>(m, "View");
+	auto view = py::class_<osgViewer::View, osg::View, osg::ref_ptr<osgViewer::View>>(
+		m,
+		"View",
+		"A View that adds a CameraManipulator, EventQueue, and a list of GUIEventHandlers "
+		"on top of osg.View's camera/scene pairing. .eventHandlers is a sequence proxy "
+		"(append/insert instead of addEventHandler()) that also accepts a plain Python "
+		"callable in place of a GUIEventHandler subclass instance."
+	);
 
 	pyx::bind_proxy_property<detail::EventHandlersProxy, osgViewer::View, detail::ViewStorage>(
 		view, "_EventHandlers", "eventHandlers"
@@ -299,7 +319,12 @@ void bind(py::module_& m) {
 		detail::ViewerBase,
 		osg::Object,
 		osg::ref_ptr<osgViewer::ViewerBase>
-	>(m, "ViewerBase")
+	>(
+		m,
+		"ViewerBase",
+		"Base class for running the frame loop (realize/frame) over one or more Views, "
+		"with a configurable ThreadingModel."
+	)
 		// .def(py::init_alias<>())
 		.def("frame", [](osgViewer::ViewerBase& self) {
 			// Only release the GIL for genuinely multi-threaded models (real OSG cull/draw
@@ -375,7 +400,12 @@ void bind(py::module_& m) {
 		osgViewer::ViewerBase,
 		osgViewer::View,
 		osg::ref_ptr<osgViewer::Viewer>
-	>(m, "Viewer")
+	>(
+		m,
+		"Viewer",
+		"The standard single-view application entry point: a ViewerBase and osgViewer.View "
+		"combined, plus window-setup convenience methods."
+	)
 		.def(py::init<>())
 		// .def(py::init<osg::ArgumentParser&>())
 		.def(py::init([](pyosg::detail::ArgumentParser& args) {

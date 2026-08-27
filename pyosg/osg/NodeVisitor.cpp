@@ -9,7 +9,12 @@ void bind_NodeVisitor(py::module_& m) {
 	// py::bind_vector<std::vector<osg::Node*>>(m, "NodePath");
 
 	// TODO: This is a readonly variant I'm testing!
-	py::class_<osg::NodePath>(m, "NodePath")
+	py::class_<osg::NodePath>(
+		m,
+		"NodePath",
+		"An ordered sequence of Nodes from the scene graph root down to a specific node, as "
+		"returned by NodeVisitor.nodePath."
+	)
 		.def("__len__", [](const osg::NodePath& self) {
 			return self.size();
 		})
@@ -35,7 +40,11 @@ void bind_NodeVisitor(py::module_& m) {
 		detail::NodeVisitor,
 		osg::Object,
 		osg::ref_ptr<osg::NodeVisitor>
-	>(m, "NodeVisitor");
+	>(
+		m,
+		"NodeVisitor",
+		"Base class for traversing the scene graph and applying custom logic to Nodes it visits."
+	);
 
 	py::enum_<osg::NodeVisitor::TraversalMode>(nv, "TraversalMode")
 		.value("TRAVERSE_NONE", osg::NodeVisitor::TRAVERSE_NONE)

@@ -3,7 +3,12 @@
 namespace pyosgGA {
 
 void bind(py::module_& m) {
-	py::class_<osgGA::GUIActionAdapter, detail::GUIActionAdapter>(m, "GUIActionAdapter")
+	py::class_<osgGA::GUIActionAdapter, detail::GUIActionAdapter>(
+		m,
+		"GUIActionAdapter",
+		"Interface an event handler uses to request a redraw, continuous updates, or a "
+		"pointer warp from the windowing system, without depending on it directly."
+	)
 		.def(py::init_alias<>())
 		.def("requestRedraw", &osgGA::GUIActionAdapter::requestRedraw)
 		.def("requestContinuousUpdate", &osgGA::GUIActionAdapter::requestContinuousUpdate,
@@ -11,7 +16,12 @@ void bind(py::module_& m) {
 		.def("requestWarpPointer", &osgGA::GUIActionAdapter::requestWarpPointer)
 	;
 
-	py::class_<osgGA::Event, osg::Object, osg::ref_ptr<osgGA::Event>>(m, "Event")
+	py::class_<osgGA::Event, osg::Object, osg::ref_ptr<osgGA::Event>>(
+		m,
+		"Event",
+		"Base class for a single GUI event (see GUIEventAdapter) with a timestamp and a "
+		"handled flag."
+	)
 		.def_property("handled", &osgGA::Event::getHandled, &osgGA::Event::setHandled)
 		.def_property("time", &osgGA::Event::getTime, &osgGA::Event::setTime)
 	;
@@ -20,7 +30,12 @@ void bind(py::module_& m) {
 		osgGA::GUIEventAdapter,
 		osgGA::Event,
 		osg::ref_ptr<osgGA::GUIEventAdapter>
-	>(m, "GUIEventAdapter")
+	>(
+		m,
+		"GUIEventAdapter",
+		"A concrete Event carrying mouse/keyboard/window state (position, buttons, key, "
+		"scroll) for a single input or window event."
+	)
 		// TODO: Continue converting these down below!
 		.def_property_readonly("x", &osgGA::GUIEventAdapter::getX)
 		.def_property_readonly("y", &osgGA::GUIEventAdapter::getY)
@@ -37,7 +52,12 @@ void bind(py::module_& m) {
 		osgGA::EventVisitor,
 		osg::NodeVisitor,
 		osg::ref_ptr<osgGA::EventVisitor>
-	>(m, "EventVisitor")
+	>(
+		m,
+		"EventVisitor",
+		"A NodeVisitor that dispatches queued GUIEventAdapter events to each Node's "
+		"eventCallback during the event traversal."
+	)
 		.def(py::init<>())
 		.def_property(
 			"actionAdapter",
@@ -125,7 +145,12 @@ void bind(py::module_& m) {
 		detail::GUIEventHandler,
 		osg::Object,
 		osg::ref_ptr<osgGA::GUIEventHandler>
-	>(m, "GUIEventHandler")
+	>(
+		m,
+		"GUIEventHandler",
+		"Base class for a per-view handler invoked with each event; override handle() to "
+		"react to input (see View.eventHandlers)."
+	)
 		.def(py::init_alias<>())
 		.def("handle", [](
 			osgGA::GUIEventHandler& self,
@@ -140,7 +165,12 @@ void bind(py::module_& m) {
 		osgGA::EventQueue,
 		osg::Referenced,
 		osg::ref_ptr<osgGA::EventQueue>
-	>(m, "EventQueue")
+	>(
+		m,
+		"EventQueue",
+		"Accumulates synthesized input/window events (mouse, keyboard, resize) to be "
+		"delivered on the next frame, e.g. from an embedded windowing toolkit."
+	)
 		.def(py::init<>())
 		.def("clear", &osgGA::EventQueue::clear)
 		.def_property_readonly(
@@ -218,7 +248,13 @@ void bind(py::module_& m) {
 		detail::CameraManipulator,
 		osgGA::GUIEventHandler,
 		osg::ref_ptr<osgGA::CameraManipulator>
-	>(m, "CameraManipulator")
+	>(
+		m,
+		"CameraManipulator",
+		"Base class for interactive camera controllers (see TrackballManipulator) that turn "
+		"input events into a view matrix. .node returns the same stable Python wrapper for "
+		"the underlying scene node on every access, rather than a fresh one each call."
+	)
 		.def(py::init_alias<>())
 		.def("home", py::overload_cast<
 			const osgGA::GUIEventAdapter&,
@@ -299,7 +335,12 @@ void bind(py::module_& m) {
 		osgGA::StandardManipulator,
 		osgGA::CameraManipulator,
 		osg::ref_ptr<osgGA::StandardManipulator>
-	>(m, "StandardManipulator");
+	>(
+		m,
+		"StandardManipulator",
+		"A CameraManipulator base adding common mouse-wheel/model-size/home-position "
+		"behavior shared by OSG's built-in manipulators."
+	);
 
 	py::enum_<osgGA::StandardManipulator::UserInteractionFlags>(sm, "UserInteractionFlags")
 		.value("UPDATE_MODEL_SIZE", osgGA::StandardManipulator::UPDATE_MODEL_SIZE)
@@ -317,13 +358,22 @@ void bind(py::module_& m) {
 		osgGA::OrbitManipulator,
 		osgGA::StandardManipulator,
 		osg::ref_ptr<osgGA::OrbitManipulator>
-	>(m, "OrbitManipulator");
+	>(
+		m,
+		"OrbitManipulator",
+		"A StandardManipulator that orbits the camera around a fixed center point."
+	);
 
 	py::class_<
 		osgGA::TrackballManipulator,
 		osgGA::CameraManipulator,
 		osg::ref_ptr<osgGA::TrackballManipulator>
-	>(m, "TrackballManipulator")
+	>(
+		m,
+		"TrackballManipulator",
+		"The default interactive camera manipulator: orbit/pan/zoom driven by mouse drag "
+		"and scroll."
+	)
 		.def(py::init<int>(), "flags"_a=osgGA::StandardManipulator::DEFAULT_SETTINGS)
 	;
 }

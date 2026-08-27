@@ -23,7 +23,15 @@ void bind_Object(py::module_& m) {
 
 	m.attr("RefCounts") = RefCounts;
 
-	py::class_<osg::Referenced, osg::ref_ptr<osg::Referenced>>(m, "Referenced")
+	py::class_<osg::Referenced, osg::ref_ptr<osg::Referenced>>(
+		m,
+		"Referenced",
+		"Root of OSG's intrusive reference-counting hierarchy; nearly everything else in "
+		"osg/osgGA/osgViewer inherits its ref()/unref() lifetime. Its owning Python wrapper "
+		"is tracked via the object's own UserDataContainer rather than pybind11's keep_alive<>, "
+		"so a replaced/discarded C++ instance can be freed instead of leaking for the life of "
+		"the process."
+	)
 		.def("ref", [](osg::Referenced& self) { return self.ref(); })
 		.def("unref", [](osg::Referenced& self) { return self.unref(); })
 		// .def_property_readonly("referenceCount", &osg::Referenced::referenceCount)
@@ -48,7 +56,14 @@ void bind_Object(py::module_& m) {
 		detail::Object,
 		osg::Referenced,
 		osg::ref_ptr<osg::Object>
-	>(m, "Object");
+	>(
+		m,
+		"Object",
+		"Base class adding a name, DataVariance, and a UserDataContainer on top of Referenced; "
+		"the common ancestor of Node, StateAttribute, Array, and most other OSG types. Most "
+		"subclasses accept name=/dataVariance=/etc. as constructor keyword arguments in "
+		"addition to their traditional setters."
+	);
 
 	py::enum_<osg::Object::DataVariance>(obj, "DataVariance")
 		.value("DYNAMIC", osg::Object::DYNAMIC)
@@ -115,7 +130,12 @@ void bind_Object(py::module_& m) {
 		detail::UserDataContainer,
 		osg::Object,
 		osg::ref_ptr<osg::UserDataContainer>
-	>(m, "UserDataContainer")
+	>(
+		m,
+		"UserDataContainer",
+		"Holds an arbitrary collection of named/indexed user Objects attached to an Object "
+		"via Object.userDataContainer."
+	)
 		.def_property_readonly("numUserObjects", &osg::UserDataContainer::getNumUserObjects)
 		.def("getUserObject", py::overload_cast<unsigned int>(
 			&osg::UserDataContainer::getUserObject
@@ -126,7 +146,12 @@ void bind_Object(py::module_& m) {
 		osg::DefaultUserDataContainer,
 		osg::UserDataContainer,
 		osg::ref_ptr<osg::DefaultUserDataContainer>
-	>(m, "DefaultUserDataContainer");
+	>(
+		m,
+		"DefaultUserDataContainer",
+		"OSG's standard UserDataContainer implementation, created automatically by "
+		"Object.getOrCreateUserDataContainer()."
+	);
 
 	// TODO: This is a temporary debugging method; REMOVE IT (eventually).
 	obj.def("dumps", [](osg::Object& self, const std::string& ext) {

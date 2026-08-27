@@ -13,7 +13,12 @@ void bind(py::module_& m) {
 		osgUtil::UpdateVisitor,
 		osg::NodeVisitor,
 		osg::ref_ptr<osgUtil::UpdateVisitor>
-	>(m, "UpdateVisitor")
+	>(
+		m,
+		"UpdateVisitor",
+		"A NodeVisitor that runs each Node's updateCallback once per frame, driving "
+		"animation and other per-frame logic."
+	)
 		.def(py::init<>())
 	;
 }

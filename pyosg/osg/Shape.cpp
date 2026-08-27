@@ -9,13 +9,23 @@ OSGX_ENABLE_WARNINGS
 namespace pyosg {
 
 void bind_Shape(py::module_& m) {
-	py::class_<osg::Shape, osg::Object, osg::ref_ptr<osg::Shape>>(m, "Shape");
+	py::class_<osg::Shape, osg::Object, osg::ref_ptr<osg::Shape>>(
+		m,
+		"Shape",
+		"Base class for procedural geometric primitives (Sphere, Box, etc.) that a "
+		"ShapeDrawable can tessellate and render."
+	);
 
 	auto th = py::class_<
 		osg::TessellationHints,
 		osg::Object,
 		osg::ref_ptr<osg::TessellationHints>
-	>(m, "TessellationHints")
+	>(
+		m,
+		"TessellationHints",
+		"Controls the level of detail and which faces ShapeDrawable.build() generates for "
+		"a Shape."
+	)
 		.def(py::init<>())
 	;
 
@@ -68,7 +78,11 @@ void bind_Shape(py::module_& m) {
 		)
 	;
 
-	py::class_<osg::Sphere, osg::Shape, osg::ref_ptr<osg::Sphere>>(m, "Sphere")
+	py::class_<osg::Sphere, osg::Shape, osg::ref_ptr<osg::Sphere>>(
+		m,
+		"Sphere",
+		"A Shape describing a sphere by center and radius."
+	)
 		.def(py::init<>())
 		.def(py::init<const osg::Vec3&, float>())
 		.def(py::init([](float radius) {
@@ -103,7 +117,11 @@ void bind_Shape(py::module_& m) {
 		.def_property("radius", &osg::Sphere::getRadius, &osg::Sphere::setRadius)
 	;
 
-	py::class_<osg::Box, osg::Shape, osg::ref_ptr<osg::Box>>(m, "Box")
+	py::class_<osg::Box, osg::Shape, osg::ref_ptr<osg::Box>>(
+		m,
+		"Box",
+		"A Shape describing an axis-aligned box by center and half-lengths."
+	)
 		.def(py::init<>())
 		.def(py::init<const osg::Vec3&, float>())
 		.def(py::init<const osg::Vec3&, float, float, float>())
@@ -141,7 +159,12 @@ void bind_Shape(py::module_& m) {
 	// Capsule
 	// InfinitePlane
 
-	py::class_<osg::ShapeDrawable, osg::Geometry, osg::ref_ptr<osg::ShapeDrawable>>(m, "ShapeDrawable")
+	py::class_<osg::ShapeDrawable, osg::Geometry, osg::ref_ptr<osg::ShapeDrawable>>(
+		m,
+		"ShapeDrawable",
+		"A Drawable that tessellates a Shape (per its TessellationHints) into renderable "
+		"geometry with a flat color."
+	)
 		.def(py::init<>())
 		// NOTE: The following WOULDN'T be safe, because there's no `keep_alive` call.
 		// .def(py::init<osg::Shape*, osg::TessellationHints*>())

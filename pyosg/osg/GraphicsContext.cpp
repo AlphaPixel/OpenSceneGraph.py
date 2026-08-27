@@ -16,7 +16,12 @@ void bind_GraphicsContext(py::module_& m) {
 		osg::DisplaySettings,
 		osg::Referenced,
 		osg::ref_ptr<osg::DisplaySettings>
-	>(m, "DisplaySettings")
+	>(
+		m,
+		"DisplaySettings",
+		"Process-wide rendering configuration (multisampling, stereo, compression, etc.) "
+		"shared by every GraphicsContext."
+	)
 		.def(py::init<>())
 		.def(py::init<osg::ArgumentParser&>())
 		// I know the syntax here LOOKS WEIRD, but there's a lot of "magic" happening; see:
@@ -36,7 +41,11 @@ void bind_GraphicsContext(py::module_& m) {
 		osg::GraphicsContext,
 		osg::Object,
 		osg::ref_ptr<osg::GraphicsContext>
-	>(m, "GraphicsContext")
+	>(
+		m,
+		"GraphicsContext",
+		"An OpenGL context and its associated drawing surface (window, pbuffer, or FBO target)."
+	)
 		.def("resized", &osg::GraphicsContext::resized)
 		.def("runOperations", &osg::GraphicsContext::runOperations)
 		.def("valid", &osg::GraphicsContext::valid)

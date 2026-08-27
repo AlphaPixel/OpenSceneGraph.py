@@ -15,7 +15,12 @@ namespace pyosg {
 // namespace detail {}
 
 void bind_Shader(py::module_& m) {
-	auto shader = py::class_<osg::Shader, osg::Object, osg::ref_ptr<osg::Shader>>(m, "Shader");
+	auto shader = py::class_<osg::Shader, osg::Object, osg::ref_ptr<osg::Shader>>(
+		m,
+		"Shader",
+		"A single GLSL shader stage's source code, attached to a Program to build a "
+		"complete shader pipeline."
+	);
 
 	py::enum_<osg::Shader::Type>(shader, "Type")
 		.value("VERTEX", osg::Shader::VERTEX)

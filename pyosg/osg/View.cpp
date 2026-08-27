@@ -20,7 +20,12 @@ namespace detail {
 }
 
 void bind_View(py::module_& m) {
-	py::class_<osg::View, osg::Object, osg::ref_ptr<osg::View>>(m, "View")
+	py::class_<osg::View, osg::Object, osg::ref_ptr<osg::View>>(
+		m,
+		"View",
+		"Base class pairing a scene (via a Camera) with a FrameStamp, the common ancestor of "
+		"osgViewer.View/Viewer."
+	)
 		.def(py::init<>())
 		.def_property(
 			"camera",

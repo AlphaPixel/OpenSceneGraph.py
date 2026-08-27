@@ -32,15 +32,29 @@ namespace pybind11x {
 namespace pyosg {
 
 void bind_Geometry(py::module_& m) {
-	py::class_<osg::PrimitiveFunctor>(m, "PrimitiveFunctor");
-	py::class_<osg::PrimitiveIndexFunctor>(m, "PrimitiveIndexFunctor");
+	py::class_<osg::PrimitiveFunctor>(
+		m,
+		"PrimitiveFunctor",
+		"Visitor interface for iterating over a Geometry's vertex data resolved to raw "
+		"primitives (triangles, lines, points)."
+	);
+	py::class_<osg::PrimitiveIndexFunctor>(
+		m,
+		"PrimitiveIndexFunctor",
+		"Like PrimitiveFunctor, but visits vertex indices rather than resolved vertex values."
+	);
 
 	auto ps = py::class_<
 		osg::PrimitiveSet,
 		detail::PrimitiveSet,
 		osg::BufferData,
 		osg::ref_ptr<osg::PrimitiveSet>
-	>(m, "PrimitiveSet");
+	>(
+		m,
+		"PrimitiveSet",
+		"Base class describing how a Geometry's vertex arrays are assembled into primitives "
+		"(draw mode, vertex count/order)."
+	);
 
 	py::enum_<osg::PrimitiveSet::Type>(ps, "Type")
 		.value("PrimitiveType", osg::PrimitiveSet::PrimitiveType)
@@ -106,7 +120,11 @@ void bind_Geometry(py::module_& m) {
 		)
 	;
 
-	py::class_<osg::DrawArrays, osg::PrimitiveSet, osg::ref_ptr<osg::DrawArrays>>(m, "DrawArrays")
+	py::class_<osg::DrawArrays, osg::PrimitiveSet, osg::ref_ptr<osg::DrawArrays>>(
+		m,
+		"DrawArrays",
+		"A PrimitiveSet that draws a contiguous run of vertices starting at a given index."
+	)
 		.def(py::init<GLenum>(), "mode"_a=0)
 		.def(py::init<GLenum, GLint, GLsizei, int>(),
 			"mode"_a,
@@ -119,7 +137,14 @@ void bind_Geometry(py::module_& m) {
 	;
 
 	// virtual void setUseVertexBufferObjects(bool flag);
-	auto geom = py::class_<osg::Geometry, osg::Drawable, osg::ref_ptr<osg::Geometry>>(m, "Geometry")
+	auto geom = py::class_<osg::Geometry, osg::Drawable, osg::ref_ptr<osg::Geometry>>(
+		m,
+		"Geometry",
+		"A Drawable built from vertex/color/normal arrays plus one or more PrimitiveSets "
+		"describing how to draw them. .vertexArray/.colorArray/.normalArray are settable "
+		"properties (alongside the traditional set*Array() methods), and .primitiveSets/"
+		".vertexAttrib are sequence/mapping proxies rather than add/get method pairs."
+	)
 		.def(py::init<>())
 		.def(py::init(pyx::kwargs_ctor<osg::Geometry>()))
 

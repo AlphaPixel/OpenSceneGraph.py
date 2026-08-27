@@ -19,7 +19,12 @@ namespace detail {
 }
 
 void bind_Quat(py::module_& m) {
-	auto quat = py::class_<osg::Quat>(m, "Quat")
+	auto quat = py::class_<osg::Quat>(
+		m,
+		"Quat",
+		"A quaternion for representing and composing 3D rotations, with the usual "
+		"multiply/slerp/inverse operations."
+	)
 		.def(py::init<>())
 		.def(py::init<const osg::Quat&>())
 		.def(py::init<const osg::Vec4f&>())

@@ -7,7 +7,12 @@ void bind_Array(py::module_& m) {
 		osg::Array,
 		osg::BufferData,
 		osg::ref_ptr<osg::Array>
-	>(m, "Array")
+	>(
+		m,
+		"Array",
+		"Base class for typed vertex/attribute arrays (ByteArray, FloatArray, Vec2Array, "
+		"Vec3Array, Vec4Array) bound to a Geometry or GPU buffer object."
+	)
 		.def_property_readonly("type", &osg::Array::getType)
 		.def_property_readonly("dataSize", &osg::Array::getDataSize)
 		.def_property_readonly("dataType", &osg::Array::getDataType)

@@ -3,7 +3,12 @@
 namespace pyosg {
 
 void bind_Uniform(py::module_& m) {
-	auto uniform = py::class_<osg::Uniform, osg::Object, osg::ref_ptr<osg::Uniform>>(m, "Uniform");
+	auto uniform = py::class_<osg::Uniform, osg::Object, osg::ref_ptr<osg::Uniform>>(
+		m,
+		"Uniform",
+		"A named shader uniform value (scalar, vector, matrix, or sampler), attached to a "
+		"StateSet and uploaded to a Program."
+	);
 
 	py::enum_<osg::Uniform::Type>(uniform, "Type")
 		.value("FLOAT", osg::Uniform::FLOAT)

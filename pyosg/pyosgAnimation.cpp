@@ -87,7 +87,12 @@ void bind(py::module_& m) {
 		osgAnimation::Motion,
 		osg::Referenced,
 		osg::ref_ptr<osgAnimation::Motion>
-	>(m, "Motion")
+	>(
+		m,
+		"Motion",
+		"Base class for a stateful animation driver (reset()/update(dt)/getValue()) built on "
+		"one of the easing curve functions (linear, inQuad, outBounce, etc.)."
+	)
 		.def("reset", &osgAnimation::Motion::reset)
 		.def_property("time", &osgAnimation::Motion::getTime, &osgAnimation::Motion::setTime)
 		.def("update", &osgAnimation::Motion::update, "dt"_a)
@@ -153,7 +158,11 @@ void bind(py::module_& m) {
 		osgAnimation::CompositeMotion,
 		osgAnimation::Motion,
 		osg::ref_ptr<osgAnimation::CompositeMotion>
-	>(m, "CompositeMotion")
+	>(
+		m,
+		"CompositeMotion",
+		"A Motion that sequences a list of child Motions end-to-end via addMotion()."
+	)
 		.def(py::init<float, float, float, osgAnimation::Motion::TimeBehaviour>(),
 			"startValue"_a=0.0f,
 			"duration"_a=1.0f,

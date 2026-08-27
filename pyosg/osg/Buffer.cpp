@@ -14,7 +14,11 @@ void bind_Buffer(py::module_& m) {
 		detail::BufferData,
 		osg::Object,
 		osg::ref_ptr<osg::BufferData>
-	>(m, "BufferData")
+	>(
+		m,
+		"BufferData",
+		"Base class for CPU-side data (Array, Image, etc.) that mirrors to a GPU BufferObject."
+	)
 		// .def(py::init_alias<>())
 		// .def(py::init<const osg::BufferData&>())
 
@@ -56,7 +60,11 @@ void bind_Buffer(py::module_& m) {
 		osg::GLBufferObject,
 		osg::Referenced,
 		osg::ref_ptr<osg::GLBufferObject>
-	>(m, "GLBufferObject")
+	>(
+		m,
+		"GLBufferObject",
+		"The live, per-GL-context buffer object (glGenBuffers() name) backing a compiled BufferObject."
+	)
 		.def_property_readonly("contextID", &osg::GLBufferObject::getContextID)
 		.def_property_readonly(
 			"glObjectID",
@@ -70,7 +78,12 @@ void bind_Buffer(py::module_& m) {
 		osg::BufferObject,
 		osg::Object,
 		osg::ref_ptr<osg::BufferObject>
-	>(m, "BufferObject")
+	>(
+		m,
+		"BufferObject",
+		"Base class for GPU buffer objects (SSBOs, UBOs, etc.) that hold one or more BufferData "
+		"arrays uploaded to the GPU."
+	)
 		// .def(py::init<>())
 		.def(
 			"glBufferObject",
@@ -84,7 +97,11 @@ void bind_Buffer(py::module_& m) {
 		osg::ShaderStorageBufferObject,
 		osg::BufferObject,
 		osg::ref_ptr<osg::ShaderStorageBufferObject>
-	>(m, "ShaderStorageBufferObject")
+	>(
+		m,
+		"ShaderStorageBufferObject",
+		"A GPU buffer object bound as an SSBO, used for arbitrary read/write shader storage."
+	)
 		.def(py::init<>())
 	;
 
@@ -92,7 +109,11 @@ void bind_Buffer(py::module_& m) {
 		osg::UniformBufferObject,
 		osg::BufferObject,
 		osg::ref_ptr<osg::UniformBufferObject>
-	>(m, "UniformBufferObject")
+	>(
+		m,
+		"UniformBufferObject",
+		"A GPU buffer object bound as a UBO, used to share a block of uniforms between shader stages."
+	)
 		.def(py::init<>())
 	;
 }

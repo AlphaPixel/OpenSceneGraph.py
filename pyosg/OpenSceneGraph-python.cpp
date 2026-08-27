@@ -91,32 +91,83 @@ std::string pyosg_async_task_example(
 }
 
 PYBIND11_MODULE(PYOSG_MODULE_NAME, m) {
+	m.doc() = (
+		"Python bindings for OpenSceneGraph. Stays as close to the native OSG C++ API as is "
+		"reasonable -- same class names, same namespaces (osg, osgAnimation, osgUtil, osgDB, "
+		"osgGA, osgViewer as submodules) -- and only diverges where it makes the API feel "
+		"Pythonic:\n"
+		"\n"
+		"- Container-style getters/setters/add*/remove* (osg::Group::addChild, "
+		"osg::Geode::addDrawable, osg::StateSet::setAttribute, etc.) are replaced by a single "
+		"semantic proxy property (Group.children, Geode.drawables, StateSet.attributes, ...) "
+		"supporting normal Python sequence/mapping protocol: indexing, iteration, "
+		"append/extend, __contains__, etc.\n"
+		"- Most objects can be constructed either the traditional way (default-construct then "
+		"call setters) or with keyword arguments at construction time -- "
+		"osg.Node(name=\"n\", nodeMask=1) -- both paths end up calling the same setters.\n"
+		"- Anywhere OSG expects a callback object (NodeCallback, DrawCallback, "
+		"GUIEventHandler, ...), a plain Python callable works too, alongside the traditional "
+		"subclass-and-override approach.\n"
+		"- Python object identity for a given underlying C++/OSG instance is kept stable "
+		"across repeated property/proxy access -- the same osg::Node accessed twice through "
+		"group.children[0] returns the same Python object both times, not two independent "
+		"wrappers -- without relying on pybind11's keep_alive<>, which can outlive its "
+		"C++ owner and never release it.\n"
+		"\n"
+		"See https://github.com/AlphaPixel/OpenSceneGraph.py for the full rationale and "
+		"examples."
+	);
+
 	// The wheel owns its deliberately supported osgDB plugins. Register their
 	// private directory when the core module imports, so loading a packaged
 	// format does not require an otherwise unrelated `import osgx`.
 	add_packaged_plugin_path(m);
 
-	auto osg = m.def_submodule("osg", "osg namespace");
+	auto osg = m.def_submodule(
+		"osg",
+		"Core OSG namespace: the scene graph (Node/Group/Geode/Geometry), rendering state "
+		"(StateSet/StateAttribute/Texture/Program/Uniform), and math/data types (Quat, Array, "
+		"Image)."
+	);
 
 	pyosg::bind(osg);
 
-	auto osgAnimation = m.def_submodule("osgAnimation", "osgAnimation namespace");
+	auto osgAnimation = m.def_submodule(
+		"osgAnimation",
+		"Easing-curve functions (linear, inQuad, outBounce, etc.) and the stateful Motion "
+		"drivers built on them."
+	);
 
 	pyosgAnimation::bind(osgAnimation);
 
-	auto osgUtil = m.def_submodule("osgUtil", "osgUtil namespace");
+	auto osgUtil = m.def_submodule(
+		"osgUtil",
+		"Scene graph traversal utilities, currently just UpdateVisitor."
+	);
 
 	pyosgUtil::bind(osgUtil);
 
-	auto osgDB = m.def_submodule("osgDB", "osgDB namespace");
+	auto osgDB = m.def_submodule(
+		"osgDB",
+		"File I/O: the ReaderWriter plugin Registry, Options, and the readXFile()/writeXFile() "
+		"module-level helpers."
+	);
 
 	pyosgDB::bind(osgDB);
 
-	auto osgGA = m.def_submodule("osgGA", "osgGA namespace");
+	auto osgGA = m.def_submodule(
+		"osgGA",
+		"GUI/event-handling namespace: input events (GUIEventAdapter), event handlers "
+		"(GUIEventHandler), and camera manipulators (CameraManipulator, TrackballManipulator)."
+	);
 
 	pyosgGA::bind(osgGA);
 
-	auto osgViewer = m.def_submodule("osgViewer", "osgViewer namespace");
+	auto osgViewer = m.def_submodule(
+		"osgViewer",
+		"Application-facing namespace: Viewer, View, and the windowing/graphics-context types "
+		"that tie a scene, a camera, and an OS window together."
+	);
 
 	pyosgViewer::bind(osgViewer);
 
@@ -179,7 +230,12 @@ PYBIND11_MODULE(PYOSG_MODULE_NAME, m) {
 
 	atexit.attr("register")( py::cpp_function([]() { })); */
 
-	py::class_<pyx::StopEvent>(m, "StopEvent")
+	py::class_<pyx::StopEvent>(
+		m,
+		"StopEvent",
+		"A cross-thread cancellation flag: set from Python via stop() and polled from a "
+		"background C++ task to request early exit."
+	)
 		.def(py::init<>())
 		.def("stop", [](pyx::StopEvent& t) { t.stop.store(true); })
 	;
