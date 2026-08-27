@@ -35,6 +35,25 @@ void bind_GraphicsContext(py::module_& m) {
 			&osg::DisplaySettings::getNumMultiSamples,
 			&osg::DisplaySettings::setNumMultiSamples
 		)
+		// The REQUESTED GL context (from OSG_GL_VERSION/OSG_GL_CONTEXT_VERSION and
+		// OSG_GL_CONTEXT_PROFILE_MASK, read automatically into these fields the moment this
+		// singleton is first constructed) -- compare against the ACTUALLY negotiated context
+		// via State.glExtensions.glVersion to confirm a request was honored, not just made.
+		.def_property(
+			"glContextVersion",
+			&osg::DisplaySettings::getGLContextVersion,
+			&osg::DisplaySettings::setGLContextVersion
+		)
+		.def_property(
+			"glContextProfileMask",
+			&osg::DisplaySettings::getGLContextProfileMask,
+			&osg::DisplaySettings::setGLContextProfileMask
+		)
+		.def_property(
+			"glContextFlags",
+			&osg::DisplaySettings::getGLContextFlags,
+			&osg::DisplaySettings::setGLContextFlags
+		)
 	;
 
 	auto gc = py::class_<
@@ -67,6 +86,11 @@ void bind_GraphicsContext(py::module_& m) {
 			static_cast<osg::State*(osg::GraphicsContext::*)()>(&osg::GraphicsContext::getState),
 			py::return_value_policy::reference
 		)
+		// The Traits this context was actually realized with -- e.g. traits.glContextVersion
+		// to confirm what a DisplaySettings request (see DisplaySettings.glContextVersion
+		// above) resolved to on THIS context specifically, independent of what
+		// State.glExtensions.glVersion later reports the driver actually granted.
+		.def_property_readonly("traits", &osg::GraphicsContext::getTraits)
 	;
 
 	py::class_<osg::GraphicsContext::ScreenIdentifier>(gc, "ScreenIdentifier")
@@ -92,6 +116,9 @@ void bind_GraphicsContext(py::module_& m) {
 		.def_readwrite("y", &osg::GraphicsContext::Traits::y)
 		.def_readwrite("width", &osg::GraphicsContext::Traits::width)
 		.def_readwrite("height", &osg::GraphicsContext::Traits::height)
+		.def_readwrite("glContextVersion", &osg::GraphicsContext::Traits::glContextVersion)
+		.def_readwrite("glContextProfileMask", &osg::GraphicsContext::Traits::glContextProfileMask)
+		.def_readwrite("glContextFlags", &osg::GraphicsContext::Traits::glContextFlags)
 	;
 
 	// struct ScreenSettings {

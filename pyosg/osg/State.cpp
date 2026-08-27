@@ -29,6 +29,57 @@ void bind_State(py::module_& m) {
 		)
 	;
 
+	// Per-context capability/version info, populated by OSG itself from the live driver once a
+	// GraphicsContext has been realized -- the answer to "what GL version/profile did this
+	// context actually negotiate", as opposed to what OSG was compiled to SUPPORT (a fixed,
+	// build-time property that doesn't vary per install of this project's own GL3/CORE-only
+	// wheels). Only the plain informational fields are bound here, not the ~300 raw GL function
+	// pointers GLExtensions also carries -- those aren't meaningfully callable from Python and
+	// are out of scope for what this binding is for.
+	py::class_<
+		osg::GLExtensions,
+		osg::Referenced,
+		osg::ref_ptr<osg::GLExtensions>
+	>(
+		m,
+		"GLExtensions",
+		"Per-GL-context capability/version info, reached via State.glExtensions."
+	)
+		.def_readonly("contextID", &osg::GLExtensions::contextID)
+		.def_readonly("glVersion", &osg::GLExtensions::glVersion)
+		.def_readonly("glslLanguageVersion", &osg::GLExtensions::glslLanguageVersion)
+		.def_readonly("isGlslSupported", &osg::GLExtensions::isGlslSupported)
+		.def_readonly("isShaderObjectsSupported", &osg::GLExtensions::isShaderObjectsSupported)
+		.def_readonly("isVertexShaderSupported", &osg::GLExtensions::isVertexShaderSupported)
+		.def_readonly("isFragmentShaderSupported", &osg::GLExtensions::isFragmentShaderSupported)
+		.def_readonly("isLanguage100Supported", &osg::GLExtensions::isLanguage100Supported)
+		.def_readonly(
+			"isGeometryShader4Supported",
+			&osg::GLExtensions::isGeometryShader4Supported
+		)
+		.def_readonly(
+			"areTessellationShadersSupported",
+			&osg::GLExtensions::areTessellationShadersSupported
+		)
+		.def_readonly("isGpuShader4Supported", &osg::GLExtensions::isGpuShader4Supported)
+		.def_readonly(
+			"isUniformBufferObjectSupported",
+			&osg::GLExtensions::isUniformBufferObjectSupported
+		)
+		.def_readonly(
+			"isGetProgramBinarySupported",
+			&osg::GLExtensions::isGetProgramBinarySupported
+		)
+		.def_readonly("isGpuShaderFp64Supported", &osg::GLExtensions::isGpuShaderFp64Supported)
+		.def_readonly(
+			"isShaderAtomicCountersSupported",
+			&osg::GLExtensions::isShaderAtomicCountersSupported
+		)
+		.def_readonly("isRectangleSupported", &osg::GLExtensions::isRectangleSupported)
+		.def_readonly("isCubeMapSupported", &osg::GLExtensions::isCubeMapSupported)
+		.def_readonly("isClipControlSupported", &osg::GLExtensions::isClipControlSupported)
+	;
+
 	py::class_<osg::State, osg::Referenced, osg::ref_ptr<osg::State>>(
 		m,
 		"State",
@@ -40,6 +91,13 @@ void bind_State(py::module_& m) {
 			py::return_value_policy::reference_internal
 		)
 		.def_property_readonly("contextID", &osg::State::getContextID)
+		// Not cached via a PropertySlot like most other ref_ptr-returning properties here --
+		// osg::GLExtensions::Get() already IS the per-contextID cache (a static registry OSG
+		// itself owns), a second identity cache on top of it would only add complexity for no
+		// benefit.
+		.def_property_readonly("glExtensions", [](osg::State& self) {
+			return osg::GLExtensions::Get(self.getContextID(), true);
+		})
 		/* .def("getGraphicsContext",
 			&osg::State::getGraphicsContext,
 			py::return_value_policy::reference

@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.18)
 
-project(OpenSceneGraph-python LANGUAGES C CXX)
+# The single version of record. pyproject.toml's [project] version is dynamic and reads this
+# VERSION back out via scikit-build-core's regex provider (see [[tool.dynamic-metadata]]), so
+# PROJECT_VERSION here, PYOSG_VERSION at runtime, and the wheel's metadata version all agree.
+project(OpenSceneGraph-python VERSION 0.1.0 LANGUAGES C CXX)
 
 # An extension module needs Python headers but must not link to libpython on
 # Unix. manylinux deliberately omits that embedding library, so request the
@@ -42,6 +45,7 @@ set(PYOSG_OSG_PLUGIN_DIR "osgPlugins-3.6.5"
 set(PYOSG_PACKAGED_EXAMPLES
 	"pyosg-blur.py=blur.py"
 	"pyosg-mrt.py=mrt.py"
+	"pyosg-info.py=info.py"
 	"pyosg_visitor.py=pyosg_visitor.py"
 )
 
@@ -452,6 +456,7 @@ if(NOT PYOSG_EMBEDDED)
 	target_compile_definitions(_OpenSceneGraph PRIVATE
 		PYOSG_MODULE_NAME=_OpenSceneGraph
 		PYOSG_OSG_PLUGIN_DIR="${PYOSG_OSG_PLUGIN_DIR}"
+		PYOSG_VERSION="${PROJECT_VERSION}"
 	)
 
 	# Keep the extension and project-built OSG libraries together in the wheel.
@@ -530,7 +535,10 @@ else()
 		"etc/embed.cpp"
 	)
 
-	target_compile_definitions(embed PRIVATE PYOSG_EMBEDDED=1)
+	target_compile_definitions(embed PRIVATE
+		PYOSG_EMBEDDED=1
+		PYOSG_VERSION="${PROJECT_VERSION}"
+	)
 	target_link_libraries(embed PRIVATE Python3::Python pybind11::embed OpenSceneGraph_python)
 	target_include_directories(embed PRIVATE "${CMAKE_SOURCE_DIR}/pyosg")
 endif()

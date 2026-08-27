@@ -4,6 +4,7 @@
 
 OSGX_DISABLE_WARNINGS
 
+#include <osg/GLExtensions>
 #include <osg/Node>
 #include <osg/State>
 #include <osg/StateAttribute>

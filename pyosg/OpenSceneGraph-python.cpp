@@ -214,6 +214,7 @@ PYBIND11_MODULE(PYOSG_MODULE_NAME, m) {
 	// ============================================================================================
 	py::dict info;
 
+	info["version"] = PYOSG_VERSION;
 	info["osg"] = osgGetVersion();
 
 	pyx::build_info(m, info);
