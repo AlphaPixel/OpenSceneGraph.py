@@ -19,7 +19,7 @@ void bind(py::module_& m) {
 		"A NodeVisitor that runs each Node's updateCallback once per frame, driving "
 		"animation and other per-frame logic."
 	)
-		.def(py::init<>())
+		.def(py::init<>(), "Create an update visitor.")
 	;
 }
 

@@ -1490,12 +1490,22 @@ struct PYOBJECT_INTERNAL ValueMappingProxy {
 // - `Proxy` can be any of `SequenceProxy`/`MappingProxy`/`ValueMappingProxy`, they all expose the
 // same `::bind(py::handle, const char*)` static method this relies on.
 template<typename Proxy, typename Owner, typename Storage, typename PyClass>
-PyClass& bind_proxy_property(PyClass& cls, const char* internal_name, const char* property_name) {
+PyClass& bind_proxy_property(
+	PyClass& cls,
+	const char* internal_name,
+	const char* property_name,
+	const char* doc=nullptr
+) {
 	Proxy::bind(cls, internal_name);
 
-	cls.def_property_readonly(property_name, [](Owner& self) -> Proxy& {
-		return Storage::get(self)->template proxy<Proxy>();
-	}, py::return_value_policy::reference_internal);
+	auto getter = [](Owner& self) -> Proxy& { return Storage::get(self)->template proxy<Proxy>(); };
+
+	cls.def_property_readonly(
+		property_name,
+		getter,
+		py::return_value_policy::reference_internal,
+		doc
+	);
 
 	return cls;
 }

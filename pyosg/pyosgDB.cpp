@@ -19,10 +19,15 @@ void bind(py::module_& m) {
 		.def_static(
 			"instance",
 			&osgDB::Registry::instance,
-			"erase"_a=false
+			"erase"_a=false,
+			"Return the process-wide ReaderWriter registry singleton."
 		)
-		.def("getReaderWriterForExtension", &osgDB::Registry::getReaderWriterForExtension)
-		.def("getReaderWriterForMimeType", &osgDB::Registry::getReaderWriterForMimeType)
+		.def("getReaderWriterForExtension", &osgDB::Registry::getReaderWriterForExtension,
+			"Return the plugin registered for a filename extension."
+		)
+		.def("getReaderWriterForMimeType", &osgDB::Registry::getReaderWriterForMimeType,
+			"Return the plugin registered for a MIME type."
+		)
 	;
 
 	auto opts = py::class_<osgDB::Options, osg::Object, osg::ref_ptr<osgDB::Options>>(
@@ -32,7 +37,9 @@ void bind(py::module_& m) {
 		"ReaderWriter or the readXFile()/writeXFile() helpers."
 	);
 
-	py::enum_<osgDB::Options::CacheHintOptions>(opts, "CacheHintOptions", py::arithmetic())
+	py::enum_<osgDB::Options::CacheHintOptions>(opts, "CacheHintOptions", py::arithmetic(),
+		"Control which resource types a ReaderWriter may cache."
+	)
 		.value("CACHE_NONE", osgDB::Options::CACHE_NONE)
 		.value("CACHE_NODES", osgDB::Options::CACHE_NODES)
 		.value("CACHE_IMAGES", osgDB::Options::CACHE_IMAGES)
@@ -44,7 +51,9 @@ void bind(py::module_& m) {
 		.export_values()
 	;
 
-	py::enum_<osgDB::Options::PrecisionHint>(opts, "PrecisionHint", py::arithmetic())
+	py::enum_<osgDB::Options::PrecisionHint>(opts, "PrecisionHint", py::arithmetic(),
+		"Request double precision for selected data written by a ReaderWriter."
+	)
 		.value("FLOAT_PRECISION_ALL", osgDB::Options::FLOAT_PRECISION_ALL)
 		.value("DOUBLE_PRECISION_VERTEX", osgDB::Options::DOUBLE_PRECISION_VERTEX)
 		.value("DOUBLE_PRECISION_NORMAL", osgDB::Options::DOUBLE_PRECISION_NORMAL)
@@ -57,7 +66,9 @@ void bind(py::module_& m) {
 		.export_values()
 	;
 
-	py::enum_<osgDB::Options::BuildKdTreesHint>(opts, "BuildKdTreesHint")
+	py::enum_<osgDB::Options::BuildKdTreesHint>(opts, "BuildKdTreesHint",
+		"Control whether a ReaderWriter builds acceleration kd-trees."
+	)
 		.value("NO_PREFERENCE", osgDB::Options::NO_PREFERENCE)
 		.value("DO_NOT_BUILD_KDTREES", osgDB::Options::DO_NOT_BUILD_KDTREES)
 		.value("BUILD_KDTREES", osgDB::Options::BUILD_KDTREES)
@@ -65,11 +76,12 @@ void bind(py::module_& m) {
 	;
 
 	opts
-		.def(py::init<>())
+		.def(py::init<>(), "Create options with OSG's default settings.")
 		.def_property(
 			"optionString",
 			&osgDB::Options::getOptionString,
-			&osgDB::Options::setOptionString
+			&osgDB::Options::setOptionString,
+			"Plugin-specific option string passed to a ReaderWriter."
 		)
 		// TODO: *PluginStringData as `MappingProxy`
 	;
@@ -84,7 +96,7 @@ void bind(py::module_& m) {
 		"Base class for a file-format plugin (registered with Registry) that reads/writes "
 		"Objects, Nodes, and Images for a given extension."
 	)
-		.def(py::init<>())
+		.def(py::init<>(), "Create a ReaderWriter base instance.")
 		.def(
 			"writeObject",
 			py::overload_cast<
@@ -94,7 +106,8 @@ void bind(py::module_& m) {
 			>(&osgDB::ReaderWriter::writeObject, py::const_),
 			"object"_a,
 			"path"_a,
-			"options"_a=nullptr
+			"options"_a=nullptr,
+			"Write object to path and return the WriteResult."
 		)
 		.def("writeObject", [](
 			osgDB::ReaderWriter& self,
@@ -108,13 +121,18 @@ void bind(py::module_& m) {
 			return py::make_tuple(r, oss.str());
 		},
 			"object"_a,
-			"options"_a=nullptr
+			"options"_a=nullptr,
+			"Write object to a string and return its WriteResult and text."
 		)
 	;
 
-	auto rr = py::class_<osgDB::ReaderWriter::ReadResult>(rw, "ReadResult");
+	auto rr = py::class_<osgDB::ReaderWriter::ReadResult>(rw, "ReadResult",
+		"Result returned by a ReaderWriter read operation."
+	);
 
-	py::enum_<osgDB::ReaderWriter::ReadResult::ReadStatus>(rr, "ReadStatus")
+	py::enum_<osgDB::ReaderWriter::ReadResult::ReadStatus>(rr, "ReadStatus",
+		"Describe the outcome of a ReaderWriter read operation."
+	)
 		.value("NOT_IMPLEMENTED", osgDB::ReaderWriter::ReadResult::NOT_IMPLEMENTED)
 		.value("FILE_NOT_HANDLED", osgDB::ReaderWriter::ReadResult::FILE_NOT_HANDLED)
 		.value("FILE_NOT_FOUND", osgDB::ReaderWriter::ReadResult::FILE_NOT_FOUND)
@@ -132,13 +150,18 @@ void bind(py::module_& m) {
 	rr
 		.def_property_readonly(
 			"message",
-			py::overload_cast<>(&osgDB::ReaderWriter::ReadResult::message, py::const_)
+			py::overload_cast<>(&osgDB::ReaderWriter::ReadResult::message, py::const_),
+			"Diagnostic message supplied by the ReaderWriter."
 		)
 	;
 
-	auto wr = py::class_<osgDB::ReaderWriter::WriteResult>(rw, "WriteResult");
+	auto wr = py::class_<osgDB::ReaderWriter::WriteResult>(rw, "WriteResult",
+		"Result returned by a ReaderWriter write operation."
+	);
 
-	py::enum_<osgDB::ReaderWriter::WriteResult::WriteStatus>(wr, "WriteStatus")
+	py::enum_<osgDB::ReaderWriter::WriteResult::WriteStatus>(wr, "WriteStatus",
+		"Describe the outcome of a ReaderWriter write operation."
+	)
 		.value("NOT_IMPLEMENTED", osgDB::ReaderWriter::WriteResult::NOT_IMPLEMENTED)
 		.value("FILE_NOT_HANDLED", osgDB::ReaderWriter::WriteResult::FILE_NOT_HANDLED)
 		.value("ERROR_IN_WRITING_FILE", osgDB::ReaderWriter::WriteResult::ERROR_IN_WRITING_FILE)
@@ -147,10 +170,13 @@ void bind(py::module_& m) {
 	;
 
 	wr
-		.def_property_readonly("status", &osgDB::ReaderWriter::WriteResult::status)
+		.def_property_readonly("status", &osgDB::ReaderWriter::WriteResult::status,
+			"Status code returned by the ReaderWriter."
+		)
 		.def_property_readonly(
 			"message",
-			py::overload_cast<>(&osgDB::ReaderWriter::WriteResult::message, py::const_)
+			py::overload_cast<>(&osgDB::ReaderWriter::WriteResult::message, py::const_),
+			"Diagnostic message supplied by the ReaderWriter."
 		)
 	;
 

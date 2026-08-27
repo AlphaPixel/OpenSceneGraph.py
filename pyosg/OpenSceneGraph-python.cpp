@@ -237,8 +237,10 @@ PYBIND11_MODULE(PYOSG_MODULE_NAME, m) {
 		"A cross-thread cancellation flag: set from Python via stop() and polled from a "
 		"background C++ task to request early exit."
 	)
-		.def(py::init<>())
-		.def("stop", [](pyx::StopEvent& t) { t.stop.store(true); })
+		.def(py::init<>(), "Create an unset cancellation flag.")
+		.def("stop", [](pyx::StopEvent& t) { t.stop.store(true); },
+			"Request that the associated background task stop early."
+		)
 	;
 
 	m.def("pyosg_async_task_example",
@@ -247,6 +249,7 @@ PYBIND11_MODULE(PYOSG_MODULE_NAME, m) {
 		"stop_event"_a,
 		"loop"_a,
 		"queue"_a,
-		"job_id"_a
+		"job_id"_a,
+		"Run the cancellable background-task example used by the async integration tests."
 	);
 }

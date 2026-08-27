@@ -87,8 +87,10 @@ CHAIN_CALL_RE = re.compile(r'\.(\w+)\s*\(')
 # pyosg/ for every Sequence/Mapping-proxied member (Geode.drawables, Group.children, ...). It
 # never appears as a chained `.method()` call, so it needs its own scan -- see scan_text().
 BIND_PROXY_PROPERTY_RE = re.compile(r"pyx::bind_proxy_property\s*<")
+# Reopened fluent chains normally put the owner and `.def*()` on separate lines, e.g.
+# `quat\n\t.def_property(...)`, so whitespace is allowed on both sides of the dot.
 MODULE_CALL_RE = re.compile(
-	r'\b(\w+)\.(def_static|def_property_readonly|def_property|def_readwrite|def_readonly|def)\s*\('
+	r'\b(\w+)\s*\.\s*(def_static|def_property_readonly|def_property|def_readwrite|def_readonly|def)\s*\('
 )
 ATTR_ASSIGN_RE = re.compile(r'\b(\w+)\.attr\(\s*"([^"]+)"\s*\)\s*=')
 
@@ -345,7 +347,8 @@ def scan_text(text: str) -> tuple[list[Symbol], dict[str, str]]:
 			var_to_symbol[var_name] = symbol
 
 	# Only the SECOND string argument (the public name) is a real Python-visible symbol here --
-	# the first is `bind_proxy_property`'s internal implementation-detail name, never exposed.
+	# the first is `bind_proxy_property`'s internal implementation-detail name, and an optional
+	# third string is its docstring.
 	for m in BIND_PROXY_PROPERTY_RE.finditer(text):
 		angle_close = find_matching(text, m.end() - 1, "<", ">", skip_strings=False)
 		paren_open = text.find("(", angle_close)
@@ -365,13 +368,13 @@ def scan_text(text: str) -> tuple[list[Symbol], dict[str, str]]:
 			continue
 
 		owner = first_identifier(call_args)
-		proxy_symbol = Symbol("property_readonly", names[-1])
+		proxy_symbol = Symbol("property_readonly", names[1])
 
 		if owner in var_to_symbol:
 			var_to_symbol[owner].children.append(proxy_symbol)
 		else:
 			symbols.append(proxy_symbol)
-			owners[names[-1]] = owner or ""
+			owners[names[1]] = owner or ""
 
 	def is_consumed(pos: int) -> bool:
 		return any(s <= pos < e for s, e in consumed)
@@ -380,22 +383,30 @@ def scan_text(text: str) -> tuple[list[Symbol], dict[str, str]]:
 		if is_consumed(m.start()):
 			continue
 
+		# A reopened fluent chain has an owner only before its first call:
+		# `opts\n\t.def(...)\n\t.def_property(...)`. Walk the complete chain here rather
+		# than treating that first call as a standalone registration.
 		call_open = m.end() - 1
 		call_close = find_matching(text, call_open, "(", ")", skip_strings=True)
-		name = first_name_literal(text[call_open + 1:call_close - 1])
+		chain_end = find_chain_end(text, call_close)
+		owner_var = m.group(1)
 
-		if name is None:
-			continue
+		for method, name, arg_text in scan_chain_calls(text, m.start(), chain_end):
+			if method == "def" and arg_text.lstrip().startswith("py::init"):
+				name = "__init__"
 
-		owner_var, method = m.group(1), m.group(2)
-		kind = "function" if method in ("def", "def_static") else "module_property"
-		symbol = Symbol(kind, name)
+			if name is None:
+				continue
 
-		if owner_var in var_to_symbol:
-			var_to_symbol[owner_var].children.append(symbol)
-		else:
-			symbols.append(symbol)
-			owners[name] = owner_var
+			if owner_var in var_to_symbol:
+				kind = "constructor" if name == "__init__" else CHILD_KIND_BY_METHOD[method]
+				symbol = Symbol(kind, name)
+				var_to_symbol[owner_var].children.append(symbol)
+			else:
+				kind = "function" if method in ("def", "def_static") else "module_property"
+				symbol = Symbol(kind, name)
+				symbols.append(symbol)
+				owners[name] = owner_var
 
 	for m in ATTR_ASSIGN_RE.finditer(text):
 		if is_consumed(m.start()):

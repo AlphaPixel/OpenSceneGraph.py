@@ -41,43 +41,99 @@ namespace detail {
 }
 
 void bind(py::module_& m) {
-	m.def("linear", detail::wrap(osgAnimation::LinearFunction::getValueAt), "t"_a);
+	m.def("linear", detail::wrap(osgAnimation::LinearFunction::getValueAt), "t"_a,
+		"Evaluate the linear easing curve at normalized time t."
+	);
 
-	m.def("inQuad", detail::wrap(osgAnimation::InQuadFunction::getValueAt), "t"_a);
-	m.def("outQuad", detail::wrap(osgAnimation::OutQuadFunction::getValueAt), "t"_a);
-	m.def("inOutQuad", detail::wrap(osgAnimation::InOutQuadFunction::getValueAt), "t"_a);
+	m.def("inQuad", detail::wrap(osgAnimation::InQuadFunction::getValueAt), "t"_a,
+		"Evaluate the quadratic ease-in curve at normalized time t."
+	);
+	m.def("outQuad", detail::wrap(osgAnimation::OutQuadFunction::getValueAt), "t"_a,
+		"Evaluate the quadratic ease-out curve at normalized time t."
+	);
+	m.def("inOutQuad", detail::wrap(osgAnimation::InOutQuadFunction::getValueAt), "t"_a,
+		"Evaluate the quadratic ease-in-out curve at normalized time t."
+	);
 
-	m.def("inCubic", detail::wrap(osgAnimation::InCubicFunction::getValueAt), "t"_a);
-	m.def("outCubic", detail::wrap(osgAnimation::OutCubicFunction::getValueAt), "t"_a);
-	m.def("inOutCubic", detail::wrap(osgAnimation::InOutCubicFunction::getValueAt), "t"_a);
+	m.def("inCubic", detail::wrap(osgAnimation::InCubicFunction::getValueAt), "t"_a,
+		"Evaluate the cubic ease-in curve at normalized time t."
+	);
+	m.def("outCubic", detail::wrap(osgAnimation::OutCubicFunction::getValueAt), "t"_a,
+		"Evaluate the cubic ease-out curve at normalized time t."
+	);
+	m.def("inOutCubic", detail::wrap(osgAnimation::InOutCubicFunction::getValueAt), "t"_a,
+		"Evaluate the cubic ease-in-out curve at normalized time t."
+	);
 
-	m.def("inQuart", detail::wrap(osgAnimation::InQuartFunction::getValueAt), "t"_a);
-	m.def("outQuart", detail::wrap(osgAnimation::OutQuartFunction::getValueAt), "t"_a);
-	m.def("inOutQuart", detail::wrap(osgAnimation::InOutQuartFunction::getValueAt), "t"_a);
+	m.def("inQuart", detail::wrap(osgAnimation::InQuartFunction::getValueAt), "t"_a,
+		"Evaluate the quartic ease-in curve at normalized time t."
+	);
+	m.def("outQuart", detail::wrap(osgAnimation::OutQuartFunction::getValueAt), "t"_a,
+		"Evaluate the quartic ease-out curve at normalized time t."
+	);
+	m.def("inOutQuart", detail::wrap(osgAnimation::InOutQuartFunction::getValueAt), "t"_a,
+		"Evaluate the quartic ease-in-out curve at normalized time t."
+	);
 
-	m.def("inBounce", detail::wrap(osgAnimation::InBounceFunction::getValueAt), "t"_a);
-	m.def("outBounce", detail::wrap(osgAnimation::OutBounceFunction::getValueAt), "t"_a);
-	m.def("inOutBounce", detail::wrap(osgAnimation::InOutBounceFunction::getValueAt), "t"_a);
+	m.def("inBounce", detail::wrap(osgAnimation::InBounceFunction::getValueAt), "t"_a,
+		"Evaluate the bouncing ease-in curve at normalized time t."
+	);
+	m.def("outBounce", detail::wrap(osgAnimation::OutBounceFunction::getValueAt), "t"_a,
+		"Evaluate the bouncing ease-out curve at normalized time t."
+	);
+	m.def("inOutBounce", detail::wrap(osgAnimation::InOutBounceFunction::getValueAt), "t"_a,
+		"Evaluate the bouncing ease-in-out curve at normalized time t."
+	);
 
-	m.def("inElastic", detail::wrap(osgAnimation::InElasticFunction::getValueAt), "t"_a);
-	m.def("outElastic", detail::wrap(osgAnimation::OutElasticFunction::getValueAt), "t"_a);
-	m.def("inOutElastic", detail::wrap(osgAnimation::InOutElasticFunction::getValueAt), "t"_a);
+	m.def("inElastic", detail::wrap(osgAnimation::InElasticFunction::getValueAt), "t"_a,
+		"Evaluate the elastic ease-in curve at normalized time t."
+	);
+	m.def("outElastic", detail::wrap(osgAnimation::OutElasticFunction::getValueAt), "t"_a,
+		"Evaluate the elastic ease-out curve at normalized time t."
+	);
+	m.def("inOutElastic", detail::wrap(osgAnimation::InOutElasticFunction::getValueAt), "t"_a,
+		"Evaluate the elastic ease-in-out curve at normalized time t."
+	);
 
-	m.def("inSine", detail::wrap(osgAnimation::InSineFunction::getValueAt), "t"_a);
-	m.def("outSine", detail::wrap(osgAnimation::OutSineFunction::getValueAt), "t"_a);
-	m.def("inOutSine", detail::wrap(osgAnimation::InOutSineFunction::getValueAt), "t"_a);
+	m.def("inSine", detail::wrap(osgAnimation::InSineFunction::getValueAt), "t"_a,
+		"Evaluate the sinusoidal ease-in curve at normalized time t."
+	);
+	m.def("outSine", detail::wrap(osgAnimation::OutSineFunction::getValueAt), "t"_a,
+		"Evaluate the sinusoidal ease-out curve at normalized time t."
+	);
+	m.def("inOutSine", detail::wrap(osgAnimation::InOutSineFunction::getValueAt), "t"_a,
+		"Evaluate the sinusoidal ease-in-out curve at normalized time t."
+	);
 
-	m.def("inBack", detail::wrap(osgAnimation::InBackFunction::getValueAt), "t"_a);
-	m.def("outBack", detail::wrap(osgAnimation::OutBackFunction::getValueAt), "t"_a);
-	m.def("inOutBack", detail::wrap(osgAnimation::InOutBackFunction::getValueAt), "t"_a);
+	m.def("inBack", detail::wrap(osgAnimation::InBackFunction::getValueAt), "t"_a,
+		"Evaluate the overshooting ease-in curve at normalized time t."
+	);
+	m.def("outBack", detail::wrap(osgAnimation::OutBackFunction::getValueAt), "t"_a,
+		"Evaluate the overshooting ease-out curve at normalized time t."
+	);
+	m.def("inOutBack", detail::wrap(osgAnimation::InOutBackFunction::getValueAt), "t"_a,
+		"Evaluate the overshooting ease-in-out curve at normalized time t."
+	);
 
-	m.def("inCirc", detail::wrap(osgAnimation::InCircFunction::getValueAt), "t"_a);
-	m.def("outCirc", detail::wrap(osgAnimation::OutCircFunction::getValueAt), "t"_a);
-	m.def("inOutCirc", detail::wrap(osgAnimation::InOutCircFunction::getValueAt), "t"_a);
+	m.def("inCirc", detail::wrap(osgAnimation::InCircFunction::getValueAt), "t"_a,
+		"Evaluate the circular ease-in curve at normalized time t."
+	);
+	m.def("outCirc", detail::wrap(osgAnimation::OutCircFunction::getValueAt), "t"_a,
+		"Evaluate the circular ease-out curve at normalized time t."
+	);
+	m.def("inOutCirc", detail::wrap(osgAnimation::InOutCircFunction::getValueAt), "t"_a,
+		"Evaluate the circular ease-in-out curve at normalized time t."
+	);
 
-	m.def("inExpo", detail::wrap(osgAnimation::InExpoFunction::getValueAt), "t"_a);
-	m.def("outExpo", detail::wrap(osgAnimation::OutExpoFunction::getValueAt), "t"_a);
-	m.def("inOutExpo", detail::wrap(osgAnimation::InOutExpoFunction::getValueAt), "t"_a);
+	m.def("inExpo", detail::wrap(osgAnimation::InExpoFunction::getValueAt), "t"_a,
+		"Evaluate the exponential ease-in curve at normalized time t."
+	);
+	m.def("outExpo", detail::wrap(osgAnimation::OutExpoFunction::getValueAt), "t"_a,
+		"Evaluate the exponential ease-out curve at normalized time t."
+	);
+	m.def("inOutExpo", detail::wrap(osgAnimation::InOutExpoFunction::getValueAt), "t"_a,
+		"Evaluate the exponential ease-in-out curve at normalized time t."
+	);
 
 	// ============================================================================================
 	// Motion - stateful drivers (reset()/update(dt)/getValue()) built on the same curves above.
@@ -93,19 +149,33 @@ void bind(py::module_& m) {
 		"Base class for a stateful animation driver (reset()/update(dt)/getValue()) built on "
 		"one of the easing curve functions (linear, inQuad, outBounce, etc.)."
 	)
-		.def("reset", &osgAnimation::Motion::reset)
-		.def_property("time", &osgAnimation::Motion::getTime, &osgAnimation::Motion::setTime)
-		.def("update", &osgAnimation::Motion::update, "dt"_a)
+		.def("reset", &osgAnimation::Motion::reset,
+			"Reset the motion to its initial time and value."
+		)
+		.def_property("time", &osgAnimation::Motion::getTime, &osgAnimation::Motion::setTime,
+			"The elapsed time in seconds since the motion was reset."
+		)
+		.def("update", &osgAnimation::Motion::update, "dt"_a,
+			"Advance the motion by dt seconds."
+		)
 		.def("getValue", static_cast<
 			osgAnimation::Motion::value_type (osgAnimation::Motion::*)() const
-		>(&osgAnimation::Motion::getValue))
+		>(&osgAnimation::Motion::getValue),
+			"Return the motion's value at its current time."
+		)
 		.def("getValueAt", static_cast<
 			osgAnimation::Motion::value_type (osgAnimation::Motion::*)(float) const
-		>(&osgAnimation::Motion::getValueAt), "time"_a)
-		.def_property_readonly("duration", &osgAnimation::Motion::getDuration)
+		>(&osgAnimation::Motion::getValueAt), "time"_a,
+			"Return the motion's value at the supplied time in seconds."
+		)
+		.def_property_readonly("duration", &osgAnimation::Motion::getDuration,
+			"The motion's duration in seconds."
+		)
 	;
 
-	py::enum_<osgAnimation::Motion::TimeBehaviour>(motion, "TimeBehaviour")
+	py::enum_<osgAnimation::Motion::TimeBehaviour>(motion, "TimeBehaviour",
+		"Choose whether motion time clamps or loops at its duration."
+	)
 		.value("CLAMP", osgAnimation::Motion::CLAMP)
 		.value("LOOP", osgAnimation::Motion::LOOP)
 		.export_values()
@@ -167,11 +237,14 @@ void bind(py::module_& m) {
 			"startValue"_a=0.0f,
 			"duration"_a=1.0f,
 			"changeValue"_a=1.0f,
-			"timeBehaviour"_a=osgAnimation::Motion::CLAMP
+			"timeBehaviour"_a=osgAnimation::Motion::CLAMP,
+			"Create a composite motion with the given value range and timing behavior."
 		)
 		.def("addMotion", [](osgAnimation::CompositeMotion& self, osgAnimation::Motion* _motion) {
 			self.getMotionList().push_back(_motion);
-		}, "motion"_a)
+		}, "motion"_a,
+			"Append a child motion to this sequence."
+		)
 	;
 }
 

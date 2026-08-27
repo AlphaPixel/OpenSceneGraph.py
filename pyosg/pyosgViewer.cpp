@@ -210,10 +210,13 @@ void bind(py::module_& m) {
 				py::overload_cast<>(&osgViewer::Scene::getSceneData),
 				py::return_value_policy::reference_internal
 			),
-			&osgViewer::Scene::setSceneData
+			&osgViewer::Scene::setSceneData,
+			"The root node rendered by this scene."
 		)
 
-		.def("updateSceneGraph", &osgViewer::Scene::updateSceneGraph)
+		.def("updateSceneGraph", &osgViewer::Scene::updateSceneGraph,
+			"Run update callbacks throughout the scene graph."
+		)
 
 		// virtual bool requiresUpdateSceneGraph() const;
 		// virtual bool requiresRedraw() const;
@@ -237,7 +240,8 @@ void bind(py::module_& m) {
 		.def_property(
 			"windowName",
 			&osgViewer::GraphicsWindow::getWindowName,
-			&osgViewer::GraphicsWindow::setWindowName
+			&osgViewer::GraphicsWindow::setWindowName,
+			"The native window title, when supported by the graphics backend."
 		)
 	;
 
@@ -264,11 +268,14 @@ void bind(py::module_& m) {
 	);
 
 	pyx::bind_proxy_property<detail::EventHandlersProxy, osgViewer::View, detail::ViewStorage>(
-		view, "_EventHandlers", "eventHandlers"
+		view,
+		"_EventHandlers",
+		"eventHandlers",
+		"Sequence of event handlers and Python callables invoked for this view's events."
 	);
 
 	view
-		.def(py::init<>())
+		.def(py::init<>(), "Create a viewer view.")
 
 		// No addEventHandler() method binding - use `.eventHandlers.append(handler)` above
 		// instead (same removal as Geometry.addPrimitiveSet -> `.primitiveSets.append(...)`).
@@ -278,7 +285,8 @@ void bind(py::module_& m) {
 		.def_property_readonly(
 			"scene",
 			py::overload_cast<>(&osgViewer::View::getScene),
-			py::return_value_policy::reference_internal
+			py::return_value_policy::reference_internal,
+			"The Scene wrapper associated with this view."
 		)
 
 		.def_property(
@@ -288,7 +296,8 @@ void bind(py::module_& m) {
 			),
 			detail::ViewSlots::setter<detail::SceneDataSlot, osg::Node*>(
 				static_cast<void(osgViewer::View::*)(osg::Node*)>(&osgViewer::View::setSceneData)
-			)
+			),
+			"The root node rendered by this view."
 		)
 
 		.def_property(
@@ -298,7 +307,8 @@ void bind(py::module_& m) {
 					&osgViewer::View::getCameraManipulator
 				)
 			),
-			detail::view_camera_manipulator_setter()
+			detail::view_camera_manipulator_setter(),
+			"The camera manipulator that controls this view."
 		)
 
 		.def_property(
@@ -310,7 +320,8 @@ void bind(py::module_& m) {
 				static_cast<void(osgViewer::View::*)(osgGA::EventQueue*)>(
 					&osgViewer::View::setEventQueue
 				)
-			)
+			),
+			"The queue supplying input events to this view."
 		)
 	;
 
@@ -346,7 +357,9 @@ void bind(py::module_& m) {
 
 				self.frame();
 			}
-		})
+		},
+			"Advance one frame, updating, culling, and drawing every view."
+		)
 
 		.def_property(
 			"realizeOperation",
@@ -355,11 +368,14 @@ void bind(py::module_& m) {
 			),
 			detail::ViewerBaseSlots::setter<detail::RealizeOperationSlot, osg::Operation*>(
 				&osgViewer::ViewerBase::setRealizeOperation
-			)
+			),
+			"Operation run while realizing the viewer."
 		)
 	;
 
-	py::enum_<osgViewer::ViewerBase::ThreadingModel>(vb, "ThreadingModel")
+	py::enum_<osgViewer::ViewerBase::ThreadingModel>(vb, "ThreadingModel",
+		"Choose how viewer update, cull, and draw work is threaded."
+	)
 		.value("SingleThreaded", osgViewer::ViewerBase::SingleThreaded)
 		.value("CullDrawThreadPerContext", osgViewer::ViewerBase::CullDrawThreadPerContext)
 		.value("ThreadPerContext", osgViewer::ViewerBase::ThreadPerContext)
@@ -376,17 +392,23 @@ void bind(py::module_& m) {
 	vb
 		// TODO: So, I'm cheating here... C++ will properly virtually dispatch this upwards to
 		// subclasses, but a PYTHON SUBCLASS WON't (without a trampoline).
-		.def("realize", &osgViewer::ViewerBase::realize)
-		.def_property_readonly("realized", &osgViewer::ViewerBase::isRealized)
+		.def("realize", &osgViewer::ViewerBase::realize,
+			"Create graphics contexts and initialize the viewer."
+		)
+		.def_property_readonly("realized", &osgViewer::ViewerBase::isRealized,
+			"Whether the viewer has been realized."
+		)
 		.def_property(
 			"threadingModel",
 			&osgViewer::ViewerBase::getThreadingModel,
-			&osgViewer::ViewerBase::setThreadingModel
+			&osgViewer::ViewerBase::setThreadingModel,
+			"How viewer work is distributed across threads."
 		)
 		.def_property(
 			"done",
 			&osgViewer::ViewerBase::done,
-			&osgViewer::ViewerBase::setDone
+			&osgViewer::ViewerBase::setDone,
+			"Whether the frame loop should stop."
 		)
 		/* .def("frame", [](osgViewer::ViewerBase& self) {
 			py::gil_scoped_release release;
@@ -406,16 +428,19 @@ void bind(py::module_& m) {
 		"The standard single-view application entry point: a ViewerBase and osgViewer.View "
 		"combined, plus window-setup convenience methods."
 	)
-		.def(py::init<>())
+		.def(py::init<>(), "Create a viewer with default settings.")
 		// .def(py::init<osg::ArgumentParser&>())
 		.def(py::init([](pyosg::detail::ArgumentParser& args) {
 			return new osgViewer::Viewer(args.parser);
-		}))
+		}),
+			"Create a viewer configured from an osg.ArgumentParser."
+		)
 
 		.def(
 			"setUpViewerAsEmbeddedInWindow",
 			&osgViewer::Viewer::setUpViewerAsEmbeddedInWindow,
-			py::return_value_policy::reference_internal
+			py::return_value_policy::reference_internal,
+			"Configure this viewer to render into an existing native window."
 		)
 		.def(
 			"setUpViewInWindow",
@@ -424,7 +449,8 @@ void bind(py::module_& m) {
 			"y"_a,
 			"width"_a,
 			"height"_a,
-			"screenNum"_a=0
+			"screenNum"_a=0,
+			"Create a window at x, y with the given dimensions and attach this view."
 		)
 
 		// TODO: This is where I put stuff I NEED to call, but haven't wrapped (YET)!
@@ -439,16 +465,18 @@ void bind(py::module_& m) {
 					state->setUseVertexAttributeAliasing(true);
 				}
 			}
-		}, "glModern"_a=false)
+		}, "glModern"_a=false,
+			"Add a StatsHandler and optionally enable modern OpenGL uniform conventions."
+		)
 		.def("close", [](osgViewer::Viewer& self) {
 			if(auto* gc = self.getCamera()->getGraphicsContext(); gc) {
-				OSG_WARN << "Calling (Python-only) close!" << std::endl;
+				OSG_INFO << "Calling (Python-only) close!" << std::endl;
 
 				self.setDone(true);
 
 				gc->closeImplementation();
 			}
-		})
+		}, "Stop the viewer and close its graphics context, if present.")
 	;
 }
 
