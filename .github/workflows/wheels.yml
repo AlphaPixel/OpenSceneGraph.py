@@ -2,7 +2,9 @@ name: Build wheels
 
 on:
   push:
-    branches: [cubicool-wip]
+    branches: [main]
+    # Release tags build the same wheels, then unlock the publish job below.
+    tags: ["v*"]
   workflow_dispatch:
 
 # The workflow only needs to read the repository and upload its wheel artifact.
@@ -195,14 +197,41 @@ jobs:
             python -m pip install delvewheel
           # scikit-build-core forwards CMAKE_ARGS to the native configure.
           # vcpkg's toolchain makes CMake's FindJPEG/FindPNG/FindTIFF and
-          # FindFreetype resolve to the Windows libraries above.
+          # FindFreetype resolve to the Windows libraries above. The linker
+          # flags ask MSVC for a .map file next to every DLL/module it links
+          # (osg*.dll, osgx*.pyd, etc.) -- diagnostic-only, see the "Collect
+          # linker maps" step below, which is what actually finds and
+          # preserves them since cibuildwheel builds in a temp directory
+          # that doesn't survive past this step.
           CIBW_ENVIRONMENT_WINDOWS: >-
-            CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows -DPYOSG_MSVC_WARNINGS_AS_ERRORS=OFF"
+            CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows -DPYOSG_MSVC_WARNINGS_AS_ERRORS=OFF -DCMAKE_SHARED_LINKER_FLAGS=/MAP -DCMAKE_MODULE_LINKER_FLAGS=/MAP"
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >-
             python -m delvewheel repair --ignore-existing --analyze-existing --add-path C:/vcpkg/installed/x64-windows/bin -w {dest_dir} {wheel} &&
             python etc/scripts/repair-windows-wheel.py {dest_dir}
           CIBW_TEST_COMMAND: >-
             python -c "import OpenSceneGraph; from OpenSceneGraph.osg import Node; from OpenSceneGraph.GL import GL_RGBA; assert Node is OpenSceneGraph.osg.Node; assert GL_RGBA == OpenSceneGraph.GL.GL_RGBA; registry = OpenSceneGraph.osgDB.Registry.instance(); extensions = ('osg', 'obj', 'stl', 'bmp', 'dds', 'hdr', 'jpeg', 'jpg', 'pnm', 'png', 'rgb', 'tga', 'tif', 'tiff', 'gltf', 'ktx2'); missing = [extension for extension in extensions if not registry.getReaderWriterForExtension(extension)]; assert not missing, f'Missing osgDB plugins: {missing}'; import osgx"
+
+      # Runs whether or not the build/link above succeeded -- the whole point is to capture a
+      # .map file from a FAILED link for diagnosis. cibuildwheel/scikit-build-core build inside
+      # a per-run temp directory under $env:TEMP that isn't part of the checkout and wouldn't
+      # otherwise be reachable by upload-artifact below; this just relocates any .map files
+      # found there into the workspace first. Finds nothing (harmlessly) once this diagnostic
+      # is no longer needed and the /MAP flags above are removed.
+      - name: Collect linker maps
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path mapfiles | Out-Null
+          Get-ChildItem -Path $env:TEMP -Filter *.map -Recurse -ErrorAction SilentlyContinue |
+            Copy-Item -Destination mapfiles -Force
+
+      - name: Upload linker maps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenSceneGraph-cp312-win-amd64-mapfiles
+          path: mapfiles/*.map
+          if-no-files-found: warn
 
       - name: Upload Windows wheel
         uses: actions/upload-artifact@v4
@@ -210,3 +239,24 @@ jobs:
           name: OpenSceneGraph-cp312-win-amd64
           path: wheelhouse/*.whl
           if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    # Pushes to `main` (and manual test runs) produce build artifacts only.
+    # Publishing requires an explicit versioned release tag, e.g. v0.1.1.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-x86_64-cp312, linux-aarch64-cp312, windows-x86_64-cp312]
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/openscenegraph/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: OpenSceneGraph-*
+          path: dist/
+          merge-multiple: true
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

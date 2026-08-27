@@ -10,6 +10,12 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 
+[project.scripts]
+# Runs one of the curated OpenSceneGraph.examples modules standalone (no Qt
+# required), e.g. `pyosg mrt` or `pyosg blur -- model.gltf`. Equivalent to
+# `python -m OpenSceneGraph.examples <name> ...`, which also works.
+pyosg = "OpenSceneGraph.examples.__main__:main"
+
 [project.entry-points."aipython.skills"]
 # aipython reads this package's OpenSceneGraph/aipython/*.md resources without
 # requiring a source checkout or importing the native bindings.
