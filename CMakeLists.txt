@@ -33,6 +33,18 @@ set(PYOSG_OSG_PLUGIN_DIR "osgPlugins-3.6.5"
 	CACHE STRING "Private OSG plugin directory for the pinned OpenSceneGraph release"
 )
 
+# A small, curated subset of examples/ that implements the build_scene()/configure_viewer()
+# contract, promoted into the installed OpenSceneGraph.examples package so `pyosg <name>`
+# and `python -m OpenSceneGraph.examples.<name>` work from a pip-installed wheel. Most of
+# examples/ is a development sandbox and deliberately not part of this list; add an entry
+# here once an example implements the contract and is meant to ship. Each entry is
+# "<source file in examples/>=<installed module filename>".
+set(PYOSG_PACKAGED_EXAMPLES
+	"pyosg-blur.py=blur.py"
+	"pyosg-mrt.py=mrt.py"
+	"pyosg_visitor.py=pyosg_visitor.py"
+)
+
 # Keep the first expanded wheel plugin set deliberately small. PNG, JPEG, and
 # TIFF are included because they are essential interchange formats; their
 # libraries are installed in the manylinux build container and audited into the
@@ -370,6 +382,27 @@ if(NOT PYOSG_EMBEDDED)
 			)
 		endif()
 
+		# PYOSG_PACKAGED_EXAMPLES above, mirrored here as symlinks so `python -m
+		# OpenSceneGraph.examples.<name>` also works against a dev build, not just an
+		# installed wheel (see the matching install() rules for the wheel side of this).
+		set(PYOSG_BUILD_EXAMPLES_DIR "${PYOSG_BUILD_PACKAGE_DIR}/examples")
+		file(MAKE_DIRECTORY "${PYOSG_BUILD_EXAMPLES_DIR}")
+		foreach(PYOSG_EXAMPLE_ENTRY IN LISTS PYOSG_PACKAGED_EXAMPLES)
+			string(REPLACE "=" ";" PYOSG_EXAMPLE_ENTRY "${PYOSG_EXAMPLE_ENTRY}")
+			list(GET PYOSG_EXAMPLE_ENTRY 0 PYOSG_EXAMPLE_SRC)
+			list(GET PYOSG_EXAMPLE_ENTRY 1 PYOSG_EXAMPLE_DST)
+			set(PYOSG_EXAMPLE_DST_PATH "${PYOSG_BUILD_EXAMPLES_DIR}/${PYOSG_EXAMPLE_DST}")
+
+			if(EXISTS "${PYOSG_EXAMPLE_DST_PATH}" OR IS_SYMLINK "${PYOSG_EXAMPLE_DST_PATH}")
+				file(REMOVE "${PYOSG_EXAMPLE_DST_PATH}")
+			endif()
+
+			file(CREATE_LINK
+				"${CMAKE_CURRENT_SOURCE_DIR}/examples/${PYOSG_EXAMPLE_SRC}"
+				"${PYOSG_EXAMPLE_DST_PATH}" SYMBOLIC COPY_ON_ERROR
+			)
+		endforeach()
+
 		# CONFIGURE_DEPENDS notices added or removed helpers. Existing source files
 		# are symbolic links, so Python-only edits are immediately visible without
 		# rebuilding the native extension. COPY_ON_ERROR keeps this usable where
@@ -442,6 +475,24 @@ if(NOT PYOSG_EMBEDDED)
 	# osgx used to be a top-level native extension. Keep that import path alive
 	# while locating its implementation with the rest of this wheel's runtime.
 	install(FILES "python/osgx.py" DESTINATION ".")
+
+	# The `OpenSceneGraph.examples` package backing the `pyosg` console script; see
+	# PYOSG_PACKAGED_EXAMPLES above for the curated example list itself.
+	install(FILES
+		"python/OpenSceneGraph/examples/__init__.py"
+		"python/OpenSceneGraph/examples/__main__.py"
+		DESTINATION "OpenSceneGraph/examples"
+	)
+	foreach(PYOSG_EXAMPLE_ENTRY IN LISTS PYOSG_PACKAGED_EXAMPLES)
+		string(REPLACE "=" ";" PYOSG_EXAMPLE_ENTRY "${PYOSG_EXAMPLE_ENTRY}")
+		list(GET PYOSG_EXAMPLE_ENTRY 0 PYOSG_EXAMPLE_SRC)
+		list(GET PYOSG_EXAMPLE_ENTRY 1 PYOSG_EXAMPLE_DST)
+
+		install(FILES "examples/${PYOSG_EXAMPLE_SRC}"
+			DESTINATION "OpenSceneGraph/examples"
+			RENAME "${PYOSG_EXAMPLE_DST}"
+		)
+	endforeach()
 
 	if(PYOSG_FETCH_OSG)
 		set_target_properties(osgx osgx_python ktx PROPERTIES
