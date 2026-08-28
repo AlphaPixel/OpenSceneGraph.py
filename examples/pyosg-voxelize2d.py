@@ -116,7 +116,6 @@ in vec3 vPosition;
 in vec4 vTangent;
 in vec2 vUV;
 
-uniform vec3 emissiveFactor;
 uniform vec3 skyColor;
 uniform vec3 groundColor;
 
@@ -161,14 +160,20 @@ void main() {
 
 	vec3 N = osgx_gltf_ShadingNormal(vNGeom, vTangent, vPosition, vUV);
 	vec3 V = normalize(-vPosition);
-	osgx_Material mat = osgx_gltf_GetMaterial(vUV, N);
+	// osgx::gltf::pbribl::GET_MATERIAL now takes separate baseColor/ORM UVs
+	// (per-slot TEXCOORD_n support); this shader only ever produces one UV
+	// set, so pass vUV for both.
+	osgx_Material mat = osgx_gltf_GetMaterial(vUV, vUV, N);
 	float NdotV = max(dot(N, V), 0.0);
 
 	vec3 worldUp = normalize(mat3(osg_ViewMatrix) * vec3(0.0, 0.0, 1.0));
 
 	vec3 Lo = evaluateDirectLighting(mat, N, V, NdotV);
 	vec3 ambient = osgx_HemisphereAmbient(N, worldUp, mat.albedo, mat.ao, skyColor, groundColor);
-	vec3 emissive = osgx_gltf_Emissive(vUV, emissiveFactor);
+	// osgx_gltf_Emissive() now reads the per-material osgx_gltf_emissiveFactor/
+	// osgx_gltf_hasEmissiveMap uniforms the loader sets, rather than taking a
+	// caller-supplied factor.
+	vec3 emissive = osgx_gltf_Emissive(vUV);
 
 	vec3 color = ambient + Lo + emissive;
 	color = osgx_TonemapPBRNeutral(color);
@@ -197,7 +202,6 @@ def apply_gltf_fallback_pbr(
 	fill_intensity=2.5,
 	sky_color=(0.55, 0.6, 0.75),
 	ground_color=(0.18, 0.14, 0.12),
-	emissive_factor=(1.0, 1.0, 1.0),
 ):
 	bound = node.bound
 	center = osg.Vec3d(bound.center) if bound.valid() else osg.Vec3d(0, 0, 0)
@@ -224,7 +228,6 @@ def apply_gltf_fallback_pbr(
 
 	osgx.gltf.shader.configureStateSet(ss)
 	ss.attributes[osg.StateAttribute.PROGRAM] = (p, osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE)
-	ss.uniforms["emissiveFactor"] = osg.Vec3(*emissive_factor)
 	ss.uniforms["skyColor"] = osg.Vec3(*sky_color)
 	ss.uniforms["groundColor"] = osg.Vec3(*ground_color)
 
