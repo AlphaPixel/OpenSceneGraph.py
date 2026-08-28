@@ -179,21 +179,23 @@ void bind_Quat(py::module_& m) {
 		quat
 			.def("__getitem__", [](const osg::Quat& v, py::ssize_t i) {
 				return v[detail::n_index(4, i)];
-			})
+			}, "Return component i (0=x, 1=y, 2=z, 3=w); negative indices count from the end.")
 
 			.def("__setitem__", [](osg::Quat& v, py::ssize_t i, value_type val){
 				v[detail::n_index(4, i)] = val;
-			})
+			}, "Set component i (0=x, 1=y, 2=z, 3=w); negative indices count from the end.")
 		;
 
 	OSGX_ENABLE_WARNINGS
 
 	quat
-		.def_property_readonly("zeroRotation", &osg::Quat::zeroRotation)
-		.def_property("x", detail::quat_get<0>(), detail::quat_set<0>())
-		.def_property("y", detail::quat_get<1>(), detail::quat_set<1>())
-		.def_property("z", detail::quat_get<2>(), detail::quat_set<2>())
-		.def_property("w", detail::quat_get<3>(), detail::quat_set<3>())
+		.def_property_readonly("zeroRotation", &osg::Quat::zeroRotation,
+			"Return whether this quaternion represents no rotation (the identity quaternion)."
+		)
+		.def_property("x", detail::quat_get<0>(), detail::quat_set<0>(), "The x component.")
+		.def_property("y", detail::quat_get<1>(), detail::quat_set<1>(), "The y component.")
+		.def_property("z", detail::quat_get<2>(), detail::quat_set<2>(), "The z component.")
+		.def_property("w", detail::quat_get<3>(), detail::quat_set<3>(), "The w (scalar) component.")
 	;
 }
 

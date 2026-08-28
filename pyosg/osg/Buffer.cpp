@@ -22,7 +22,11 @@ void bind_Buffer(py::module_& m) {
 		// .def(py::init_alias<>())
 		// .def(py::init<const osg::BufferData&>())
 
-		.def_property_readonly("totalDataSize", &osg::BufferData::getTotalDataSize)
+		.def_property_readonly(
+			"totalDataSize",
+			&osg::BufferData::getTotalDataSize,
+			"Return the total size in bytes of this object's CPU-side data."
+		)
 		// .def_property_readonly("dataPointer", &osg::BufferData::getTotalDataSize)
 
 		// Increments the modified count, telling the render backend a buffer object needs
@@ -33,7 +37,12 @@ void bind_Buffer(py::module_& m) {
 		// same Array object (rather than constructing a new one every frame, which forces an
 		// expensive full glBufferData() reallocation instead of a cheap glBufferSubData()
 		// update) plus calling dirty() is the correct, efficient pattern.
-		.def("dirty", &osg::BufferData::dirty)
+		.def(
+			"dirty",
+			&osg::BufferData::dirty,
+			"Mark this data as modified so it is re-uploaded to its GPU BufferObject next "
+			"compile; mutating an Array's elements in place does NOT call this automatically."
+		)
 
 		// .def_property("bufferIndex"
 		.def_property(
@@ -47,7 +56,9 @@ void bind_Buffer(py::module_& m) {
 				static_cast<void(osg::BufferData::*)(osg::BufferObject*)>(
 					&osg::BufferData::setBufferObject
 				)
-			)
+			),
+			"The GPU BufferObject (SSBO/UBO/VBO) this data uploads through; assign the same "
+			"BufferObject to multiple BufferData instances to pack them into one GPU buffer."
 		)
 	;
 
@@ -65,13 +76,27 @@ void bind_Buffer(py::module_& m) {
 		"GLBufferObject",
 		"The live, per-GL-context buffer object (glGenBuffers() name) backing a compiled BufferObject."
 	)
-		.def_property_readonly("contextID", &osg::GLBufferObject::getContextID)
+		.def_property_readonly(
+			"contextID",
+			&osg::GLBufferObject::getContextID,
+			"The GL context index this compiled buffer object belongs to."
+		)
 		.def_property_readonly(
 			"glObjectID",
-			static_cast<GLuint(osg::GLBufferObject::*)() const>(&osg::GLBufferObject::getGLObjectID)
+			static_cast<GLuint(osg::GLBufferObject::*)() const>(&osg::GLBufferObject::getGLObjectID),
+			"The raw GL buffer name (glGenBuffers() id) for this context; reads 0 until "
+			"the buffer has actually been compiled (uploaded) at least once."
 		)
-		.def_property_readonly("dirty", &osg::GLBufferObject::isDirty)
-		.def("compileBuffer", &osg::GLBufferObject::compileBuffer)
+		.def_property_readonly(
+			"dirty",
+			&osg::GLBufferObject::isDirty,
+			"Whether this buffer object's GPU-side data is stale and needs recompiling."
+		)
+		.def(
+			"compileBuffer",
+			&osg::GLBufferObject::compileBuffer,
+			"Upload this buffer object's current CPU-side data to the GPU for its GL context."
+		)
 	;
 
 	py::class_<
@@ -89,7 +114,8 @@ void bind_Buffer(py::module_& m) {
 			"glBufferObject",
 			&osg::BufferObject::getOrCreateGLBufferObject,
 			"contextID"_a,
-			py::return_value_policy::reference
+			py::return_value_policy::reference,
+			"Return (compiling it if necessary) the GLBufferObject for the given GL context."
 		)
 	;
 
@@ -102,7 +128,7 @@ void bind_Buffer(py::module_& m) {
 		"ShaderStorageBufferObject",
 		"A GPU buffer object bound as an SSBO, used for arbitrary read/write shader storage."
 	)
-		.def(py::init<>())
+		.def(py::init<>(), "Create an empty SSBO with no BufferData attached yet.")
 	;
 
 	py::class_<
@@ -114,7 +140,7 @@ void bind_Buffer(py::module_& m) {
 		"UniformBufferObject",
 		"A GPU buffer object bound as a UBO, used to share a block of uniforms between shader stages."
 	)
-		.def(py::init<>())
+		.def(py::init<>(), "Create an empty UBO with no BufferData attached yet.")
 	;
 }
 

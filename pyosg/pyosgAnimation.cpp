@@ -29,12 +29,22 @@ namespace detail {
 	// Motion base binding once it's registered as the base class here, no need to repeat them.
 	template<typename T>
 	void bind_Motion(py::module_& m, const char* name) {
-		py::class_<T, osgAnimation::Motion, osg::ref_ptr<T>>(m, name)
+		py::class_<T, osgAnimation::Motion, osg::ref_ptr<T>>(
+			m,
+			name,
+			"A stateful Motion that eases from startValue to startValue+changeValue over "
+			"duration seconds, using this class's specific named curve shape (see the "
+			"module-level function of the same shape, e.g. inQuad(), for the raw curve "
+			"evaluated standalone without Motion's time-tracking state)."
+		)
 			.def(py::init<float, float, float, osgAnimation::Motion::TimeBehaviour>(),
 				"startValue"_a=0.0f,
 				"duration"_a=1.0f,
 				"changeValue"_a=1.0f,
-				"timeBehaviour"_a=osgAnimation::Motion::CLAMP
+				"timeBehaviour"_a=osgAnimation::Motion::CLAMP,
+				"Create a Motion easing from startValue by changeValue over duration seconds; "
+				"timeBehaviour controls what happens once time() passes duration (CLAMP holds "
+				"at the end value, LOOP/SWING repeat)."
 			)
 		;
 	}

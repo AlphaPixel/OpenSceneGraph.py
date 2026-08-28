@@ -29,7 +29,7 @@ void bind_Image(py::module_& m) {
 		"Raw pixel data plus format/type metadata, used for textures, framebuffer readback, "
 		"and file I/O."
 	)
-		.def(py::init<>())
+		.def(py::init<>(), "Create an empty Image with no dimensions or data allocated.")
 		.def(
 			"allocateImage",
 			&osg::Image::allocateImage,
@@ -38,7 +38,9 @@ void bind_Image(py::module_& m) {
 			"r"_a,
 			"pixelFormat"_a,
 			"type"_a,
-			"packing"_a=1
+			"packing"_a=1,
+			"Allocate (or reallocate) this Image's own pixel storage to (s, t, r) with the "
+			"given format/type, discarding any previous contents."
 		)
 		.def(
 			"readPixels",
@@ -49,7 +51,9 @@ void bind_Image(py::module_& m) {
 			"height"_a,
 			"pixelFormat"_a,
 			"type"_a,
-			"packing"_a=1
+			"packing"_a=1,
+			"Read a rectangle of pixels back from the currently-bound GL framebuffer into "
+			"this Image (glReadPixels), reallocating storage as needed."
 		)
 		.def(
 			"readImageFromCurrentTexture",
@@ -57,15 +61,38 @@ void bind_Image(py::module_& m) {
 			"contextID"_a,
 			"copyMipMapsIfAvailable"_a,
 			"type"_a=GL_UNSIGNED_BYTE,
-			"face"_a=0
+			"face"_a=0,
+			"Read this Image's data back from the currently-bound GL texture object for the "
+			"given context; result may be GPU-async-stale if read immediately after a render, "
+			"so prefer shader hot-swap for live inspection where possible."
 		)
-		.def_property_readonly("s", &osg::Image::s)
-		.def_property_readonly("t", &osg::Image::t)
-		.def_property_readonly("r", &osg::Image::r)
-		.def_property_readonly("valid", &osg::Image::valid)
-		.def_property_readonly("pixelFormat", &osg::Image::getPixelFormat)
-		.def_property_readonly("dataType", &osg::Image::getDataType)
-		.def_property_readonly("fileName", &osg::Image::getFileName)
+		.def_property_readonly("s", &osg::Image::s, "Image width in texels/pixels.")
+		.def_property_readonly("t", &osg::Image::t, "Image height in texels/pixels.")
+		.def_property_readonly(
+			"r",
+			&osg::Image::r,
+			"Image depth in texels/pixels (1 for a plain 2D image, >1 for a 3D image/atlas)."
+		)
+		.def_property_readonly(
+			"valid",
+			&osg::Image::valid,
+			"Whether this Image currently holds allocated pixel data."
+		)
+		.def_property_readonly(
+			"pixelFormat",
+			&osg::Image::getPixelFormat,
+			"The GL pixel format of the stored data (e.g. GL_RGBA)."
+		)
+		.def_property_readonly(
+			"dataType",
+			&osg::Image::getDataType,
+			"The GL data type of the stored data (e.g. GL_UNSIGNED_BYTE, GL_FLOAT)."
+		)
+		.def_property_readonly(
+			"fileName",
+			&osg::Image::getFileName,
+			"The file path this Image was loaded from, or empty if it was created in memory."
+		)
 		.def_buffer([](osg::Image& self) -> py::buffer_info {
 			if(self.r() > 1) throw std::runtime_error(
 				"osg.Image buffer protocol only supports 2D images (r() == 1)"
@@ -101,7 +128,12 @@ void bind_Image(py::module_& m) {
 		})
 	;
 
-	py::enum_<osg::Image::Origin>(img, "Origin")
+	py::enum_<osg::Image::Origin>(
+		img,
+		"Origin",
+		"Which corner row 0 of the pixel data represents; most image loaders produce "
+		"BOTTOM_LEFT to match GL's texture coordinate convention."
+	)
 		.value("BOTTOM_LEFT", osg::Image::BOTTOM_LEFT)
 		.value("TOP_LEFT", osg::Image::TOP_LEFT)
 		.export_values()

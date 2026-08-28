@@ -23,12 +23,16 @@ void bind_Geode(py::module_& m) {
 	);
 
 	pyx::bind_proxy_property<detail::DrawablesProxy, osg::Geode, detail::DrawablesStorage>(
-		geode, "_Drawables", "drawables"
+		geode, "_Drawables", "drawables",
+		"Sequence proxy over this Geode's Drawables (indexing, iteration, append/extend)."
 	);
 
 	geode
-		.def(py::init<>())
-		.def(py::init(pyx::kwargs_ctor<osg::Geode>()))
+		.def(py::init<>(), "Create a Geode with no drawables.")
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Geode>()),
+			"Create a Geode, optionally populating .drawables from a drawables= sequence."
+		)
 	;
 }
 

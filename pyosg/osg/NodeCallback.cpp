@@ -28,11 +28,14 @@ void bind_NodeCallback(py::module_& m) {
 	// iteration -- the usual SequenceProxy surface, instead of hand-walking getNestedCallback()
 	// chains or calling addNestedCallback()/removeNestedCallback() directly.
 	pyx::bind_proxy_property<detail::NestedCallbacksProxy, osg::Callback, detail::CallbackStorage>(
-		callback, "_NestedCallbacks", "nestedCallbacks"
+		callback, "_NestedCallbacks", "nestedCallbacks",
+		"Sequence proxy over the chained callback list: indexing, len(), append(), insert(), "
+		"del, remove(), index(), and iteration - in place of "
+		"addNestedCallback()/removeNestedCallback()/getNestedCallback()."
 	);
 
 	callback
-		.def(py::init<>())
+		.def(py::init<>(), "Create a Callback with no nested callbacks.")
 	;
 
 	py::class_<
@@ -46,7 +49,7 @@ void bind_NodeCallback(py::module_& m) {
 		"A Callback specialized for Node.updateCallback/eventCallback, invoked once per "
 		"traversal of the node it's attached to."
 	)
-		.def(py::init<>())
+		.def(py::init<>(), "Create a NodeCallback with no nested callbacks.")
 	;
 }
 

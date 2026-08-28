@@ -87,6 +87,19 @@ CHAIN_CALL_RE = re.compile(r'\.(\w+)\s*\(')
 # pyosg/ for every Sequence/Mapping-proxied member (Geode.drawables, Group.children, ...). It
 # never appears as a chained `.method()` call, so it needs its own scan -- see scan_text().
 BIND_PROXY_PROPERTY_RE = re.compile(r"pyx::bind_proxy_property\s*<")
+# A `template<typename T> auto bind_XXX(py::module_& m, const char* name) { py::class_<T>(m,
+# name)...` helper (osg/Matrix.hpp, osg/Vec.hpp, osg/Bound.hpp, osg/Array.hpp,
+# pyosgAnimation.cpp's bind_Motion<T>) builds its py::class_/enum_ using a runtime PARAMETER as
+# the exposed name, not a string literal -- DECL_RE's first_name_literal() finds nothing there, so
+# without this, the whole templated family silently vanishes from the checklist (this is exactly
+# what happened to Matrix/Vec/Bound/Array and all 29 osgAnimation ...Motion classes). Resolving it
+# takes two regexes: this one finds the helper's OWN signature (to walk its body and capture its
+# member list under a placeholder), and TEMPLATE_BINDER_CALL_RE below finds each call site that
+# instantiates it with a real type + literal name -- see scan_template_binders().
+TEMPLATE_BINDER_SIG_RE = re.compile(
+	r"(?:auto|void)\s+(\w+)\s*\(\s*py::module_&\s*\w+\s*,\s*const\s+char\s*\*\s*(\w+)"
+)
+TEMPLATE_BINDER_CALL_RE = re.compile(r"\b(?:detail::)?(\w+)\s*<[^<>]*>\s*\(")
 # Reopened fluent chains normally put the owner and `.def*()` on separate lines, e.g.
 # `quat\n\t.def_property(...)`, so whitespace is allowed on both sides of the dot.
 MODULE_CALL_RE = re.compile(
@@ -237,6 +250,40 @@ def first_identifier(text: str) -> str | None:
 	return m.group(1) if m else None
 
 
+def second_positional_is_literal(ctor_args: str) -> bool:
+	"""True if the argument right after the first top-level comma in a py::class_/enum_ call's
+	ctor_args (the exposed-name slot, right after the module/owner argument) is ITSELF a quoted
+	string literal -- distinguishes a normal `py::class_<T>(m, "Name", ...)` from a templated
+	`py::class_<T>(m, name_param, ...)` whose own docstring (a real literal appearing LATER in the
+	same arg list) would otherwise fool a plain "is there any literal in here" check."""
+
+	depth = 0
+	i = 0
+	n = len(ctor_args)
+
+	while i < n:
+		c = ctor_args[i]
+
+		if c == '"':
+			i = skip_string(ctor_args, i)
+			continue
+		if c in "([{<":
+			depth += 1
+		elif c in ")]}>":
+			depth -= 1
+		elif c == "," and depth == 0:
+			break
+
+		i += 1
+
+	j = i + 1
+
+	while j < n and ctor_args[j].isspace():
+		j += 1
+
+	return j < n and ctor_args[j] == '"'
+
+
 def scan_chain_calls(text: str, start: int, end: int) -> list[tuple[str, str | None, str]]:
 	"""Finds each top-level `.method(...)` call within text[start:end] (one binding chain's
 	body), returning (method_name, exposed_name_or_None, raw_arg_text). Nested (), lambda {}
@@ -274,6 +321,105 @@ def scan_chain_calls(text: str, start: int, end: int) -> list[tuple[str, str | N
 	return calls
 
 
+def scan_template_binders(text: str) -> dict[str, Symbol]:
+	"""Returns {function_name: Symbol} for every `bind_XXX(py::module_& m, const char* name)`
+	template helper found in `text` (see TEMPLATE_BINDER_SIG_RE) -- one Symbol per helper, holding
+	the member list from that helper's OWN py::class_/py::enum_ declaration (matched against
+	`name` used as the exposed-name argument), under a placeholder name since there's no single
+	real Python name at the declaration site.
+
+	A helper with no py::class_/enum_ of its own (bind_alias_Vec: it just forwards to bind_Vec and
+	aliases the result via m.add_object) is instead aliased onto whichever OTHER already-scanned
+	template helper it calls with its own (module, name) parameters forwarded unchanged -- found
+	via a second TEMPLATE_BINDER_CALL_RE scan of its body."""
+
+	templates: dict[str, Symbol] = {}
+	forwarding: list[tuple[str, str]] = []  # (this helper's name, body text) still unresolved
+
+	for sig in TEMPLATE_BINDER_SIG_RE.finditer(text):
+		func_name, name_param = sig.group(1), sig.group(2)
+		body_open = text.find("{", sig.end())
+
+		if body_open == -1:
+			continue
+
+		body_close = find_matching(text, body_open, "{", "}", skip_strings=True)
+		body = text[body_open:body_close]
+		found_own_decl = False
+
+		for decl in DECL_RE.finditer(body):
+			decl_kind = decl.group(2)
+			angle_close = find_matching(body, decl.end() - 1, "<", ">", skip_strings=False)
+			paren_open = body.find("(", angle_close)
+
+			if paren_open == -1:
+				continue
+
+			paren_close = find_matching(body, paren_open, "(", ")", skip_strings=True)
+			ctor_args = body[paren_open + 1:paren_close - 1]
+			args = ctor_args.split(",", 2)
+
+			# Only a py::class_/enum_ built directly on THIS helper's own `name` parameter (as its
+			# 2nd ctor arg -- the module is always 1st) counts; anything else in the body (e.g. a
+			# nested-type declaration built on a different variable) isn't what we're after.
+			if len(args) < 2 or args[1].strip() != name_param:
+				continue
+
+			var_name = decl.group(1)
+			chain_end = find_chain_end(body, paren_close)
+			symbol = Symbol("class" if decl_kind == "class_" else "enum", f"<template:{func_name}>")
+			children_by_name: dict[str, Symbol] = {}
+
+			for method, cname, _arg in scan_chain_calls(body, paren_close, chain_end):
+				if cname is None:
+					continue
+
+				kind = "constructor" if cname == "__init__" else CHILD_KIND_BY_METHOD[method]
+				children_by_name[cname] = Symbol(kind, cname)
+
+			# Follow reopened chains on the same local variable -- e.g. Matrix.hpp's
+			# `if constexpr(...) mat.def(...)` and its later `mat\n\t.def_static(...)...` block, or
+			# Vec.hpp's conditional `vec.def_property("z", ...)` sections -- exactly like
+			# MODULE_CALL_RE's handling of reopened chains on a module-level var in scan_text()
+			# below, just scoped to this helper's own body and its own local var.
+			if var_name:
+				for m in MODULE_CALL_RE.finditer(body):
+					if m.group(1) != var_name:
+						continue
+
+					reopen_open = m.end() - 1
+					reopen_close = find_matching(body, reopen_open, "(", ")", skip_strings=True)
+					reopen_end = find_chain_end(body, reopen_close)
+
+					for method, cname, arg_text in scan_chain_calls(body, m.start(), reopen_end):
+						if method == "def" and arg_text.lstrip().startswith("py::init"):
+							cname = "__init__"
+
+						if cname is None:
+							continue
+
+						kind = "constructor" if cname == "__init__" else CHILD_KIND_BY_METHOD[method]
+						children_by_name[cname] = Symbol(kind, cname)
+
+			symbol.children = list(children_by_name.values())
+			templates[func_name] = symbol
+			found_own_decl = True
+			break
+
+		if not found_own_decl:
+			forwarding.append((func_name, body))
+
+	for func_name, body in forwarding:
+		for call in TEMPLATE_BINDER_CALL_RE.finditer(body):
+			target = templates.get(call.group(1))
+
+			if target is not None:
+				templates[func_name] = target
+				break
+
+	return templates
+
+
 def scan_text(text: str) -> tuple[list[Symbol], dict[str, str]]:
 	"""Returns (top_level_symbols, owner_by_name). `owner_by_name` records, for each top-level
 	symbol, the C++ identifier its binding call was made on -- meaningless for most files (every
@@ -304,20 +450,25 @@ def scan_text(text: str) -> tuple[list[Symbol], dict[str, str]]:
 		consumed.append((paren_close, chain_end))
 
 		ctor_args = text[paren_open + 1:paren_close - 1]
-		exposed_name = first_name_literal(ctor_args)
 
-		if exposed_name is None:
+		if not second_positional_is_literal(ctor_args):
 			# A templated bind_XT<T>(m, name) call (see osg/Vec.hpp): `name` is a runtime const
-			# char*, so there's no static Python name to report. Still register a placeholder
-			# under `var_name` so later reopened statements like `vec.def_property("x", ...)`
-			# attach to IT instead of leaking out as bogus module-level symbols below -- but
-			# never add the placeholder itself to `symbols`, so this whole unnameable family is
-			# silently excluded from the checklist rather than shown under a fabricated name.
+			# char*, so there's no static Python name to report -- even though a LATER argument
+			# in this same call might be a real string literal (this helper's own docstring, or
+			# py::buffer_protocol()'s neighbors), which is exactly why this checks the exposed-name
+			# ARGUMENT POSITION specifically rather than "is there any literal anywhere in
+			# ctor_args" (first_name_literal() alone would wrongly grab that docstring as the
+			# name). Still register a placeholder under `var_name` so later reopened statements
+			# like `vec.def_property("x", ...)` attach to IT instead of leaking out as bogus
+			# module-level symbols below -- but never add the placeholder itself to `symbols`, so
+			# this whole unnameable family is silently excluded from the checklist rather than
+			# shown under a fabricated name.
 			if var_name:
 				var_to_symbol[var_name] = Symbol("class" if decl_kind == "class_" else "enum", "<templated>")
 
 			continue
 
+		exposed_name = first_name_literal(ctor_args)
 		symbol = Symbol("class" if decl_kind == "class_" else "enum", exposed_name)
 
 		children_by_name: dict[str, Symbol] = {}
@@ -420,6 +571,32 @@ def scan_text(text: str) -> tuple[list[Symbol], dict[str, str]]:
 		else:
 			symbols.append(symbol)
 			owners[name] = owner_var
+
+	# Re-emit each templated bind_XXX(module, name) helper's member list under every call site's
+	# real literal name -- see scan_template_binders(). A call passing more than one string literal
+	# (bind_alias_Vec<T, N>(m, "Vec2f", "Vec2")) only exposes the FIRST as a distinct Python object;
+	# any literal after it is just an `m.add_object(alias, ...)` alias for the SAME object, not a
+	# second symbol worth its own checklist entry.
+	templates = scan_template_binders(text)
+
+	for call in TEMPLATE_BINDER_CALL_RE.finditer(text):
+		template = templates.get(call.group(1))
+
+		if template is None:
+			continue
+
+		call_open = call.end() - 1
+		call_close = find_matching(text, call_open, "(", ")", skip_strings=True)
+		call_args = text[call_open + 1:call_close - 1]
+		exposed_name = first_name_literal(call_args)
+
+		if exposed_name is None:
+			continue
+
+		symbol = Symbol(template.kind, exposed_name)
+		symbol.children = template.children
+		symbols.append(symbol)
+		owners[exposed_name] = first_identifier(call_args) or ""
 
 	return symbols, owners
 

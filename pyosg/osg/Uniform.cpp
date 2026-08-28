@@ -10,7 +10,13 @@ void bind_Uniform(py::module_& m) {
 		"StateSet and uploaded to a Program."
 	);
 
-	py::enum_<osg::Uniform::Type>(uniform, "Type")
+	py::enum_<osg::Uniform::Type>(
+		uniform,
+		"Type",
+		"The GLSL type this Uniform holds (scalar/vector/matrix/sampler/image variant), "
+		"matching the shader's declared uniform type; set via the type property or a "
+		"typed constructor."
+	)
 		.value("FLOAT", osg::Uniform::FLOAT)
 		.value("FLOAT_VEC2", osg::Uniform::FLOAT_VEC2)
 		.value("FLOAT_VEC3", osg::Uniform::FLOAT_VEC3)
@@ -151,21 +157,36 @@ void bind_Uniform(py::module_& m) {
 			bool operator != (const Uniform& rhs) const { return compare(rhs)!=0; }
 #endif
 
-	py::class_<detail::UniformIterator>(uniform, "_UniformIterator", py::module_local())
-		.def("__iter__", [](detail::UniformIterator& self) -> detail::UniformIterator& {
-			return self;
-		}, py::return_value_policy::reference_internal)
-		.def("__next__", &detail::UniformIterator::next)
+	py::class_<detail::UniformIterator>(
+		uniform,
+		"_UniformIterator",
+		py::module_local(),
+		"Internal element iterator produced by iterating a multi-element Uniform directly."
+	)
+		.def(
+			"__iter__",
+			[](detail::UniformIterator& self) -> detail::UniformIterator& { return self; },
+			py::return_value_policy::reference_internal,
+			"Return self, as required by the iterator protocol."
+		)
+		.def(
+			"__next__",
+			&detail::UniformIterator::next,
+			"Return the value of the next element, raising StopIteration once exhausted."
+		)
 	;
 
 	uniform
-		.def(py::init(pyx::kwargs_ctor<osg::Uniform>()))
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Uniform>()),
+			"Create an untyped, unnamed, single-element Uniform; set type/name/value before use."
+		)
 		// Deliberately left as a plain (non-kwargs) copy constructor, matching the convention
 		// already established for MatrixTransform/PositionAttitudeTransform in Transform.cpp --
 		// a copy already fully initializes every field from the source object, so layering
 		// debug=/name=/etc. on top would mean overriding specific post-copy fields, a different
 		// (and not currently needed) feature from what kwargs_ctor is for.
-		.def(py::init<const osg::Uniform&>())
+		.def(py::init<const osg::Uniform&>(), "Create a copy of another Uniform.")
 		.def(py::init([](
 			osg::Uniform::Type type, const std::string& name, py::sequence elements, py::kwargs kwargs
 		) {
@@ -174,22 +195,35 @@ void bind_Uniform(py::module_& m) {
 			pyx::kwargs_init(*obj, kwargs);
 
 			return obj;
-		}), "type"_a, "name"_a, "elements"_a)
+		}), "type"_a, "name"_a, "elements"_a,
+			"Create an array Uniform of `type`, sized and initialized from the Python sequence "
+			"`elements` (one entry per array element)."
+		)
 
 		.def(
 			py::init(pyx::kwargs_ctor<osg::Uniform, osg::Uniform::Type, const std::string&, int>()),
 			"type"_a,
 			"name"_a,
-			"numElements"_a=1
+			"numElements"_a=1,
+			"Create an array Uniform of `type` with `numElements` zero-initialized elements."
 		)
 
 		/* .def(py::init<const char*, double>())
 		.def(py::init<const char*, unsigned long long>())
 		.def(py::init<const char*, long long>()) */
 
-		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, const osg::Vec2&>()))
-		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, const osg::Vec3&>()))
-		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, const osg::Vec4&>()))
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Uniform, const char*, const osg::Vec2&>()),
+			"Create a single-element FLOAT_VEC2 Uniform named `name` from an osg.Vec2."
+		)
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Uniform, const char*, const osg::Vec3&>()),
+			"Create a single-element FLOAT_VEC3 Uniform named `name` from an osg.Vec3."
+		)
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Uniform, const char*, const osg::Vec4&>()),
+			"Create a single-element FLOAT_VEC4 Uniform named `name` from an osg.Vec4."
+		)
 
 		/* .def(py::init<const char*, const osg::Vec2d&>())
 		.def(py::init<const char*, const osg::Vec3d&>())
@@ -217,24 +251,57 @@ void bind_Uniform(py::module_& m) {
 		.def(py::init<const char*, const osg::Matrix4x2d&>())
 		.def(py::init<const char*, const osg::Matrix4x3d&>()) */
 
-		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, const osg::Matrixf&>()))
-		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, const osg::Matrixd&>()))
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Uniform, const char*, const osg::Matrixf&>()),
+			"Create a single-element FLOAT_MAT4 Uniform named `name` from an osg.Matrixf."
+		)
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Uniform, const char*, const osg::Matrixd&>()),
+			"Create a single-element DOUBLE_MAT4 Uniform named `name` from an osg.Matrixd."
+		)
 
-		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, int, int>()))
-		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, int, int, int>()))
-		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, int, int, int, int>()))
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Uniform, const char*, int, int>()),
+			"Create a single-element INT_VEC2 Uniform named `name` from two ints."
+		)
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Uniform, const char*, int, int, int>()),
+			"Create a single-element INT_VEC3 Uniform named `name` from three ints."
+		)
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Uniform, const char*, int, int, int, int>()),
+			"Create a single-element INT_VEC4 Uniform named `name` from four ints."
+		)
 
-		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, unsigned int, unsigned int>()))
-		.def(py::init(
-			pyx::kwargs_ctor<osg::Uniform, const char*, unsigned int, unsigned int, unsigned int>()
-		))
-		.def(py::init(pyx::kwargs_ctor<
-			osg::Uniform, const char*, unsigned int, unsigned int, unsigned int, unsigned int
-		>()))
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Uniform, const char*, unsigned int, unsigned int>()),
+			"Create a single-element UNSIGNED_INT_VEC2 Uniform named `name` from two unsigned ints."
+		)
+		.def(
+			py::init(
+				pyx::kwargs_ctor<osg::Uniform, const char*, unsigned int, unsigned int, unsigned int>()
+			),
+			"Create a single-element UNSIGNED_INT_VEC3 Uniform named `name` from three unsigned ints."
+		)
+		.def(
+			py::init(pyx::kwargs_ctor<
+				osg::Uniform, const char*, unsigned int, unsigned int, unsigned int, unsigned int
+			>()),
+			"Create a single-element UNSIGNED_INT_VEC4 Uniform named `name` from four unsigned ints."
+		)
 
-		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, bool, bool>()))
-		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, bool, bool, bool>()))
-		.def(py::init(pyx::kwargs_ctor<osg::Uniform, const char*, bool, bool, bool, bool>()))
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Uniform, const char*, bool, bool>()),
+			"Create a single-element BOOL_VEC2 Uniform named `name` from two bools."
+		)
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Uniform, const char*, bool, bool, bool>()),
+			"Create a single-element BOOL_VEC3 Uniform named `name` from three bools."
+		)
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Uniform, const char*, bool, bool, bool, bool>()),
+			"Create a single-element BOOL_VEC4 Uniform named `name` from four bools."
+		)
 
 		.def(py::init([](const char* name, py::object obj, py::kwargs kwargs) {
 			osg::ref_ptr<osg::Uniform> obj_u;
@@ -252,10 +319,23 @@ void bind_Uniform(py::module_& m) {
 			pyx::kwargs_init(*obj_u, kwargs);
 
 			return obj_u;
-		}))
+		}),
+			"Create a single-element BOOL/INT/FLOAT Uniform named `name`, inferring the Uniform.Type "
+			"from the Python type of `value`."
+		)
 
-		.def_property("type", &osg::Uniform::getType, &osg::Uniform::setType)
-		.def_property("numElements", &osg::Uniform::getNumElements, &osg::Uniform::setNumElements)
+		.def_property(
+			"type",
+			&osg::Uniform::getType,
+			&osg::Uniform::setType,
+			"This uniform's Uniform.Type; reassigning it does not resize or reinterpret existing data."
+		)
+		.def_property(
+			"numElements",
+			&osg::Uniform::getNumElements,
+			&osg::Uniform::setNumElements,
+			"The number of elements in this uniform; 1 for a scalar/vector/matrix uniform."
+		)
 		// .def_property_readonly("nameID", py::overload_cast<>(&osg::Uniform::getNameID, py::const_))
 
 		.def_property(
@@ -288,24 +368,79 @@ void bind_Uniform(py::module_& m) {
 				} */
 
 				detail::uniform_set(self, 0, obj);
-			}
+			},
+			"The single value of a 1-element Uniform; raises ValueError if numElements != 1 (use "
+			"array/[] for multi-element uniforms). A vector uniform must be assigned an explicit "
+			"osg.Vec2/Vec3/Vec4, not a raw tuple."
 		)
 
 		// TODO: This needs lots of testing!
-		.def_property("array", &detail::uniform_get_array, &detail::uniform_set_array)
+		.def_property(
+			"array",
+			&detail::uniform_get_array,
+			&detail::uniform_set_array,
+			"The list of every element's value, get/set as a whole; works for both scalar and "
+			"multi-element (array) uniforms."
+		)
 
-		.def("dirty", &osg::Uniform::dirty)
-		.def("__len__", [](const osg::Uniform& self) { return self.getNumElements(); })
-		.def("__getitem__", &detail::uniform_get, py::return_value_policy::reference_internal)
-		.def("__setitem__", &detail::uniform_set)
-		.def("__iter__", [](osg::Uniform& self) { return detail::UniformIterator{&self, 0}; })
+		.def(
+			"dirty",
+			&osg::Uniform::dirty,
+			"Mark this uniform's value as modified so it is re-uploaded to bound Programs next frame."
+		)
+		.def(
+			"__len__",
+			[](const osg::Uniform& self) { return self.getNumElements(); },
+			"Return the element count, i.e. numElements."
+		)
+		.def(
+			"__getitem__",
+			&detail::uniform_get,
+			py::return_value_policy::reference_internal,
+			"Return the value of element i."
+		)
+		.def(
+			"__setitem__",
+			&detail::uniform_set,
+			"Set the value of element i; does not call dirty() - call it after mutating elements."
+		)
+		.def(
+			"__iter__",
+			[](osg::Uniform& self) { return detail::UniformIterator{&self, 0}; },
+			"Return an iterator over this uniform's element values."
+		)
 
-		.def_static("getTypename", &osg::Uniform::getTypename)
-		.def_static("getTypeNumComponents", &osg::Uniform::getTypeNumComponents)
-		.def_static("getTypeId", &osg::Uniform::getTypeId)
-		.def_static("getGlApiType", &osg::Uniform::getGlApiType)
-		.def_static("getInternalArrayType", &osg::Uniform::getInternalArrayType)
-		.def_static("getNameID", py::overload_cast<const std::string&>(&osg::Uniform::getNameID))
+		.def_static(
+			"getTypename",
+			&osg::Uniform::getTypename,
+			"Return the GLSL type name string (e.g. \"vec3\") for a Uniform.Type."
+		)
+		.def_static(
+			"getTypeNumComponents",
+			&osg::Uniform::getTypeNumComponents,
+			"Return how many scalar components a Uniform.Type has (e.g. 3 for FLOAT_VEC3)."
+		)
+		.def_static(
+			"getTypeId",
+			&osg::Uniform::getTypeId,
+			"Return the Uniform.Type whose GLSL type name matches the given string."
+		)
+		.def_static(
+			"getGlApiType",
+			&osg::Uniform::getGlApiType,
+			"Return the underlying GL API type (e.g. mapping *_MAT2x3 down to the closest square "
+			"matrix type) used to upload a Uniform.Type."
+		)
+		.def_static(
+			"getInternalArrayType",
+			&osg::Uniform::getInternalArrayType,
+			"Return the GL scalar type (e.g. GL_FLOAT) OSG uses internally to store a Uniform.Type."
+		)
+		.def_static(
+			"getNameID",
+			py::overload_cast<const std::string&>(&osg::Uniform::getNameID),
+			"Return the process-wide interned integer id for a uniform name string."
+		)
 	;
 }
 

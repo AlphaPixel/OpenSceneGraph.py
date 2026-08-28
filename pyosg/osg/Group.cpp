@@ -23,12 +23,16 @@ void bind_Group(py::module_& m) {
 	);
 
 	pyx::bind_proxy_property<detail::ChildrenProxy, osg::Group, detail::ChildrenStorage>(
-		group, "_Children", "children"
+		group, "_Children", "children",
+		"Sequence proxy over this Group's child Nodes (indexing, iteration, append/extend)."
 	);
 
 	group
-		.def(py::init<>())
-		.def(py::init(pyx::kwargs_ctor<osg::Group>()))
+		.def(py::init<>(), "Create a Group with no children.")
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Group>()),
+			"Create a Group, optionally populating .children from a children= sequence of Nodes."
+		)
 
 		.def_static("test_cpp", []() {
 			auto* g = new osg::Group();
@@ -53,7 +57,9 @@ void bind_Group(py::module_& m) {
 			addNode("n2");
 
 			return g;
-		})
+		}, "Internal C++-side lifetime probe: build a Group with 3 named, tracked child Nodes "
+			"for testing ref_ptr/identity lifecycle behavior, not for general use."
+		)
 	;
 }
 

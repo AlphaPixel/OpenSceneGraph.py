@@ -56,7 +56,10 @@ void bind_Geometry(py::module_& m) {
 		"(draw mode, vertex count/order)."
 	);
 
-	py::enum_<osg::PrimitiveSet::Type>(ps, "Type")
+	py::enum_<osg::PrimitiveSet::Type>(ps, "Type",
+		"Which concrete PrimitiveSet subclass (and underlying draw call, e.g. DrawArrays vs. "
+		"a DrawElements* variant) a set was built as."
+	)
 		.value("PrimitiveType", osg::PrimitiveSet::PrimitiveType)
 		.value("DrawArraysPrimitiveType", osg::PrimitiveSet::DrawArraysPrimitiveType)
 		.value("DrawArrayLengthsPrimitiveType", osg::PrimitiveSet::DrawArrayLengthsPrimitiveType)
@@ -75,7 +78,10 @@ void bind_Geometry(py::module_& m) {
 		.export_values()
 	;
 
-	py::enum_<osg::PrimitiveSet::Mode>(ps, "Mode")
+	py::enum_<osg::PrimitiveSet::Mode>(ps, "Mode",
+		"OpenGL primitive topology this set's indices/vertices are drawn as, e.g. TRIANGLES "
+		"or LINE_STRIP - matches the GL_* draw-mode constants."
+	)
 		.value("POINTS", osg::PrimitiveSet::POINTS)
 		.value("LINES", osg::PrimitiveSet::LINES)
 		.value("LINE_STRIP", osg::PrimitiveSet::LINE_STRIP)
@@ -98,25 +104,40 @@ void bind_Geometry(py::module_& m) {
 		.def_property(
 			"numInstances",
 			&osg::PrimitiveSet::getNumInstances,
-			&osg::PrimitiveSet::setNumInstances
+			&osg::PrimitiveSet::setNumInstances,
+			"Number of instanced copies drawn via glDraw*Instanced; 0 (the OSG default) means "
+			"non-instanced, a single draw."
 		)
 		.def_property(
 			"mode",
 			&osg::PrimitiveSet::getMode,
-			&osg::PrimitiveSet::setMode
+			&osg::PrimitiveSet::setMode,
+			"The set's PrimitiveSet.Mode draw topology (e.g. TRIANGLES)."
 		)
-		.def_property_readonly("numIndices", &osg::PrimitiveSet::getNumIndices)
+		.def_property_readonly("numIndices", &osg::PrimitiveSet::getNumIndices,
+			"Number of vertex indices this set will draw."
+		)
 		// .def_property_readonly("numIndices", &detail::PrimitiveSet::getNumIndices)
-		.def("index", &osg::PrimitiveSet::index)
-		.def("offsetIndices", &osg::PrimitiveSet::offsetIndices)
-		.def("draw", &osg::PrimitiveSet::draw)
-		.def(
-			"accept",
-			py::overload_cast<osg::PrimitiveFunctor&>(&osg::PrimitiveSet::accept, py::const_)
+		.def("index", &osg::PrimitiveSet::index,
+			"Return the vertex-array index stored at position `pos` within this set."
+		)
+		.def("offsetIndices", &osg::PrimitiveSet::offsetIndices,
+			"Add `offset` to every index in this set in place, e.g. when merging geometries "
+			"that share one combined vertex array."
+		)
+		.def("draw", &osg::PrimitiveSet::draw,
+			"Issue this set's raw glDrawArrays/glDrawElements call against the currently "
+			"bound GL state; normally invoked internally by Geometry, not called directly."
 		)
 		.def(
 			"accept",
-			py::overload_cast<osg::PrimitiveIndexFunctor&>(&osg::PrimitiveSet::accept, py::const_)
+			py::overload_cast<osg::PrimitiveFunctor&>(&osg::PrimitiveSet::accept, py::const_),
+			"Visit this set's primitives resolved to actual vertex values via a PrimitiveFunctor."
+		)
+		.def(
+			"accept",
+			py::overload_cast<osg::PrimitiveIndexFunctor&>(&osg::PrimitiveSet::accept, py::const_),
+			"Visit this set's primitives as raw vertex indices via a PrimitiveIndexFunctor."
 		)
 	;
 
@@ -125,15 +146,21 @@ void bind_Geometry(py::module_& m) {
 		"DrawArrays",
 		"A PrimitiveSet that draws a contiguous run of vertices starting at a given index."
 	)
-		.def(py::init<GLenum>(), "mode"_a=0)
+		.def(py::init<GLenum>(), "mode"_a=0, "Create an empty DrawArrays with the given draw mode.")
 		.def(py::init<GLenum, GLint, GLsizei, int>(),
 			"mode"_a,
 			"first"_a,
 			"count"_a,
-			"numInstances"_a=0
+			"numInstances"_a=0,
+			"Create a DrawArrays spanning `count` vertices starting at index `first`, drawn "
+			"with the given mode."
 		)
-		.def_property("first", &osg::DrawArrays::getFirst, &osg::DrawArrays::setFirst)
-		.def_property("count", &osg::DrawArrays::getCount, &osg::DrawArrays::setCount)
+		.def_property("first", &osg::DrawArrays::getFirst, &osg::DrawArrays::setFirst,
+			"Index of the first vertex to draw."
+		)
+		.def_property("count", &osg::DrawArrays::getCount, &osg::DrawArrays::setCount,
+			"Number of contiguous vertices to draw starting at `first`."
+		)
 	;
 
 	// virtual void setUseVertexBufferObjects(bool flag);
@@ -145,8 +172,11 @@ void bind_Geometry(py::module_& m) {
 		"properties (alongside the traditional set*Array() methods), and .primitiveSets/"
 		".vertexAttrib are sequence/mapping proxies rather than add/get method pairs."
 	)
-		.def(py::init<>())
-		.def(py::init(pyx::kwargs_ctor<osg::Geometry>()))
+		.def(py::init<>(), "Create an empty Geometry with no arrays or primitive sets.")
+		.def(py::init(pyx::kwargs_ctor<osg::Geometry>()),
+			"Create a Geometry, optionally setting vertexArray/colorArray/normalArray/"
+			"primitiveSets via keyword arguments."
+		)
 
 		// Properties (new) alongside the old set*Array()/get*Array() method calls (kept for
 		// compatibility -- osgGLTF's loader still calls setVertexArray()/setColorArray()
@@ -159,7 +189,10 @@ void bind_Geometry(py::module_& m) {
 			),
 			detail::GeometrySlots::setter<detail::VertexArraySlot, osg::Array*>(
 				&osg::Geometry::setVertexArray
-			)
+			),
+			"The Array of per-vertex positions. To update an existing geometry, mutate this "
+			"array's elements in place and call its .dirty() rather than reassigning a new "
+			"Array every frame; a fresh Array is a brand-new GPU buffer allocation."
 		)
 		.def_property(
 			"colorArray",
@@ -168,7 +201,9 @@ void bind_Geometry(py::module_& m) {
 			),
 			detail::GeometrySlots::setter<detail::ColorArraySlot, osg::Array*>(
 				py::overload_cast<osg::Array*>(&osg::Geometry::setColorArray)
-			)
+			),
+			"The Array of per-vertex (or per-primitive, depending on its .binding) color "
+			"values; same in-place-mutate-plus-.dirty() rule as vertexArray."
 		)
 		.def_property(
 			"normalArray",
@@ -177,7 +212,9 @@ void bind_Geometry(py::module_& m) {
 			),
 			detail::GeometrySlots::setter<detail::NormalArraySlot, osg::Array*>(
 				py::overload_cast<osg::Array*>(&osg::Geometry::setNormalArray)
-			)
+			),
+			"The Array of per-vertex (or per-primitive, depending on its .binding) normal "
+			"vectors; same in-place-mutate-plus-.dirty() rule as vertexArray."
 		)
 
 		// TODO: TexCoordArray should eventually be a pyx::MappingProxy (unit -> Array), like
@@ -192,10 +229,15 @@ void bind_Geometry(py::module_& m) {
 	;
 
 	pyx::bind_proxy_property<detail::VertexAttribProxy, osg::Geometry, detail::GeometryStorage>(
-		geom, "_VertexAttrib", "vertexAttrib"
+		geom, "_VertexAttrib", "vertexAttrib",
+		"Mapping proxy of generic vertex-attribute index -> Array (setVertexAttribArray's "
+		"index slot, e.g. for a shader's manually-bound osg_Tangent). Assigning `geom."
+		"vertexAttrib[i] = arr` replaces the array at that index; deleting a key clears it."
 	);
 	pyx::bind_proxy_property<detail::PrimitiveSetsProxy, osg::Geometry, detail::GeometryStorage>(
-		geom, "_PrimitiveSets", "primitiveSets"
+		geom, "_PrimitiveSets", "primitiveSets",
+		"Sequence proxy over this Geometry's PrimitiveSets - supports indexing, `len()`, "
+		"`.append()`, `.insert()`, and `del` in place of add/removePrimitiveSet()."
 	);
 
 	m
@@ -209,7 +251,9 @@ void bind_Geometry(py::module_& m) {
 				float,
 				float,
 				float
-			>(&osg::createTexturedQuadGeometry)
+			>(&osg::createTexturedQuadGeometry),
+			"Build a single-quad Geometry from a corner point and two edge vectors, with an "
+			"explicit texture-coordinate rectangle (l, b, r, t)."
 		)
 		.def(
 			"createTexturedQuadGeometry",
@@ -224,7 +268,9 @@ void bind_Geometry(py::module_& m) {
 			"width"_a,
 			"height"_a,
 			"s"_a=1.0f,
-			"t"_a=1.0f
+			"t"_a=1.0f,
+			"Build a single-quad Geometry from a corner point and width/height edge vectors, "
+			"with texture coordinates spanning (0, 0) to (s, t)."
 		)
 	;
 }
