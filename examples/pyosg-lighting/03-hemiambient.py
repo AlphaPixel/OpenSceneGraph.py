@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 03-hemiambient.py
 
 import sys
 import os

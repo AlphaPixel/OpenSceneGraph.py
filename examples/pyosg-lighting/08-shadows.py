@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 08-shadows.py
 
 # Step 8 -- Shadow Mapping
 # New concept: a PRE_RENDER "shadow camera" looks at the scene from the key light's POV

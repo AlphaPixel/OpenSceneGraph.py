@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-async-gltf.py
 
 # Proves the "viewer pops up immediately, model pops in a few seconds later" idea, AND
 # demonstrates the fully decoupled progress-display pattern: osgx.gltf.readNodeFile() runs the

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-rtt.py
 
 import os
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-voronoi-reveal.py
 
 """A pure-GL take on the Unity "Shapes" library's Voronoi-construction demo:
 a field of points where a diagram of cells sweeps into existence left-to-right,
@@ -39,15 +38,16 @@ import random
 import sys
 
 os.environ.setdefault("OSG_WINDOW", "50 50 900 650")
-os.environ.setdefault("OSG_THREADING", "SingleThreaded")
-os.environ.setdefault("OSG_GL_CONTEXT_PROFILE_MASK", "1")
-os.environ.setdefault("OSG_GL_VERSION", "4.6")
-os.environ.setdefault("OSG_GL_CONTEXT_VERSION", "4.6")
+
+# Import side effect: fills in OSG_THREADING/OSG_GL_* env var defaults (see pyosg_example.py).
+# Deliberately after the OSG_WINDOW override above (setdefault() means order between these
+# doesn't actually matter, but matching pyosg-khronos-viewer.py's style) and before
+# `from OpenSceneGraph import *` -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
-W, H = 900, 650
 POINT_COUNT = 90 # default cell count; overridden by --density N
 SWEEP_PERIOD = 5.0 # seconds for one left->right pass; the sweep then ping-pongs back
 
@@ -325,15 +325,20 @@ def build_voronoi_hud(points, w, h, vband_px=None, fill=False):
 
 	return cam
 
-if __name__ == "__main__":
-	aspect = W / float(H)
+# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+# Reads --density/--vband/--fill straight from sys.argv (matching parse_arg()/parse_vband()'s
+# existing shape) rather than switching to argparse, so both a standalone run and a runner-driven
+# one (which forwards `-- --density N ...` straight into sys.argv[1:], see pyosg-khronos-viewer.py)
+# pick these up identically.
+def build_scene(w, h):
+	aspect = w / float(h)
 	margin = 0.05
 	density = int(parse_arg(sys.argv, "--density", POINT_COUNT))
 
 	points = generate_points(density, aspect, margin)
 
 	hud = build_voronoi_hud(
-		points, W, H,
+		points, w, h,
 		vband_px=parse_vband(sys.argv),
 		fill="--fill" in sys.argv,
 	)
@@ -341,16 +346,28 @@ if __name__ == "__main__":
 	root = osg.Group()
 	root.children.append(hud)
 
-	v = osgViewer.Viewer()
-	v.sceneData = root
-	v.cameraManipulator = osgGA.TrackballManipulator()
-	# The HUD camera clears white and covers the whole viewport every frame.
-	v.camera.clearColor = osg.Vec4(1.0, 0.0, 1.0, 1.0)
+	return root
+
+# The HUD camera clears white and covers the whole viewport every frame -- viewer-level, so it
+# needs the live viewer build_scene() never receives.
+def configure_viewer(viewer, root):
+	viewer.camera.clearColor = osg.Vec4(1.0, 0.0, 1.0, 1.0)
 
 	if "--repl" in sys.argv:
 		from pyosg_repl import repl
 
-		repl(v, globals())
+		repl(viewer, globals())
+
+if __name__ == "__main__":
+	W, H = window_size()
+
+	v = osgViewer.Viewer()
+	root = build_scene(W, H)
+
+	v.sceneData = root
+	v.cameraManipulator = osgGA.TrackballManipulator()
+
+	configure_viewer(v, root)
 
 	while not v.done:
 		v.frame()

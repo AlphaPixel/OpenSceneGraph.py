@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 ../examples/pyosg-repl.py
 
 # Proof-of-concept for an eventual OpenSceneGraph.repl(viewer, namespace) helper.
 #

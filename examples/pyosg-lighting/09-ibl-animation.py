@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 09-ibl-animation.py --hdr papermill
 
 # Step 9 (animated) -- Image-Based Lighting (IBL) + glTF animation playback
 #

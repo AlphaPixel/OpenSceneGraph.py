@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 09-ibl.py --hdr papermill --floor-z -0.04 --floor-size 0.15
 
 # Step 9 -- Image-Based Lighting (IBL)
 #

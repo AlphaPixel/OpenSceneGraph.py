@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-taa.py
 
 # Minimal temporal anti-aliasing (TAA) / temporal supersampling proof.
 #
@@ -37,22 +36,14 @@
 #   2 = exaggerate jitter 12x, to make the sampling pattern obvious
 #   R = reset history
 
-import os
-
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6",
-})
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
+# example -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
-import pyosg_repl
-
-W, H = 800, 600
 HISTORY_LENGTH = 16
 
 SCENE_VERTEX = """
@@ -180,11 +171,11 @@ def create_scene():
 	return root
 
 
-def create_gbuffer(scene):
-	color = make_texture(W, H)
-	normal = make_texture(W, H, False)
+def create_gbuffer(scene, w, h):
+	color = make_texture(w, h)
+	normal = make_texture(w, h, False)
 	depth = osg.Texture2D(
-		size=(W, H),
+		size=(w, h),
 		internalFormat=GL_DEPTH_COMPONENT24,
 		sourceFormat=GL_DEPTH_COMPONENT,
 		sourceType=GL_FLOAT,
@@ -198,7 +189,7 @@ def create_gbuffer(scene):
 		renderTargetImplementation=osg.Camera.FRAME_BUFFER_OBJECT,
 		clearMask=GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
 		clearColor=osg.Vec4(0, 0, 0, 0),
-		viewport=osg.Viewport(0, 0, W, H),
+		viewport=osg.Viewport(0, 0, w, h),
 	)
 	cam.attach(osg.Camera.COLOR_BUFFER0, color)
 	cam.attach(osg.Camera.COLOR_BUFFER1, normal)
@@ -207,7 +198,7 @@ def create_gbuffer(scene):
 	return cam, color, normal, depth
 
 
-def fullscreen_rtt(name, order, output, inputs, fragment, uniforms=()):
+def fullscreen_rtt(name, order, output, inputs, fragment, w, h, uniforms=()):
 	cam = osg.Camera(
 		name=name,
 		referenceFrame=osg.Transform.ABSOLUTE_RF,
@@ -215,7 +206,7 @@ def fullscreen_rtt(name, order, output, inputs, fragment, uniforms=()):
 		renderTargetImplementation=osg.Camera.FRAME_BUFFER_OBJECT,
 		clearMask=GL_COLOR_BUFFER_BIT,
 		clearColor=osg.Vec4(0, 0, 0, 1),
-		viewport=osg.Viewport(0, 0, W, H),
+		viewport=osg.Viewport(0, 0, w, h),
 		projectionMatrix=osg.Matrix.identity(),
 		viewMatrix=osg.Matrix.identity(),
 		allowEventFocus=False,
@@ -262,11 +253,124 @@ def halton(index, base):
 
 
 class Controls(osgGA.GUIEventHandler):
-	def __init__(self, state):
+	"""Drives the whole TAA state machine (jitter/history-swap/weight-ramp) off the
+	FRAME event, which osgGA dispatches to every registered handler once per
+	viewer.frame() call -- this is what lets a plain `while not viewer.done:
+	viewer.frame()` loop (runner-driven or standalone) work here at all, instead of
+	requiring pyosg_repl.repl() to drive the loop itself and call back in
+	(the original shape this file had, before build_scene()/configure_viewer())."""
+
+	def __init__(self, gbuffer, resolve_ab, resolve_ba, display_current, display_a, display_b,
+			history_weight_a, history_weight_b):
 		super().__init__()
-		self.state = state
+
+		self.gbuffer = gbuffer
+		self.resolve_ab = resolve_ab
+		self.resolve_ba = resolve_ba
+		self.display_current = display_current
+		self.display_a = display_a
+		self.display_b = display_b
+		self.history_weight_a = history_weight_a
+		self.history_weight_b = history_weight_b
+
+		self.w = int(gbuffer.viewport.width)
+		self.h = int(gbuffer.viewport.height)
+
+		self.state = {
+			"mode": 0,
+			"reset": True,
+			"reset_reason": "startup",
+			"sample": 0,
+			"write_b": True,
+			"sequence_index": None,
+			"jitter": None,
+			"history_weight": 0.0,
+			"history_weights": (0.0, 0.0),
+			"camera_moving": False,
+		}
+
+		# The FIRST FRAME event must render with THIS prepared state, not an already-advanced
+		# one -- see the FRAME branch in handle() below.
+		self._primed = False
+
+		self.prepare_frame()
+
+		print("0=TAA  1=current frame  2=exaggerated jitter  R=reset", flush=True)
+
+	def prepare_frame(self):
+		state = self.state
+
+		if state["reset"]:
+			print(f"history reset: {state['reset_reason']}", flush=True)
+			state["sample"] = 0
+			state["reset"] = False
+
+		sequence_index = state["sample"] % HISTORY_LENGTH + 1
+		jx = halton(sequence_index, 2) - 0.5
+		jy = halton(sequence_index, 3) - 0.5
+		jitter_scale = 12.0 if state["mode"] == 2 else 1.0
+		state["sequence_index"] = sequence_index
+		state["jitter"] = (jx, jy)
+		# This camera is RELATIVE_RF: its tiny projection translation is composed
+		# with the viewer camera's real projection during cull traversal.
+		self.gbuffer.projectionMatrix = osg.Matrix.translate(
+			2.0 * jx * jitter_scale / self.w,
+			2.0 * jy * jitter_scale / self.h,
+			0.0,
+		)
+
+		weight = min(state["sample"], HISTORY_LENGTH - 1) / float(
+			min(state["sample"], HISTORY_LENGTH - 1) + 1
+		)
+		self.history_weight_a.value = weight
+		self.history_weight_b.value = weight
+		state["history_weight"] = weight
+		state["history_weights"] = (
+			self.history_weight_a.value, self.history_weight_b.value,
+		)
+
+		show_current = state["mode"] != 0
+		self.display_current.nodeMask = 0xFFFFFFFF if show_current else 0
+		if state["write_b"]:
+			self.resolve_ab.nodeMask = 0xFFFFFFFF
+			self.resolve_ba.nodeMask = 0
+			self.display_b.nodeMask = 0 if show_current else 0xFFFFFFFF
+			self.display_a.nodeMask = 0
+		else:
+			self.resolve_ab.nodeMask = 0
+			self.resolve_ba.nodeMask = 0xFFFFFFFF
+			self.display_a.nodeMask = 0 if show_current else 0xFFFFFFFF
+			self.display_b.nodeMask = 0
+
+	def advance(self):
+		state = self.state
+
+		state["write_b"] = not state["write_b"]
+		state["sample"] += 1
+		if state["sample"] == 1:
+			print("accumulation started", flush=True)
+		elif state["sample"] == HISTORY_LENGTH:
+			print(f"accumulation converged at sample {HISTORY_LENGTH}", flush=True)
+		self.prepare_frame()
+
+	def reset_history(self, reason="interactive request"):
+		"""Reset accumulation now, ready for the next FRAME event."""
+		self.state["reset"] = True
+		self.state["reset_reason"] = reason
+		self.prepare_frame()
 
 	def handle(self, ea, aa):
+		if ea.type == osgGA.GUIEventAdapter.FRAME:
+			# __init__ already prepared frame 0 -- only ADVANCE (bump sample, swap
+			# history buffers) for every frame after that.
+			if self._primed:
+				self.advance()
+
+			else:
+				self._primed = True
+
+			return False
+
 		# Any manipulator input invalidates same-pixel history. Reprojection would
 		# preserve it, but that is precisely the omitted Layer 2.
 		if ea.type in (
@@ -305,29 +409,32 @@ class Controls(osgGA.GUIEventHandler):
 		return True
 
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
-
-	current = make_texture(W, H)
-	history_a = make_texture(W, H)
-	history_b = make_texture(W, H)
+# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+# The seven RTT/display cameras are appended to root.children in a fixed order (gbuffer, shade,
+# resolve_ab, resolve_ba, display_current, display_a, display_b); configure_viewer() unpacks them
+# back out in that same order, the same "recover state from the graph instead of a module-level
+# stash" idea as pyosg-mrt.py's Uniform recovery.
+def build_scene(w, h):
+	current = make_texture(w, h)
+	history_a = make_texture(w, h)
+	history_b = make_texture(w, h)
 	history_weight_a = osg.Uniform("historyWeight", 0.0)
 	history_weight_b = osg.Uniform("historyWeight", 0.0)
 
-	gbuffer, color, normal, depth = create_gbuffer(create_scene())
+	gbuffer, color, normal, depth = create_gbuffer(create_scene(), w, h)
 	shade = fullscreen_rtt(
 		"Deferred shading", 1, current,
-		((color, "colorTex"), (normal, "normalTex")), SHADE_FRAGMENT,
+		((color, "colorTex"), (normal, "normalTex")), SHADE_FRAGMENT, w, h,
 	)
 	# A->B and B->A are structurally identical but never enabled together.
 	resolve_ab = fullscreen_rtt(
 		"TAA A to B", 2, history_b,
-		((current, "currentTex"), (history_a, "historyTex")), TAA_FRAGMENT,
+		((current, "currentTex"), (history_a, "historyTex")), TAA_FRAGMENT, w, h,
 		(history_weight_a,),
 	)
 	resolve_ba = fullscreen_rtt(
 		"TAA B to A", 2, history_a,
-		((current, "currentTex"), (history_b, "historyTex")), TAA_FRAGMENT,
+		((current, "currentTex"), (history_b, "historyTex")), TAA_FRAGMENT, w, h,
 		(history_weight_b,),
 	)
 	display_current = display_camera("Display current", current)
@@ -340,82 +447,32 @@ if __name__ == "__main__":
 		display_current, display_a, display_b,
 	))
 
+	return root
+
+# Controls needs the live viewer to register as an event handler, which build_scene() never
+# receives.
+def configure_viewer(viewer, root):
+	gbuffer, shade, resolve_ab, resolve_ba, display_current, display_a, display_b = root.children
+	history_weight_a = resolve_ab.stateSet.uniforms["historyWeight"]
+	history_weight_b = resolve_ba.stateSet.uniforms["historyWeight"]
+
+	viewer.eventHandlers.append(Controls(
+		gbuffer, resolve_ab, resolve_ba, display_current, display_a, display_b,
+		history_weight_a, history_weight_b,
+	))
+
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	W, H = window_size()
+
 	viewer = osgViewer.Viewer()
+	root = build_scene(W, H)
+
 	viewer.sceneData = root
 	viewer.cameraManipulator = osgGA.TrackballManipulator()
-	state = {
-		"mode": 0,
-		"reset": True,
-		"reset_reason": "startup",
-		"sample": 0,
-		"write_b": True,
-		"sequence_index": None,
-		"jitter": None,
-		"history_weight": 0.0,
-		"history_weights": (0.0, 0.0),
-		"camera_moving": False,
-	}
-	viewer.eventHandlers.append(Controls(state))
 
-	def prepare_frame():
-		if state["reset"]:
-			print(f"history reset: {state['reset_reason']}", flush=True)
-			state["sample"] = 0
-			state["reset"] = False
+	configure_viewer(viewer, root)
 
-		sequence_index = state["sample"] % HISTORY_LENGTH + 1
-		jx = halton(sequence_index, 2) - 0.5
-		jy = halton(sequence_index, 3) - 0.5
-		jitter_scale = 12.0 if state["mode"] == 2 else 1.0
-		state["sequence_index"] = sequence_index
-		state["jitter"] = (jx, jy)
-		# This camera is RELATIVE_RF: its tiny projection translation is composed
-		# with the viewer camera's real projection during cull traversal.
-		gbuffer.projectionMatrix = osg.Matrix.translate(
-			2.0 * jx * jitter_scale / W,
-			2.0 * jy * jitter_scale / H,
-			0.0,
-		)
-
-		weight = min(state["sample"], HISTORY_LENGTH - 1) / float(
-			min(state["sample"], HISTORY_LENGTH - 1) + 1
-		)
-		history_weight_a.value = weight
-		history_weight_b.value = weight
-		state["history_weight"] = weight
-		state["history_weights"] = (
-			history_weight_a.value, history_weight_b.value,
-		)
-
-		show_current = state["mode"] != 0
-		display_current.nodeMask = 0xFFFFFFFF if show_current else 0
-		if state["write_b"]:
-			resolve_ab.nodeMask = 0xFFFFFFFF
-			resolve_ba.nodeMask = 0
-			display_b.nodeMask = 0 if show_current else 0xFFFFFFFF
-			display_a.nodeMask = 0
-		else:
-			resolve_ab.nodeMask = 0
-			resolve_ba.nodeMask = 0xFFFFFFFF
-			display_a.nodeMask = 0 if show_current else 0xFFFFFFFF
-			display_b.nodeMask = 0
-
-
-	def after_frame():
-		state["write_b"] = not state["write_b"]
-		state["sample"] += 1
-		if state["sample"] == 1:
-			print("accumulation started", flush=True)
-		elif state["sample"] == HISTORY_LENGTH:
-			print(f"accumulation converged at sample {HISTORY_LENGTH}", flush=True)
-		prepare_frame()
-
-	def reset_history(reason="interactive request"):
-		"""Reset accumulation now, ready for the next manual or continuous frame."""
-		state["reset"] = True
-		state["reset_reason"] = reason
-		prepare_frame()
-
-	prepare_frame()
-	print("0=TAA  1=current frame  2=exaggerated jitter  R=reset", flush=True)
-	controller = pyosg_repl.repl(viewer, globals(), after_frame)
+	while not viewer.done:
+		viewer.frame()

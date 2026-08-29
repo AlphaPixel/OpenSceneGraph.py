@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 11-sketchfab.py --hdr papermill --floor-z -0.04 --floor-size 0.15
 
 # Step 11 -- Sketchfab-parity capstone: deferred G-buffer + SSAO/bloom/tonemap post-fx chain
 #

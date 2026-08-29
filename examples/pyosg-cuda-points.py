@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
-#vimrun! python3 ../examples/pyosg-cuda-points.py
 
 import ctypes
-import os
 import struct
 import sys
 import time
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6"
-})
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
+# example -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -210,8 +205,15 @@ class CUDAPointDriver:
 		cu(driver.cuGraphicsUnmapResources(1, self.resource, 0))
 
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+# Set by build_scene(), read by configure_viewer() -- CUDAPointDriver isn't an osg Callback (no
+# __call__), so it can't ride along stashed on a node's callback slot the way pyosg-picking.py/
+# pyosg-hover.py recover their own plain-Python state; a same-module variable is the simpler
+# channel here. Both runners and every __main__ block call build_scene() before
+# configure_viewer(), so the ordering is guaranteed.
+_cuda_driver = None
+
+def build_scene(w, h):
+	global _cuda_driver
 
 	positions = osg.Vec3Array(POINT_COUNT)
 
@@ -237,24 +239,38 @@ if __name__ == "__main__":
 		osg.StateAttribute.Values.ON
 	)
 
-	cuda_driver = CUDAPointDriver(positions, POINT_COUNT)
+	_cuda_driver = CUDAPointDriver(positions, POINT_COUNT)
+
+	return r
+
+# preDrawCallback needs viewer.camera, which build_scene() never receives.
+def configure_viewer(viewer, root):
 	frame_index = [0]
 
 	def predraw(ri):
-		if not cuda_driver.try_register(ri.contextID):
+		if not _cuda_driver.try_register(ri.contextID):
 			return
 
 		frame_index[0] += 1
 
 		verbose = (frame_index[0] % 60 == 1)
 
-		cuda_driver.step(ri.state.frameStamp.simulationTime, verbose=verbose)
+		_cuda_driver.step(ri.state.frameStamp.simulationTime, verbose=verbose)
+
+	viewer.camera.preDrawCallback = predraw
+
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	W, H = window_size()
 
 	v = osgViewer.Viewer()
+	root = build_scene(W, H)
 
-	v.sceneData = r
+	v.sceneData = root
 	v.cameraManipulator = osgGA.TrackballManipulator()
-	v.camera.preDrawCallback = predraw
+
+	configure_viewer(v, root)
 
 	while not v.done:
 		v.frame()

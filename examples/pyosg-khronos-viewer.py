@@ -14,16 +14,18 @@ import time
 
 # os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
 os.environ.setdefault("OSG_WINDOW", "50 50 1420 933") # Default on cubicool's machine
-os.environ.setdefault("OSG_THREADING", "SingleThreaded")
-os.environ.setdefault("OSG_GL_CONTEXT_PROFILE_MASK", "1")
-os.environ.setdefault("OSG_GL_VERSION", "4.6")
-os.environ.setdefault("OSG_GL_CONTEXT_VERSION", "4.6")
 os.environ.setdefault(
 	"OSG_LIBRARY_PATH", ":".join((
 		"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/plugins/ktx2",
 		"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/plugins/gltf"
 	))
 )
+
+# Import side effect: fills in OSG_THREADING/OSG_GL_* env var defaults (see pyosg_example.py),
+# same reason as every other example -- these need to land before OSG's DisplaySettings reads
+# them. Deliberately after the OSG_WINDOW/OSG_LIBRARY_PATH overrides above (setdefault() means
+# order between these doesn't actually matter, but matching the rest of this file's style).
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -167,6 +169,13 @@ class FramebufferPNG(osg.Camera.DrawCallback):
 
 		self.done = True
 
+		# Standard runner loops just do `while not viewer.done: viewer.frame()` -- they don't
+		# know about `capture.done`. Setting this here (rather than main()'s old special-cased
+		# `if capture is not None and capture.done: break`) means the same standard loop exits
+		# on its own after the screenshot, standalone or via a runner, no custom exit condition
+		# needed anywhere else.
+		self.viewer.done = True
+
 		osg.notice(f"Wrote framebuffer screenshot: {self.filename}")
 
 class Diagnostics(osgGA.GUIEventHandler):
@@ -199,18 +208,28 @@ class Diagnostics(osgGA.GUIEventHandler):
 
 		return True
 
-def main():
+# Set by build_scene(), read by configure_viewer() -- args.camera/args.debug/args.screenshot and
+# the PBRIBLScene object aren't retrievable from the returned root (build_scene()'s contract is
+# just "return a Node"), and args in particular has no natural home in the graph the way e.g.
+# pyosg-mrt.py pulls a Uniform back out of a StateSet. A same-module variable is the simpler
+# channel; both runners and every __main__ block call build_scene() before configure_viewer().
+_args = None
+_pbr = None
+
+def build_scene(w, h):
+	global _args, _pbr
+
 	parser = argparse.ArgumentParser(description=__doc__)
 
 	parser.add_argument("model", help="glTF model path")
-	environment = parser.add_mutually_exclusive_group(required=True)
+	environment_group = parser.add_mutually_exclusive_group(required=True)
 
-	environment.add_argument(
+	environment_group.add_argument(
 		"--hdr",
 		metavar="PATH",
 		help="source HDR environment; bakes diffuse, BRDF LUT, and GGX-prefiltered specular live"
 	)
-	environment.add_argument(
+	environment_group.add_argument(
 		"--env",
 		metavar="MANIFEST",
 		help="fully pre-baked osgx_pbribl environment manifest"
@@ -231,11 +250,14 @@ def main():
 		help="write one raw framebuffer PNG"
 	)
 
-	args = parser.parse_args()
+	_args = parser.parse_args()
 
+	# Must happen before any GraphicsContext exists -- build_scene() runs before either runner's
+	# viewer.setUpViewInWindow(), and before a standalone __main__ constructs its GraphicsContext
+	# at first realize()/frame(), so this ordering holds either way.
 	osg.DisplaySettings.instance.numMultiSamples = 8
 
-	model_path = resolve_model(args.model)
+	model_path = resolve_model(_args.model)
 	t0 = time.time()
 	model = osgDB.readNodeFile(str(model_path))
 
@@ -244,11 +266,11 @@ def main():
 	if model is None:
 		raise RuntimeError(f"failed to load model {model_path}")
 
-	diagnostics = args.debug is not None
+	diagnostics = _args.debug is not None
 
-	if args.hdr:
+	if _args.hdr:
 		hdr_path = resolve_asset(
-			args.hdr,
+			_args.hdr,
 			"hdr",
 			("glTF-Sample-Environments/{}",)
 		)
@@ -256,7 +278,7 @@ def main():
 		environment_description = str(hdr_path)
 
 	else:
-		env_path = resolve_environment_manifest(args.env)
+		env_path = resolve_environment_manifest(_args.env)
 		environment = osgx.gltf.pbribl.PBRIBLEnvironment.load(str(env_path))
 		environment_description = str(env_path)
 
@@ -272,7 +294,9 @@ def main():
 		raise RuntimeError(f"failed to prepare PBR IBL resources for {environment_description}")
 
 	if diagnostics:
-		pbr.debugMode.value = DEBUG_MODES[args.debug]
+		pbr.debugMode.value = DEBUG_MODES[_args.debug]
+
+	_pbr = pbr
 
 	root = osg.Group()
 
@@ -281,12 +305,17 @@ def main():
 
 	root.children.append(pbr.node)
 
-	viewer = osgViewer.Viewer()
+	return root
 
-	viewer.sceneData = root
+# Camera/diagnostics/screenshot setup all need the live viewer, which build_scene() never
+# receives.
+def configure_viewer(viewer, root):
+	args = _args
+	pbr = _pbr
+
 	viewer.camera.clearColor = osg.Vec4(*CLEAR_COLOR)
 
-	if diagnostics:
+	if args.debug is not None:
 		viewer.eventHandlers.append(Diagnostics(pbr))
 
 		osg.notice("Diagnostics: 1=combined 2=diffuse 3=specular N=normal R=roughness D=diffuse IBL")
@@ -299,8 +328,6 @@ def main():
 	else:
 		viewer.cameraManipulator = osgGA.TrackballManipulator()
 
-	capture = None
-
 	if args.screenshot:
 		path = pathlib.Path(args.screenshot).expanduser()
 
@@ -310,11 +337,15 @@ def main():
 		capture = FramebufferPNG(viewer, str(path))
 		viewer.camera.finalDrawCallback = capture
 
+if __name__ == "__main__":
+	W, H = window_size()
+
+	viewer = osgViewer.Viewer()
+	root = build_scene(W, H)
+
+	viewer.sceneData = root
+
+	configure_viewer(viewer, root)
+
 	while not viewer.done:
 		viewer.frame()
-
-		if capture is not None and capture.done:
-			break
-
-if __name__ == "__main__":
-	main()

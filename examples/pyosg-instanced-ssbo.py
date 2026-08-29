@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-instanced-ssbo.py --samples 4 --clear-color 0.1,0.2,0.3
 
 import sys
-import os
 import time
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6"
-})
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
+# example -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -65,9 +60,7 @@ FRAGMENT_SHADER = """
 	}
 """
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
-
+def build_scene(w, h):
 	c = osg.Vec4Array(NUM_INSTANCES)
 
 	# TODO: Do this in the constructor!
@@ -99,9 +92,19 @@ if __name__ == "__main__":
 	g.stateSet.attributes.append(p)
 	g.stateSet.attributes.append(ssbb)
 
+	return g
+
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	# osg.ArgumentParser here (rather than plain osgViewer.Viewer()) picks up OSG's own standard
+	# command-line options (--samples, --clear-color, ...) mentioned in the #vimrun! header above
+	# -- standalone-only; a runner-driven run constructs its own bare Viewer and won't parse those.
 	v = osgViewer.Viewer(osg.ArgumentParser("pyosg-instanced-ssbo.py", sys.argv))
 
-	v.sceneData = g
+	W, H = window_size()
+
+	v.sceneData = build_scene(W, H)
 	v.cameraManipulator = osgGA.TrackballManipulator()
 
 	while not v.done:

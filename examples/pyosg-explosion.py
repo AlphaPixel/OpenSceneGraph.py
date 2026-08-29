@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-fire.py --samples 4 --clear-color 0.02,0.02,0.03
 
 # "Fiery explosion" prototype: a swarm of view-space-billboarded unit quads (same
 # gl_InstanceID instancing trick as pyosg-instanced.py) expanding outward from the
@@ -27,16 +26,14 @@
 
 import colorsys
 import math
-import os
 import random
 import sys
 import time
 
-os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
-os.environ.setdefault("OSG_THREADING", "SingleThreaded")
-os.environ.setdefault("OSG_GL_CONTEXT_PROFILE_MASK", "1")
-os.environ.setdefault("OSG_GL_VERSION", "4.6")
-os.environ.setdefault("OSG_GL_CONTEXT_VERSION", "4.6")
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
+# example -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -323,7 +320,7 @@ def build_shockwave(max_radius=4.0, duration=0.6, ring_width=0.3):
 	g.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4))
 	g.initialBound = osg.BoundingBox(-quad_size, -quad_size, -0.1, quad_size, quad_size, 0.1)
 
-	p = osg.Program(name="pyosg-fire-shockwave", shaders=(
+	p = osg.Program(name="pyosg-explosion-shockwave", shaders=(
 		osg.Shader(osg.Shader.VERTEX, SHOCKWAVE_VERTEX_SHADER),
 		osg.Shader(osg.Shader.FRAGMENT, SHOCKWAVE_FRAGMENT_SHADER)
 	))
@@ -548,7 +545,7 @@ def build_smoke(
 	g.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4, num_instances))
 	g.initialBound = osg.BoundingBox(-7, -7, -0.5, 7, 7, 8)
 
-	p = osg.Program(name="pyosg-fire-smoke", shaders=(
+	p = osg.Program(name="pyosg-explosion-smoke", shaders=(
 		osg.Shader(osg.Shader.VERTEX, SMOKE_VERTEX_SHADER),
 		osg.Shader(osg.Shader.FRAGMENT, SMOKE_FRAGMENT_SHADER)
 	))
@@ -724,7 +721,7 @@ def build_embers(num_points=220, duration=1.6, launch_speed=4.0, gravity=6.0, ba
 	g.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.POINTS, 0, num_points))
 	g.initialBound = osg.BoundingBox(-8, -8, -4, 8, 8, 8)
 
-	p = osg.Program(name="pyosg-fire-embers", shaders=(
+	p = osg.Program(name="pyosg-explosion-embers", shaders=(
 		osg.Shader(osg.Shader.VERTEX, EMBER_VERTEX_SHADER),
 		osg.Shader(osg.Shader.FRAGMENT, EMBER_FRAGMENT_SHADER)
 	))
@@ -777,7 +774,7 @@ def build_fire(
 	g.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4, num_instances))
 	g.initialBound = osg.BoundingBox(-3, -3, -0.5, 3, 3, 3)
 
-	p = osg.Program(name="pyosg-fire", shaders=(
+	p = osg.Program(name="pyosg-explosion", shaders=(
 		osg.Shader(osg.Shader.VERTEX, VERTEX_SHADER),
 		osg.Shader(osg.Shader.FRAGMENT, FRAGMENT_SHADER)
 	))
@@ -960,7 +957,7 @@ def build_flash_camera(width, height, duration=0.25):
 
 	cam = osg.Camera()
 
-	cam.name = "pyosg-fire flash HUD"
+	cam.name = "pyosg-explosion flash HUD"
 	cam.renderOrder = osg.Camera.POST_RENDER
 	cam.clearMask = 0  # overlay only -- don't clear the already-rendered scene
 	cam.viewport = osg.Viewport(0, 0, width, height)
@@ -974,7 +971,7 @@ def build_flash_camera(width, height, duration=0.25):
 	g.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4))
 	g.initialBound = osg.BoundingBox(-1, -1, -1, 1, 1, 1)
 
-	p = osg.Program(name="pyosg-fire-flash", shaders=(
+	p = osg.Program(name="pyosg-explosion-flash", shaders=(
 		osg.Shader(osg.Shader.VERTEX, FLASH_VERTEX_SHADER),
 		osg.Shader(osg.Shader.FRAGMENT, FLASH_FRAGMENT_SHADER)
 	))
@@ -1071,26 +1068,41 @@ class ExplosionKeyHandler(osgGA.GUIEventHandler):
 		else:
 			trigger(target, self.viewer)
 
-		osg.notice(f"[pyosg-fire] triggered (key {chr(ea.key)})")
+		osg.notice(f"[pyosg-explosion] triggered (key {chr(ea.key)})")
 
 		return True
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+def parse_arg(argv, flag, default):
+	"""Return the value following `flag` in argv (cast to type(default)), or default."""
+
+	if flag not in argv:
+		return default
+
+	return type(default)(argv[argv.index(flag) + 1])
+
+# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+# `--samples N` used to ride OSG's own osg.ArgumentParser-consuming Viewer(argParser)
+# constructor -- neither runner constructs its Viewer that way (both use plain osgViewer.Viewer()
+# and pass w/h straight into build_scene()/setUpViewInWindow() instead), so it's reproduced here
+# via osg.DisplaySettings.instance.numMultiSamples, the same MSAA mechanism
+# pyosg-khronos-viewer.py/pyosg-praxis.py already use. (`--clear-color`, mentioned in this file's
+# own `#vimrun!` line, was never actually read anywhere before this conversion either -- a
+# pre-existing gap, left alone rather than scope-creeped into a fix.) flash_cam's size now comes
+# straight from (w, h) instead of `v.camera.viewport` (which was typically still None at the
+# point the original code read it, before any GraphicsContext existed -- hence its own
+# `if viewport else 800` fallback; build_scene()'s (w, h) args are simply the real thing).
+def build_scene(w, h):
+	samples = parse_arg(sys.argv, "--samples", 0)
+
+	if samples:
+		osg.DisplaySettings.instance.numMultiSamples = samples
 
 	fire_only = build_fire()
 	explosion = build_explosion()
 	explosion_smoke = build_explosion(include_smoke=True)
 	explosion_smoke_embers = build_explosion(include_smoke=True, include_embers=True)
 	multiburst = build_multiburst()
-
-	v = osgViewer.Viewer(osg.ArgumentParser("pyosg-fire.py", sys.argv))
-	viewport = v.camera.viewport
-
-	flash_cam = build_flash_camera(
-		int(viewport.width) if viewport else 800,
-		int(viewport.height) if viewport else 600,
-	)
+	flash_cam = build_flash_camera(w, h)
 
 	root = osg.Group()
 
@@ -1101,11 +1113,21 @@ if __name__ == "__main__":
 	root.children.append(multiburst)
 	root.children.append(flash_cam)
 
-	v.sceneData = root
+	return root
+
+# Camera manipulator override, key/ImGui interactivity, and the initial trigger() all need the
+# live viewer, which build_scene() never receives. The six top-level nodes are recovered from
+# root.children by the SAME fixed append-order build_scene() used, matching pyosg-mrt.py's
+# "recover state from the graph instead of a module-level stash" idea.
+def configure_viewer(viewer, root):
+	fire_only, explosion, explosion_smoke, explosion_smoke_embers, multiburst, flash_cam = root.children
+
 	# osgx.CameraManipulator<TrackballManipulator> genuinely IS a TrackballManipulator
 	# (see the module comment above camera_kick()) -- normal orbit/pan/zoom works exactly
 	# like plain osgGA.TrackballManipulator(), and camera_kick()'s shake composes on top.
-	v.cameraManipulator = osgx.CameraManipulator()
+	viewer.cameraManipulator = osgx.CameraManipulator()
+
+	v = viewer
 
 	def with_kick(node):
 		"""Return a zero-arg callable: trigger `node`'s bursts plus the camera kick,
@@ -1293,8 +1315,20 @@ if __name__ == "__main__":
 
 		repl(v, globals())
 
-	else:
-		while not v.done:
-			v.frame()
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	W, H = window_size()
+
+	viewer = osgViewer.Viewer()
+	root = build_scene(W, H)
+
+	viewer.sceneData = root
+
+	configure_viewer(viewer, root)
+
+	if "--repl" not in sys.argv:
+		while not viewer.done:
+			viewer.frame()
 
 			time.sleep(1.0 / 60.0)

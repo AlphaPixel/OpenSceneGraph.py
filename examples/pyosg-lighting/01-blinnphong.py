@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 01-blinnphong.py
 
 import sys
 import os

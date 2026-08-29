@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-dice.py --die d4,d6,d8,d10,d12,d20
 
 """Combined D4/D6/D8/D10/D12/D20 procedural-number-atlas prototype -- see
 ai/context-todo-dice.md. Supersedes the separate `pyosg-d4.py`/
@@ -34,10 +33,6 @@ import os
 import random
 
 os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
-os.environ.setdefault("OSG_THREADING", "SingleThreaded")
-os.environ.setdefault("OSG_GL_CONTEXT_PROFILE_MASK", "1")
-os.environ.setdefault("OSG_GL_VERSION", "4.6")
-os.environ.setdefault("OSG_GL_CONTEXT_VERSION", "4.6")
 os.environ.setdefault(
 	"OSG_LIBRARY_PATH", ":".join((
 		"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/plugins/ktx2",
@@ -45,13 +40,18 @@ os.environ.setdefault(
 	))
 )
 
+# Import side effect: fills in OSG_THREADING/OSG_GL_* env var defaults (see pyosg_example.py).
+# Deliberately after the OSG_WINDOW/OSG_LIBRARY_PATH overrides above (setdefault() means order
+# between these doesn't actually matter, but matching pyosg-khronos-viewer.py's style) and before
+# `from OpenSceneGraph import *` -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
+
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
 import osgx
 import pyosg_dice as dice
 
-W, H = 800, 600
 DIE_SPACING = 3.0
 FLOOR_MARGIN = 1.6
 
@@ -337,7 +337,23 @@ def create_scene(die_names, environment=None, roughness=0.45, metallic=0.0):
 
 	return root, rollable_dice, active_face_uniforms, active_decal_uniforms
 
-if __name__ == "__main__":
+# Set by build_scene(), read by configure_viewer() -- rollable_dice/active_face_uniforms/
+# active_decal_uniforms/roll_totals/total_label are plain Python state (roll_spec data, uniform
+# lists, running-total bookkeeping) with no single natural home in the returned Node the way
+# pyosg-mrt.py pulls a lone Uniform back out of a StateSet -- same shape/reason as
+# pyosg-khronos-viewer.py's _args/_pbr.
+_args = None
+_rollable_dice = None
+_active_face_uniforms = None
+_active_decal_uniforms = None
+_roll_totals = None
+_total_label = None
+
+# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+def build_scene(w, h):
+	global _args, _rollable_dice, _active_face_uniforms, _active_decal_uniforms
+	global _roll_totals, _total_label
+
 	parser = argparse.ArgumentParser(description="Procedural polyhedral dice, number-atlas/decal prototype.")
 	parser.add_argument(
 		"--die",
@@ -376,31 +392,25 @@ if __name__ == "__main__":
 		help="rotate the environment about the vertical axis by this many degrees before "
 			"sampling it, only used with --hdr/--env (default: %(default)s)"
 	)
-	args = parser.parse_args()
+	_args = args = parser.parse_args()
 	die_names = [d.strip() for d in args.die.split(",") if d.strip()]
 
 	for name in die_names:
 		if name not in DIE_SPECS:
 			parser.error(f"unknown die {name!r} -- choose from {{{', '.join(sorted(DIE_SPECS))}}}")
 
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
-
 	environment = dice.prepare_environment(args.hdr, args.env, args.ibl_rotate)
 
 	if environment is not None and not environment.valid():
 		parser.error("failed to prepare PBR/IBL environment resources")
 
-	viewer = osgViewer.Viewer()
-	viewer.cameraManipulator = osgGA.TrackballManipulator()
 	scene, rollable_dice, active_face_uniforms, active_decal_uniforms = create_scene(
 		die_names, environment, args.roughness, args.metallic
 	)
 
 	if environment is not None and environment.root is not None:
 		scene.children.append(environment.root)
-	rng = random.Random()
-	rolling = [False] * len(rollable_dice)
-	r_held = [False]
+
 	# 0 until a die's first roll completes, so the total is always the sum of whatever's
 	# currently showing -- populated by highlight_result() below, same per-die "which value did
 	# THIS die land on" data DiceRollCallback already threads through result_callback for the
@@ -409,8 +419,8 @@ if __name__ == "__main__":
 
 	# A screen-aligned running-total HUD, top-left -- same POST_RENDER/ABSOLUTE_RF overlay-camera
 	# shape pyosg_async.Progress already uses for a screen-space indicator, just a pixel-space
-	# ortho (0..W, 0..H) projection instead of Progress' identity/clip-space one, since
-	# osgx.PixelText expects local-space units in screen pixels, not NDC. W/H are fixed for this
+	# ortho (0..w, 0..h) projection instead of Progress' identity/clip-space one, since
+	# osgx.PixelText expects local-space units in screen pixels, not NDC. w/h are fixed for this
 	# script (no window-resize handling elsewhere), so the projection is set once, not tracked
 	# live the way examples/osgx-pixel-text.cpp's makeHudLabel() has to for a resizable window.
 	hud_margin = 12.0
@@ -423,7 +433,7 @@ if __name__ == "__main__":
 	total_geode.drawables.append(total_label)
 
 	total_transform = osg.MatrixTransform(
-		osg.Matrix.translate(hud_margin, H - hud_margin - hud_cell_size, 0.0)
+		osg.Matrix.translate(hud_margin, h - hud_margin - hud_cell_size, 0.0)
 	)
 
 	total_transform.children.append(total_geode)
@@ -434,11 +444,32 @@ if __name__ == "__main__":
 	hud_camera.renderOrder = osg.Camera.POST_RENDER
 	hud_camera.clearMask = 0
 	hud_camera.viewMatrix = osg.Matrix.identity()
-	hud_camera.projectionMatrix = osg.Matrix.ortho2D(0, W, 0, H)
+	hud_camera.projectionMatrix = osg.Matrix.ortho2D(0, w, 0, h)
 	hud_camera.allowEventFocus = False
 	hud_camera.stateSet.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF
 
 	scene.children.append(hud_camera)
+
+	_rollable_dice = rollable_dice
+	_active_face_uniforms = active_face_uniforms
+	_active_decal_uniforms = active_decal_uniforms
+	_roll_totals = roll_totals
+	_total_label = total_label
+
+	return scene
+
+# DiceRollKeyHandler needs the live viewer (event handler registration), which build_scene()
+# never receives.
+def configure_viewer(viewer, root):
+	rollable_dice = _rollable_dice
+	active_face_uniforms = _active_face_uniforms
+	active_decal_uniforms = _active_decal_uniforms
+	roll_totals = _roll_totals
+	total_label = _total_label
+
+	rng = random.Random()
+	rolling = [False] * len(rollable_dice)
+	r_held = [False]
 
 	def highlight_result(index, value, active_faces):
 		active_face_uniforms[index].value = sum(1 << face_index for face_index in active_faces)
@@ -450,7 +481,6 @@ if __name__ == "__main__":
 		active_face_uniforms[index].value = 0
 		active_decal_uniforms[index].value = -1
 
-	viewer.sceneData = scene
 	viewer.eventHandlers.append(dice.DiceRollKeyHandler(
 		rollable_dice,
 		rng,
@@ -462,6 +492,19 @@ if __name__ == "__main__":
 	))
 
 	osg.notice("[pyosg-dice] press 'r' to roll; hold it to spin at the peak")
+
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	W, H = window_size()
+
+	viewer = osgViewer.Viewer()
+	root = build_scene(W, H)
+
+	viewer.sceneData = root
+	viewer.cameraManipulator = osgGA.TrackballManipulator()
+
+	configure_viewer(viewer, root)
 
 	while not viewer.done:
 		viewer.frame()

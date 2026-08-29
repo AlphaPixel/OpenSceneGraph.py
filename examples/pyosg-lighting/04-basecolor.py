@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 04-basecolor.py
 
 import sys
 import os

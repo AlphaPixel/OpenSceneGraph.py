@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-flame.py --samples 4 --clear-color 0.008,0.008,0.012
 
 """A continuously burning, procedurally deformed low-poly flame mesh.
 
@@ -17,14 +16,12 @@ uniform- and gl_InstanceID-driven on purpose.
 """
 
 import math
-import os
 import sys
 
-os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
-os.environ.setdefault("OSG_THREADING", "SingleThreaded")
-os.environ.setdefault("OSG_GL_CONTEXT_PROFILE_MASK", "1")
-os.environ.setdefault("OSG_GL_VERSION", "4.6")
-os.environ.setdefault("OSG_GL_CONTEXT_VERSION", "4.6")
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
+# example -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -230,13 +227,12 @@ def build_flame(
 
 	return group
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+def build_scene(w, h):
+	return build_flame()
 
-	v = osgViewer.Viewer(osg.ArgumentParser("pyosg-flame.py", sys.argv))
-	v.sceneData = build_flame()
-	v.cameraManipulator = osgGA.TrackballManipulator()
-	v.camera.clearColor = osg.Vec4(0.008, 0.008, 0.012, 1.0)
+# ImGui setup needs the live viewer/camera, which build_scene() never receives.
+def configure_viewer(viewer, root):
+	viewer.camera.clearColor = osg.Vec4(0.008, 0.008, 0.012, 1.0)
 
 	if "--no-gui" not in sys.argv:
 		# Match 11-sketchfab.py's fixed left sidebar. The ImGui package is not built
@@ -244,8 +240,8 @@ if __name__ == "__main__":
 		gui_opts = osgx.imgui.Options()
 		gui_opts.dock = osgx.imgui.Dock.LEFT
 		gui_opts.dock_width = 320.0
-		gui = osgx.imgui.Widget(v, v.camera, gui_opts)
-		shell_state_sets = [child.stateSet for child in v.sceneData.children]
+		gui = osgx.imgui.Widget(viewer, viewer.camera, gui_opts)
+		shell_state_sets = [child.stateSet for child in root.children]
 
 		def draw_motion(ri):
 			for name, label, lo, hi in (
@@ -294,6 +290,19 @@ if __name__ == "__main__":
 					ss.uniforms["opacity"] = value
 
 		gui.addSection("Color", draw_colors, osgx.imgui.SectionOptions(default_open=True))
+
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	W, H = window_size()
+
+	v = osgViewer.Viewer(osg.ArgumentParser("pyosg-flame.py", sys.argv))
+	root = build_scene(W, H)
+
+	v.sceneData = root
+	v.cameraManipulator = osgGA.TrackballManipulator()
+
+	configure_viewer(v, root)
 
 	while not v.done:
 		v.frame()

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 07-emissive.py
 
 import sys
 import os

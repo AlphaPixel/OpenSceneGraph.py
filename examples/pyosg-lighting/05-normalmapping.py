@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 05-normalmapping.py
 
 import sys
 import os

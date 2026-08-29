@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-points.py
 
-import os
 import time
 import numpy as np
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6"
-})
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
+# example -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -67,9 +62,7 @@ void main(void) {
 }
 """
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
-
+def build_scene(w, h):
 	# Simulate ML output: positions
 	N = 300
 	vecs = np.random.rand(N, 3).astype(np.float32) * 0.5
@@ -124,9 +117,16 @@ if __name__ == "__main__":
 		osg.StateAttribute.Values.ON
 	)
 
+	return r
+
+if __name__ == "__main__":
+	# osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	W, H = window_size()
+
 	v = osgViewer.Viewer()
 
-	v.sceneData = r
+	v.sceneData = build_scene(W, H)
 	v.cameraManipulator = osgGA.TrackballManipulator()
 
 	while not v.done:

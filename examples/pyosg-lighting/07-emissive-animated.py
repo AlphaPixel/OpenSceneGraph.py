@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 ../examples/pyosg-lighting-7-emissive-animated.py ../examples/data/BoomBox/glTF/BoomBox.gltf
 
 import sys
 import os

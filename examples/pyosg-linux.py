@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 ../examples/pyosg-linux.py
 
 import os
 import sys

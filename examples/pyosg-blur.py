@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-blur.py
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *

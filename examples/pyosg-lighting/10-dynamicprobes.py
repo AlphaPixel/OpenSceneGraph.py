@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 10-dynamicprobes.py --hdr papermill
 
 # Step 10 -- Dynamic Probes
 #

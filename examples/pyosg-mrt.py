@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-mrt.py
 
 # MRT (Multiple Render Targets) proof-of-concept.
 #

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-polyhaven.py
 #
 # pyosg-polyhaven.py worn_brick_wall --texture
 # pyosg-polyhaven.py https://polyhaven.com/a/worn_brick_wall --texture
@@ -19,13 +18,13 @@ import argparse
 import urllib.request
 import urllib.parse
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 800",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6",
-})
+os.environ.setdefault("OSG_WINDOW", "50 50 800 800")
+
+# Import side effect: fills in OSG_THREADING/OSG_GL_* env var defaults (see pyosg_example.py).
+# Deliberately after the OSG_WINDOW override above (setdefault() means order between these
+# doesn't actually matter, but matching pyosg-khronos-viewer.py's style) and before
+# `from OpenSceneGraph import *` -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import osg, osgDB, osgViewer, osgGA
 from OpenSceneGraph.GL import *
@@ -469,7 +468,7 @@ class MipScrollHandler(osgGA.GUIEventHandler):
 
 		return True
 
-def run_texture(args):
+def build_texture_root(args):
 	src = args.source
 
 	if src.endswith(".gltf") and os.path.exists(src):
@@ -515,16 +514,18 @@ def run_texture(args):
 
 	ss.uniforms.extend((lightPos, lightColor, lightRadius, lightSourceRadius))
 
-	v = osgViewer.Viewer()
+	return root
 
-	v.sceneData = root
-	v.cameraManipulator = osgGA.TrackballManipulator()
-	v.camera.clearColor = osg.Vec4(0.08, 0.08, 0.08, 1.0)
-
-	while not v.done:
-		v.frame()
-
-def run_hdr(args):
+# --hdr mode's bake needs a real GL context and drives several v.frame() calls of its own DURING
+# construction (PRE_RENDER FBO passes plus a GPU readback poll loop) -- genuinely incompatible
+# with build_scene()'s "no viewer/window side effects" contract, unlike every other example. So
+# --hdr mode has build_scene() return an empty placeholder osg.Group() (still a valid Node for
+# viewer.sceneData), and does the ENTIRE bake in configure_viewer() instead, which already
+# receives the live viewer -- both runners assign viewer.sceneData = root BEFORE calling
+# configure_viewer(), so the bake's own intermediate v.frame() calls render exactly the
+# growing/settling subgraph the original run_hdr() produced, just through the runner's viewer
+# instead of a locally-constructed one.
+def configure_hdr(viewer, root, args):
 	src = args.source
 
 	if src.lower().endswith((".hdr", ".exr")) and os.path.exists(src):
@@ -533,18 +534,12 @@ def run_hdr(args):
 	else:
 		hdr_path = download_polyhaven_hdr(slug_from_arg(src), args.res)
 
-	root = osg.Group()
-
-	v = osgViewer.Viewer()
-
-	v.sceneData = root
-	v.cameraManipulator = osgGA.TrackballManipulator()
-	v.camera.clearColor = osg.Vec4(0.05, 0.05, 0.05, 1.0)
+	viewer.camera.clearColor = osg.Vec4(0.05, 0.05, 0.05, 1.0)
 
 	# The bake needs a real GL context (PRE_RENDER FBO cameras), so realize
 	# one frame of nothing before touching osgx -- same ordering
 	# 10-dynamicprobes.py uses for its first live bake.
-	v.frame()
+	viewer.frame()
 
 	image = osgDB.readImageFile(hdr_path)
 
@@ -566,16 +561,16 @@ def run_hdr(args):
 	bake_scene = osgx.GGXPrefilterScene.create(image, options)
 
 	root.children.append(bake_scene.root)
-	v.camera.postDrawCallback = bake_scene.readback
+	viewer.camera.postDrawCallback = bake_scene.readback
 
 	frame = 0
 
 	while frame < options.maxFrames and not bake_scene.readback.done:
-		v.frame()
+		viewer.frame()
 
 		frame += 1
 
-	v.camera.postDrawCallback = None
+	viewer.camera.postDrawCallback = None
 	bake_scene.root.nodeMask = 0
 
 	if not bake_scene.readback.done:
@@ -593,18 +588,22 @@ def run_hdr(args):
 	mip_uniform = osg.Uniform("mipLevel", 0.0)
 
 	root.children.append(build_cross_geode(cubemap, mip_uniform))
-	v.eventHandlers.append(MipScrollHandler(mip_uniform, max_mip))
+	viewer.eventHandlers.append(MipScrollHandler(mip_uniform, max_mip))
 
 	osg.notice(
 		f"[polyhaven] done -- {max_mip + 1} mip levels; "
 		"+/-, ,/., or scroll to step roughness"
 	)
 
-	while not v.done:
-		v.frame()
+# Set by build_scene(), read by configure_viewer() -- args has no natural home in the returned
+# Node; same shape/reason as pyosg-khronos-viewer.py's _args.
+_args = None
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects
+# for --texture mode. --hdr mode returns an empty placeholder Group instead; see configure_hdr()'s
+# own comment for why that mode's real work has to live in configure_viewer().
+def build_scene(w, h):
+	global _args
 
 	ap = argparse.ArgumentParser(
 		description="Render a Polyhaven texture (PBR sphere) or HDRI (cross-shaped skybox)"
@@ -648,13 +647,37 @@ if __name__ == "__main__":
 		"--max-frames", type=int, default=8,
 		help="[--hdr] Max frames to wait for the bake's GPU readback (default: 8)"
 	)
-	args = ap.parse_args()
+	_args = args = ap.parse_args()
 
 	if args.source is None:
 		args.source = "qwantani_dusk_2" if args.hdr else "worn_brick_wall"
 
 	if args.hdr:
-		run_hdr(args)
+		return osg.Group()
+
+	return build_texture_root(args)
+
+def configure_viewer(viewer, root):
+	args = _args
+
+	if args.hdr:
+		configure_hdr(viewer, root, args)
 
 	else:
-		run_texture(args)
+		viewer.camera.clearColor = osg.Vec4(0.08, 0.08, 0.08, 1.0)
+
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	W, H = window_size()
+
+	viewer = osgViewer.Viewer()
+	root = build_scene(W, H)
+
+	viewer.sceneData = root
+	viewer.cameraManipulator = osgGA.TrackballManipulator()
+
+	configure_viewer(viewer, root)
+
+	while not viewer.done:
+		viewer.frame()

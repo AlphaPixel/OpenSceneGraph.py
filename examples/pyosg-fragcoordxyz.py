@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-fragcoordxyz
 
-import os
 import time
 import random
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6"
-})
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
+# example -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -451,9 +446,23 @@ class ProgramHandler(osgGA.GUIEventHandler):
 
 		return False
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+class TimeUpdateCallback:
+	"""Refreshes u_time every update traversal -- runs under the standard
+	`while not viewer.done: viewer.frame()` loop (runner-driven or standalone) instead of
+	depending on a Python-side loop of its own, the same "OSG already provides a per-frame hook"
+	idea as pyosg-taa.py's FRAME-event handler."""
 
+	def __init__(self, stateset):
+		self.stateset = stateset
+		self.t0 = time.time()
+
+	def __call__(self, node, nv):
+		self.stateset.uniforms["u_time"] = float(time.time() - self.t0)
+
+		return True
+
+# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+def build_scene(w, h):
 	g = osg.Geometry()
 
 	g.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4))
@@ -467,20 +476,33 @@ if __name__ == "__main__":
 	ss = r.stateSet
 
 	ss.attributes.append(p)
-	ss.uniforms["u_resolution"] = osg.Vec2(800.0, 600.0)
+	ss.uniforms["u_resolution"] = osg.Vec2(float(w), float(h))
 	ss.uniforms["u_time"] = 0.0
 
+	r.updateCallback = TimeUpdateCallback(ss)
+
+	return r
+
+# ProgramHandler needs the live viewer to register as an event handler, which build_scene()
+# never receives -- the Program itself is recovered straight back out of the returned root's
+# StateSet, same as pyosg_visitor.py's own GatherVisitor introspection.
+def configure_viewer(viewer, root):
+	p = root.stateSet.attributes[osg.StateAttribute.PROGRAM]
+
+	viewer.eventHandlers.append(ProgramHandler(p))
+
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	W, H = window_size()
+
 	v = osgViewer.Viewer()
+	root = build_scene(W, H)
 
-	v.sceneData = r
+	v.sceneData = root
 	v.cameraManipulator = osgGA.TrackballManipulator()
-	v.eventHandlers.append(ProgramHandler(p))
 
-	t = time.time()
+	configure_viewer(v, root)
 
 	while not v.done:
-		ss.uniforms["u_time"] = float(time.time() - t)
-
 		v.frame()
-
-		time.sleep(0.01)

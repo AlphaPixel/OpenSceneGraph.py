@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-match4.py
 
 """Match-4 demo, per the plan in ~/dev/osgx/CLAUDE.md ("Planned/next steps for
 picking", item 5). Two layers in this one file:
@@ -531,21 +530,18 @@ class Board:
 # importable without OSG; everything below requires it.
 # ================================================================================================
 
-import os
 import time
 
-os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
-os.environ.setdefault("OSG_THREADING", "SingleThreaded")
-os.environ.setdefault("OSG_GL_CONTEXT_PROFILE_MASK", "1")
-os.environ.setdefault("OSG_GL_VERSION", "4.6")
-os.environ.setdefault("OSG_GL_CONTEXT_VERSION", "4.6")
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
+# example -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
 import osgx
 
-W, H = 800, 600
 CELL_SPACING = 2.2
 
 # Same core-profile-safe minimal Lambertian shader as pyosg-picking.py/pyosg-hover.py.
@@ -757,7 +753,52 @@ class FallCallback:
 
 		return True
 
-if __name__ == "__main__":
+class StepAdvancer(osgGA.GUIEventHandler):
+	"""Drives the shrink -> fall -> (cascade or finish) state machine forward, one check per
+	frame, via the FRAME event osgGA dispatches to every registered eventHandler once per
+	viewer.frame() call -- the same mechanism pyosg-taa.py's Controls uses for its own per-frame
+	bookkeeping (see [[project_pyosg_contract_conversion]]).
+
+	NOT a node updateCallback, deliberately: an EARLIER version of this attached a plain-callable
+	updateCallback directly to `scene` instead, and that froze the game after the first match --
+	`scene`'s own mt-piece children carry THEIR OWN separate updateCallbacks
+	(ShrinkCallback/FallCallback), and update traversal did not reliably continue past `scene`'s
+	newly-added plain-callable callback to reach them, so pending_shrink/pending_fall never
+	emptied and this check never saw a completed animation. Confirmed live 2026-08-29. A
+	GUIEventHandler carries none of that scene-graph-nesting risk -- it's dispatched by the
+	viewer directly, entirely outside the node hierarchy."""
+
+	def __init__(self, phase, pending_shrink, pending_fall, start_fall, advance_after_fall):
+		super().__init__()
+
+		self.phase = phase
+		self.pending_shrink = pending_shrink
+		self.pending_fall = pending_fall
+		self.start_fall = start_fall
+		self.advance_after_fall = advance_after_fall
+
+	def handle(self, ea, aa):
+		if ea.type != osgGA.GUIEventAdapter.FRAME:
+			return False
+
+		if self.phase[0] == "shrink" and not self.pending_shrink:
+			self.start_fall()
+
+		elif self.phase[0] == "fall" and not self.pending_fall:
+			self.advance_after_fall()
+
+		return False
+
+# Set by build_scene(), read by configure_viewer() -- PickCameraSync's sub-frustum math needs the
+# real viewport size, but configure_viewer(viewer, root) has no direct channel for it. Same
+# pattern as pyosg-hover.py's own _viewport. `_advancer` is the StepAdvancer instance itself:
+# unlike `rb` (recoverable from pick_cam.updateCallback, an actual graph slot), StepAdvancer is
+# registered as an eventHandler, not stashed anywhere in the returned Node -- same "too much
+# plain Python state for the graph to carry" shape as pyosg-khronos-viewer.py's _args/_pbr.
+_viewport = (800, 600)
+_advancer = None
+
+def parse_match4_args():
 	parser = argparse.ArgumentParser(description="Match-4 board demo")
 
 	parser.add_argument(
@@ -779,8 +820,6 @@ if __name__ == "__main__":
 
 	args = parser.parse_args()
 
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
-
 	# Always run through an explicit seed, even when the caller didn't pass one --
 	# an unseeded random.Random() is just as reproducible, but only if you print the
 	# seed it landed on so a later run can pass it back in via --seed.
@@ -792,8 +831,17 @@ if __name__ == "__main__":
 	osg.notice(f"[pyosg-match4] match mode = {match_mode.value}")
 	osg.notice(f"[pyosg-match4] reset mode = {reset_mode.value}")
 
-	viewer = osgViewer.Viewer()
-	viewer.cameraManipulator = osgGA.TrackballManipulator()
+	return seed, match_mode, reset_mode
+
+# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+def build_scene(w, h):
+	global _viewport, _advancer
+
+	_viewport = (w, h)
+
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	seed, match_mode, reset_mode = parse_match4_args()
 
 	board = Board(width=8, height=8, num_colors=5, rng=random.Random(seed), match_mode=match_mode)
 
@@ -857,7 +905,7 @@ if __name__ == "__main__":
 	pick_cam.children.append(scene)
 
 	rb = osgx.PickReadbackSync(
-		1, pick_image, W, H,
+		1, pick_image, w, h,
 		rule=osgx.PickRule.SPIRAL,
 		mode=osgx.PickReadbackSync.Mode.CONTINUOUS,
 	)
@@ -1046,25 +1094,53 @@ if __name__ == "__main__":
 	rb.onEnter = on_enter
 	rb.onLeave = on_leave
 
-	sync = osgx.PickCameraSync(viewer.camera, True, W, H, rb)
-	hover = osgx.PickHoverCallback(rb)
+	# Stashed as pick_cam's updateCallback purely so configure_viewer() can recover this SAME rb
+	# object back out of the returned root (build_scene()'s contract is "return a Node", no
+	# second channel for handing back a plain Python object it also needs later) -- same pattern
+	# as pyosg-hover.py/pyosg-picking.py. Replaced with the real NodeCallbacksGroup (sync/hover/rb)
+	# in configure_viewer(), once the live viewer.camera is available for PickCameraSync.
+	pick_cam.updateCallback = rb
 
-	# Order matters: sync (aim sub-frustum) -> hover (fire onEnter/onLeave from last
-	# frame's lastID()) -> rb (sample this frame's 1x1 readback). See pyosg-hover.py.
-	pick_cam.updateCallback = osgx.NodeCallbacksGroup([sync, hover, rb])
+	# Drives the shrink/fall/cascade state machine forward every frame -- see StepAdvancer's own
+	# docstring for why this is a FRAME-event eventHandler, registered from configure_viewer()
+	# (which has the live viewer), rather than a node updateCallback.
+	_advancer = StepAdvancer(phase, pending_shrink, pending_fall, start_fall, advance_after_fall)
 
 	root = osg.Group(name="root")
 
 	root.children.append(pick_cam)
 	root.children.append(scene)
 
-	viewer.sceneData = root
+	return root
+
+# PickCameraSync/PickHandler/StepAdvancer all need the live viewer, which build_scene() never
+# receives.
+def configure_viewer(viewer, root):
+	pick_cam, scene = root.children
+	rb = pick_cam.updateCallback
+	w, h = _viewport
+
+	sync = osgx.PickCameraSync(viewer.camera, True, w, h, rb)
+	hover = osgx.PickHoverCallback(rb)
+
+	# Order matters: sync (aim sub-frustum) -> hover (fire onEnter/onLeave from last
+	# frame's lastID()) -> rb (sample this frame's 1x1 readback). See pyosg-hover.py.
+	pick_cam.updateCallback = osgx.NodeCallbacksGroup([sync, hover, rb])
+
 	viewer.eventHandlers.append(osgx.PickHandler(rb, True))
+	viewer.eventHandlers.append(_advancer)
+
+if __name__ == "__main__":
+	W, H = window_size()
+
+	viewer = osgViewer.Viewer()
+	root = build_scene(W, H)
+
+	viewer.sceneData = root
+	# viewer.cameraManipulator = osgGA.TrackballManipulator()
+	viewer.cameraManipulator = osgx.Ortho2DManipulator()
+
+	configure_viewer(viewer, root)
 
 	while not viewer.done:
 		viewer.frame()
-
-		if phase[0] == "shrink" and not pending_shrink:
-			start_fall()
-		elif phase[0] == "fall" and not pending_fall:
-			advance_after_fall()

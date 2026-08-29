@@ -39,6 +39,13 @@ def run(name, width=800, height=600, extra_argv=()):
 
 	viewer = osgViewer.Viewer()
 
+	# Explicit window setup, driven by the same width/height build_scene() receives -- a single
+	# source of truth instead of every example hardcoding its own OSG_WINDOW env var string that
+	# has to be kept in sync by hand (and silently isn't, the moment --width/--height differs from
+	# an example's own hardcoded default). x/y match the "50 50 ..." every example's old OSG_WINDOW
+	# used.
+	viewer.setUpViewInWindow(50, 50, width, height)
+
 	viewer.cameraManipulator = osgGA.TrackballManipulator()
 
 	# Sandbox sys.argv for the duration of both hook calls below: some examples (e.g.
@@ -63,6 +70,12 @@ def run(name, width=800, height=600, extra_argv=()):
 
 	viewer.TODO()
 
+	# KNOWN ISSUE, deliberately not "fixed" with a sleep() here -- see pyosg-cli's identical loop
+	# and feedback_runner_unthrottled_loop for the full writeup. Short version: a sleep() here
+	# treats the symptom (starves anything else on the process needing the GIL on a regular
+	# cadence, confirmed via audible clicking in pyosg-animusic-grid.py's sounddevice callback
+	# thread); the real fix under consideration is releasing the GIL inside viewer.frame()'s own
+	# pybind11 binding instead.
 	while not viewer.done:
 		viewer.frame()
 
@@ -84,6 +97,12 @@ def main():
 	# -- a known CPython argparse limitation around "--" interacting with a nargs="*"
 	# positional when other flags are interspersed, not something fixable by reordering our
 	# own argument definitions.
+	#
+	# KNOWN FRICTION (deferred, not fixed, same as pyosg-cli): every one of the target example's
+	# own arguments -- including its OWN required positionals/flags -- has to go after this "--",
+	# since this parser only knows about name/--width/--height. A `parse_known_args()`-based
+	# two-pass parse could remove the need for "--" in the common case; not attempted, needs real
+	# testing against the SAME argparse quirk documented above first.
 	argv = sys.argv[1:]
 
 	if "--" in argv:

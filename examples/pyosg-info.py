@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 ../examples/pyosg-info.py
 
 # Quick diagnostic dump, not an interactive viewer: build_info() from OpenSceneGraph (and osgx,
 # if installed), the REQUESTED GL context (DisplaySettings, sourced from the OSG_GL_VERSION/

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 00-lambert.py
 
 import sys
 import os

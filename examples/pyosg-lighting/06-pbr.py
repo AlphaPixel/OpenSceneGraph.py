@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 06-pbr.py
 
 import sys
 import os

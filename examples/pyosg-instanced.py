@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-instanced.py
 
-import os
 import time
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6"
-})
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py) for anything this file doesn't set itself -- nothing below overrides them.
+# Deliberately BEFORE `from OpenSceneGraph import *`, matching every other example: these need to
+# land before OSG's DisplaySettings reads them, not just before a Viewer gets constructed.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -64,9 +60,7 @@ FRAGMENT_SHADER = """
 	}
 """
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
-
+def build_scene(w, h):
 	g = osg.Geometry()
 
 	# TODO: Convert to SequenceProxy!
@@ -86,9 +80,16 @@ if __name__ == "__main__":
 	r.drawables.append(g)
 	r.stateSet.attributes.append(p)
 
+	return r
+
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	W, H = window_size()
+
 	v = osgViewer.Viewer()
 
-	v.sceneData = r
+	v.sceneData = build_scene(W, H)
 	v.cameraManipulator = osgGA.TrackballManipulator()
 
 	while not v.done:

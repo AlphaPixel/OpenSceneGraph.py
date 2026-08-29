@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-voxelize.py
 
 # "Voxelizes" a single RTT slice of any model: render it to a small color
 # texture, then draw one instanced cube per texel, colored via texelFetch()
@@ -24,6 +23,7 @@
 #   viewer.sceneData = osg.Group(children=(rttCam, voxels))
 #   viewer.cameraManipulator = osgGA.TrackballManipulator()
 
+import argparse
 import time
 
 from OpenSceneGraph import *
@@ -478,23 +478,16 @@ def create_voxel_geode(
 	return r
 
 # --------------------------------------------------------------------------- #
-# Standalone CLI
+# Standalone CLI / runner contract
 # --------------------------------------------------------------------------- #
-# Guarded on `_osg_repl_controller` (not just `__name__`) because exec()-loading
-# this file into an already-running pyosg_repl.py session -- the documented
-# library usage above -- also runs with __name__ == "__main__" in that session's
-# own globals(); `_osg_repl_controller` only exists there once pyosg_repl.repl()
-# has already run, which is exactly the case this block must not fire in (it'd
-# otherwise spin up a second competing osgViewer.Viewer + frame loop).
-if __name__ == "__main__" and "_osg_repl_controller" not in globals():
-	import argparse
-	import os
-
-	os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
-	os.environ.setdefault("OSG_THREADING", "SingleThreaded")
-	os.environ.setdefault("OSG_GL_CONTEXT_PROFILE_MASK", "1")
-	os.environ.setdefault("OSG_GL_VERSION", "4.6")
-	os.environ.setdefault("OSG_GL_CONTEXT_VERSION", "4.6")
+# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+# Deliberately does NOT touch os.environ/OpenSceneGraph import order at all (see the module
+# docstring: this file is a "pure helper library with no module-level Viewer/env setup", so it
+# stays exec()-able into an already-running pyosg_repl.py session with zero side effects) -- the
+# usual `from pyosg_example import window_size` import stays scoped to the `__main__` guard below,
+# not module top, same as `argparse`'s CLI-only usage.
+def build_scene(w, h):
+	global _args
 
 	ap = argparse.ArgumentParser()
 	ap.add_argument("model", help="path to a model file (glTF, etc.)")
@@ -510,9 +503,7 @@ if __name__ == "__main__" and "_osg_repl_controller" not in globals():
 		help="spin the model inside the RTT camera (default 0.4 rad/s if given with no value)"
 	)
 
-	args = ap.parse_args()
-
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+	_args = args = ap.parse_args()
 
 	rttCam, colorTex, depthTex, model = create_rtt_camera(args.model, args.grid)
 
@@ -523,9 +514,28 @@ if __name__ == "__main__" and "_osg_repl_controller" not in globals():
 
 	voxels = create_voxel_geode(colorTex, depthTex, args.grid, args.grid, lift=args.lift)
 
-	root = osg.Group(children=(rttCam, voxels))
+	return osg.Group(children=(rttCam, voxels))
+
+# Set by build_scene(), unused by configure_viewer() today -- kept for parity/future use with the
+# rest of this project's _args stash convention (pyosg-khronos-viewer.py etc.); this file has no
+# viewer-level interactivity beyond the default TrackballManipulator both runners already provide.
+_args = None
+
+# Guarded on `_osg_repl_controller` (not just `__name__`) because exec()-loading this file into an
+# already-running pyosg_repl.py session -- the documented library usage above -- also runs with
+# __name__ == "__main__" in that session's own globals(); `_osg_repl_controller` only exists there
+# once pyosg_repl.repl() has already run, which is exactly the case this block must not fire in
+# (it'd otherwise spin up a second competing osgViewer.Viewer + frame loop).
+if __name__ == "__main__" and "_osg_repl_controller" not in globals():
+	from pyosg_example import window_size
+
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	W, H = window_size()
 
 	viewer = osgViewer.Viewer()
+	root = build_scene(W, H)
+
 	viewer.sceneData = root
 	viewer.cameraManipulator = osgGA.TrackballManipulator()
 

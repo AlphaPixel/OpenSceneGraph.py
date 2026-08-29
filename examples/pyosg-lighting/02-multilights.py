@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#vimrun! python3 02-multilights.py
 
 import sys
 import os
