@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osg_Array.py
-
 from .conftest import f32
 
 import pytest

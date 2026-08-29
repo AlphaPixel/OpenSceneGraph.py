@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osg_NodeVisitor.py
-
 from OpenSceneGraph.osg import Group, Node, NodeVisitor
 
 def test_construction_default_traversal_mode():

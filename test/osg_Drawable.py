@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osg_Drawable.py
-
 from .conftest import refcmp
 
 from OpenSceneGraph.osg import BoundingBox, Drawable, Vec3f

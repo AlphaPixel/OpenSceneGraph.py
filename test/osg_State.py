@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osg_State.py
-
 from OpenSceneGraph import osgGA, osgViewer
 from OpenSceneGraph.osg import GLExtensions
 

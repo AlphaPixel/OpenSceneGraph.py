@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osg_Uniform.py
-
 import pytest
 
 from .conftest import f32, floatif, refcmp

@@ -1,5 +1,3 @@
-# vimrun! pytest -v ../test/osg_Matrix.py
-
 import math
 
 import pytest

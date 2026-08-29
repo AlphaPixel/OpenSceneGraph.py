@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osgAnimation_Motion.py
-
 import pytest
 
 from OpenSceneGraph import osgAnimation

@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osg_NAME.py
-
 from .conftest import refcmp
 
 from OpenSceneGraph.osg import NAME

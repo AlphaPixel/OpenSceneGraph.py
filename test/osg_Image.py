@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osg_Image.py
-
 import pytest
 import numpy as np
 

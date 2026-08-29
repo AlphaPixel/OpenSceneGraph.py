@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osgViewer_View.py
-
 from OpenSceneGraph.osgGA import GUIEventHandler
 from OpenSceneGraph.osgViewer import View
 

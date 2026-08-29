@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osgGA_CameraManipulator.py
-
 from .conftest import refcmp
 
 from OpenSceneGraph.osg import Camera, Geode, Matrix, Matrixd

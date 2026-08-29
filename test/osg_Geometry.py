@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osg_Geometry.py
-
 import pytest
 
 from OpenSceneGraph.osg import Array, Geometry, Vec2Array, Vec3Array, DrawArrays, PrimitiveSet, Vec3

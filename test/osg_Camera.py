@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osg_Camera.py
-
 from .conftest import refcmp
 
 from OpenSceneGraph.osg import Camera, Matrixd, Transform, Vec4, Viewport

@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osg_Texture.py
-
 import pytest
 
 from OpenSceneGraph.osg import Image, Texture, Texture2D

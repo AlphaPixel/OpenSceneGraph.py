@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osg_StateSet.py
-
 # from .conftest import f32, floatif, refcmp
 
 import pytest

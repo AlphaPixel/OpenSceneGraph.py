@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osgDB.py
-
 import osgx
 
 from OpenSceneGraph import osg, osgDB

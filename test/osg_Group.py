@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osg_Group.py
-
 import pytest
 
 from .conftest import refcmp

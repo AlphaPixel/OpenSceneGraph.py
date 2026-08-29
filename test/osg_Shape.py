@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osg_Shape.py
-
 from OpenSceneGraph.osg import Box, ShapeDrawable, Sphere, TessellationHints, Vec3
 
 def test_sphere_construction():

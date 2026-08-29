@@ -1,5 +1,3 @@
-#vimrun! pytest -sv ../test/osg_Callback.py
-
 from .conftest import refcmp
 
 from OpenSceneGraph.osg import Callback, Node, NodeCallback, Object
