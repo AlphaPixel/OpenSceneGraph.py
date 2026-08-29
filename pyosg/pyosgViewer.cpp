@@ -455,7 +455,16 @@ void bind(py::module_& m) {
 
 		// TODO: This is where I put stuff I NEED to call, but haven't wrapped (YET)!
 		.def("TODO", [](osgViewer::Viewer& self, bool glModern) {
-			// self.setThreadingModel(osgViewer::Viewer::SingleThreaded);
+			// Confirmed 2026-08-28: leaving this unset means whatever OSG's default threading
+			// model resolves to (a real background draw thread on multi-core machines, not just
+			// SingleThreaded like every example's own OSG_THREADING env var requests) -- close()
+			// destructing a Viewer while that thread is still alive and parked in
+			// Renderer::ThreadSafeQueue::takeFront() hangs forever in pthread_cond_destroy()
+			// (POSIX forbids destroying a condvar another thread is still waiting on). close()
+			// below is now defensive regardless, but setting this here means anything driven
+			// through the runners (OpenSceneGraph.examples/pyosg-cli, both of which call TODO()
+			// before their frame loop) never spins up that thread in the first place.
+			self.setThreadingModel(osgViewer::Viewer::SingleThreaded);
 			// self.setCameraManipulator(new osgGA::TrackballManipulator());
 			self.addEventHandler(new osgViewer::StatsHandler());
 
@@ -466,7 +475,7 @@ void bind(py::module_& m) {
 				}
 			}
 		}, "glModern"_a=false,
-			"Add a StatsHandler and optionally enable modern OpenGL uniform conventions."
+			"Add a StatsHandler, force SingleThreaded, and optionally enable modern OpenGL uniform conventions."
 		)
 		.def("close", [](osgViewer::Viewer& self) {
 			if(auto* gc = self.getCamera()->getGraphicsContext(); gc) {
@@ -474,9 +483,20 @@ void bind(py::module_& m) {
 
 				self.setDone(true);
 
+				// Must happen before closeImplementation()/destruction, regardless of threading
+				// model: with anything other than SingleThreaded, a background draw thread is
+				// still alive and parked in Renderer::ThreadSafeQueue::takeFront() at this point.
+				// Destructing the Viewer (Camera -> Renderer -> ~Condition()) while that thread is
+				// still waiting on it is undefined by POSIX and hangs forever in
+				// pthread_cond_destroy() on glibc, rather than erroring -- confirmed 2026-08-28 via
+				// a real core dump (SIGQUIT) after a Viewer created without SingleThreaded was
+				// close()'d then left to be garbage-collected. stopThreading() is a safe no-op
+				// under SingleThreaded, so this doesn't special-case that.
+				self.stopThreading();
+
 				gc->closeImplementation();
 			}
-		}, "Stop the viewer and close its graphics context, if present.")
+		}, "Stop any running viewer threads, close the graphics context if present, and mark the viewer done.")
 	;
 }
 
