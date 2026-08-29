@@ -31,11 +31,18 @@ def _load_module(name):
 		sys.exit(f"error: no such example: {name!r} (available: {', '.join(available)})")
 
 
-def run(name, width=800, height=600, extra_argv=()):
-	module = _load_module(name)
+def run_module(module, width=800, height=600, extra_argv=(), name=None):
+	"""Shared runner core: viewer construction, window setup, build_scene()/configure_viewer(),
+	and the frame loop. Deliberately takes an already-loaded module object rather than a name --
+	`run()` below loads it from the installed OpenSceneGraph.examples package, while pyosg-cli
+	(repo root) loads an arbitrary examples/*.py file by path and calls this directly, so the
+	actual viewer-setup/frame-loop logic exists in exactly one place instead of two copies that
+	can silently drift (this bit pyosg-cli once already -- see PYOSG_BUILD_PACKAGE_OVERLAY/
+	setUpViewInWindow ordering history in project_pyosg_contract_conversion for the pyosg-
+	polyhaven.py --hdr bug that ordering mismatch caused)."""
 
 	if not hasattr(module, "build_scene"):
-		sys.exit(f"error: OpenSceneGraph.examples.{name} has no build_scene(w, h)")
+		sys.exit(f"error: {name or module.__name__} has no build_scene(w, h)")
 
 	viewer = osgViewer.Viewer()
 
@@ -55,7 +62,7 @@ def run(name, width=800, height=600, extra_argv=()):
 	# foo.gltf`.
 	saved_argv = sys.argv
 
-	sys.argv = [name, *extra_argv]
+	sys.argv = [name or module.__name__, *extra_argv]
 
 	try:
 		root = module.build_scene(width, height)
@@ -70,14 +77,19 @@ def run(name, width=800, height=600, extra_argv=()):
 
 	viewer.TODO()
 
-	# KNOWN ISSUE, deliberately not "fixed" with a sleep() here -- see pyosg-cli's identical loop
-	# and feedback_runner_unthrottled_loop for the full writeup. Short version: a sleep() here
-	# treats the symptom (starves anything else on the process needing the GIL on a regular
-	# cadence, confirmed via audible clicking in pyosg-animusic-grid.py's sounddevice callback
-	# thread); the real fix under consideration is releasing the GIL inside viewer.frame()'s own
-	# pybind11 binding instead.
+	# KNOWN ISSUE, deliberately not "fixed" with a sleep() here -- see feedback_runner_unthrottled_loop
+	# for the full writeup. Short version: a sleep() here treats the symptom (starves anything else
+	# on the process needing the GIL on a regular cadence, confirmed via audible clicking in
+	# pyosg-animusic-grid.py's sounddevice callback thread); the real fix under consideration is
+	# releasing the GIL inside viewer.frame()'s own pybind11 binding instead.
 	while not viewer.done:
 		viewer.frame()
+
+
+def run(name, width=800, height=600, extra_argv=()):
+	module = _load_module(name)
+
+	run_module(module, width, height, extra_argv, name=name)
 
 
 def main():
