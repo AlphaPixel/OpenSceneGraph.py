@@ -2,18 +2,59 @@
 
 #include "../pyosg.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osg/Uniform>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
+
+#include "pybind11x-osg.hpp"
+
+namespace pyx = pybind11x;
 
 namespace pyosg {
 
 namespace detail {
-	// ------------------------------------------------------------
+	inline std::string uniform_type_name(osg::Uniform::Type type) {
+		const char* name = osg::Uniform::getTypename(type);
+
+		if(name && *name) return name;
+
+		return std::string("UNKNOWN(") + std::to_string(static_cast<int>(type)) + ")";
+	}
+
+	inline std::string py_type_name(py::handle obj) {
+		return py::str(py::type::of(obj).attr("__name__"));
+	}
+
+	inline py::type_error uniform_type_error(const char* action, osg::Uniform::Type type) {
+		return py::type_error(
+			std::string("Unsupported Uniform type for ") + action + ": " +
+			uniform_type_name(type)
+		);
+	}
+
+	inline py::type_error uniform_value_error(
+		const char* action,
+		osg::Uniform::Type type,
+		py::handle obj
+	) {
+		return py::type_error(
+			std::string("Invalid value for ") + uniform_type_name(type) +
+			" Uniform " + action + ": got " + py_type_name(obj)
+		);
+	}
+
+	inline py::type_error uniform_assignment_error(osg::Uniform::Type type, unsigned int index) {
+		return py::type_error(
+			std::string("Uniform assignment failed for ") +
+			uniform_type_name(type) + " at index " + std::to_string(index)
+		);
+	}
+
+	// --------------------------------------------------------------------------------------------
 	// CREATE (TYPE-DRIVEN)
-	// ------------------------------------------------------------
+	// --------------------------------------------------------------------------------------------
 
 	inline osg::Uniform* make_uniform_typed(
 		const std::string& name,
@@ -47,17 +88,23 @@ namespace detail {
 			case osg::Uniform::FLOAT_VEC3:
 				return new osg::Uniform(name.c_str(), value.cast<osg::Vec3>());
 
+			case osg::Uniform::FLOAT_VEC4:
+				return new osg::Uniform(name.c_str(), value.cast<osg::Vec4>());
+
 			case osg::Uniform::FLOAT_MAT4:
 				return new osg::Uniform(name.c_str(), value.cast<osg::Matrixf>());
 
+			case osg::Uniform::DOUBLE_MAT4:
+				return new osg::Uniform(name.c_str(), value.cast<osg::Matrixd>());
+
 			default:
-				throw py::type_error("Unsupported Uniform type");
+				throw uniform_type_error("construction", type);
 		}
 	}
 
-	// ------------------------------------------------------------
+	// --------------------------------------------------------------------------------------------
 	// CREATE (PYTHON TYPE INFERENCE)
-	// ------------------------------------------------------------
+	// --------------------------------------------------------------------------------------------
 
 	inline osg::Uniform* make_uniform_infer(const std::string& name, py::handle h) {
 		// IMPORTANT: `bool` must come before `int`; thanks Python! :)
@@ -81,16 +128,27 @@ namespace detail {
 			return new osg::Uniform(name.c_str(), h.cast<osg::Vec3>());
 		}
 
+		if(py::isinstance<osg::Vec4>(h)) {
+			return new osg::Uniform(name.c_str(), h.cast<osg::Vec4>());
+		}
+
 		if(py::isinstance<osg::Matrixf>(h)) {
 			return new osg::Uniform(name.c_str(), h.cast<osg::Matrixf>());
 		}
 
-		throw py::type_error("Cannot infer Uniform type from Python object");
+		if(py::isinstance<osg::Matrixd>(h)) {
+			return new osg::Uniform(name.c_str(), h.cast<osg::Matrixd>());
+		}
+
+		throw py::type_error(
+			std::string("Cannot infer Uniform type from Python object: got ") +
+			py_type_name(h)
+		);
 	}
 
-	// ------------------------------------------------------------
+	// --------------------------------------------------------------------------------------------
 	// MAIN CREATE ENTRY
-	// ------------------------------------------------------------
+	// --------------------------------------------------------------------------------------------
 
 	inline osg::Uniform* make_uniform(const std::string& name, py::handle h) {
 		// This supports a convenience layer where instead of implicitly inferring the type, it
@@ -112,17 +170,12 @@ namespace detail {
 		return make_uniform_infer(name, h);
 	}
 
-	// ------------------------------------------------------------
+	// --------------------------------------------------------------------------------------------
 	// SET (TYPE-DRIVEN)
-	// ------------------------------------------------------------
+	// --------------------------------------------------------------------------------------------
 
 	template<typename T>
-	void _uniform_set(
-		osg::Uniform& self,
-		unsigned int i,
-		py::object obj,
-		const char* name
-	) {
+	void _uniform_set(osg::Uniform& self, unsigned int i, py::object obj) {
 		T v;
 
 		try {
@@ -130,10 +183,10 @@ namespace detail {
 		}
 
 		catch(const py::cast_error&) {
-			throw py::type_error(std::string("Invalid type for ") + name + " Uniform");
+			throw uniform_value_error("assignment", self.getType(), obj);
 		}
 
-		if(!self.setElement(i, v)) throw py::type_error("Uniform assignment failed");
+		if(!self.setElement(i, v)) throw uniform_assignment_error(self.getType(), i);
 	}
 
 	inline void uniform_set(osg::Uniform& self, py::ssize_t index, py::object obj) {
@@ -141,45 +194,43 @@ namespace detail {
 
 		switch(self.getType()) {
 			case osg::Uniform::INT:
-				_uniform_set<int>(self, i, obj, "INT");
-				return;
+				_uniform_set<int>(self, i, obj); return;
 
 			case osg::Uniform::UNSIGNED_INT:
-				_uniform_set<unsigned int>(self, i, obj, "UNSIGNED_INT");
-				return;
+				_uniform_set<unsigned int>(self, i, obj); return;
 
 			case osg::Uniform::FLOAT:
-				_uniform_set<float>(self, i, obj, "FLOAT");
-				return;
+				_uniform_set<float>(self, i, obj); return;
 
 			case osg::Uniform::DOUBLE:
-				_uniform_set<double>(self, i, obj, "DOUBLE");
-				return;
+				_uniform_set<double>(self, i, obj); return;
 
 			case osg::Uniform::BOOL:
-				_uniform_set<bool>(self, i, obj, "BOOL");
-				return;
+				_uniform_set<bool>(self, i, obj); return;
 
 			case osg::Uniform::FLOAT_VEC2:
-				_uniform_set<osg::Vec2f>(self, i, obj, "FLOAT_VEC2");
-				return;
+				_uniform_set<osg::Vec2f>(self, i, obj); return;
 
 			case osg::Uniform::FLOAT_VEC3:
-				_uniform_set<osg::Vec3f>(self, i, obj, "FLOAT_VEC3");
-				return;
+				_uniform_set<osg::Vec3f>(self, i, obj); return;
+
+			case osg::Uniform::FLOAT_VEC4:
+				_uniform_set<osg::Vec4f>(self, i, obj); return;
 
 			case osg::Uniform::FLOAT_MAT4:
-				_uniform_set<osg::Matrixf>(self, i, obj, "FLOAT_MAT4");
-				return;
+				_uniform_set<osg::Matrixf>(self, i, obj); return;
+
+			case osg::Uniform::DOUBLE_MAT4:
+				_uniform_set<osg::Matrixd>(self, i, obj); return;
 
 			default:
-				throw py::type_error("Unsupported Uniform type for assignment");
+				throw uniform_type_error("assignment", self.getType());
 		}
 	}
 
-	// ------------------------------------------------------------
+	// --------------------------------------------------------------------------------------------
 	// GET
-	// ------------------------------------------------------------
+	// --------------------------------------------------------------------------------------------
 
 	inline py::object uniform_get(osg::Uniform& self, py::ssize_t index) {
 		auto i = n_index<unsigned int>(self.getNumElements(), index);
@@ -227,20 +278,78 @@ namespace detail {
 				return py::cast(v);
 			}
 
+			case osg::Uniform::FLOAT_VEC4: {
+				osg::Vec4 v; self.getElement(i, v);
+
+				return py::cast(v);
+			}
+
 			case osg::Uniform::FLOAT_MAT4: {
 				osg::Matrixf v; self.getElement(i, v);
 
 				return py::cast(v);
 			}
 
+			case osg::Uniform::DOUBLE_MAT4: {
+				osg::Matrixd v; self.getElement(i, v);
+
+				return py::cast(v);
+			}
+
 			default:
-				throw py::type_error("Unsupported underlying Uniform type");
+				throw uniform_type_error("access", self.getType());
 		}
 	}
 
-	// ------------------------------------------------------------
-	// ARRAY ACCESS (unchanged)
-	// ------------------------------------------------------------
+	// --------------------------------------------------------------------------------------------
+	// ARRAY CONSTRUCTION (from Python sequence)
+	// --------------------------------------------------------------------------------------------
+
+	inline osg::Uniform::Type infer_uniform_type(py::handle h) {
+		if(py::isinstance<py::bool_>(h)) return osg::Uniform::BOOL;
+		if(py::isinstance<py::int_>(h)) return osg::Uniform::INT;
+		if(py::isinstance<py::float_>(h)) return osg::Uniform::FLOAT;
+		if(py::isinstance<osg::Vec2>(h)) return osg::Uniform::FLOAT_VEC2;
+		if(py::isinstance<osg::Vec3>(h)) return osg::Uniform::FLOAT_VEC3;
+		if(py::isinstance<osg::Vec4>(h)) return osg::Uniform::FLOAT_VEC4;
+		if(py::isinstance<osg::Matrixf>(h)) return osg::Uniform::FLOAT_MAT4;
+		if(py::isinstance<osg::Matrixd>(h)) return osg::Uniform::DOUBLE_MAT4;
+
+		throw py::type_error(
+			std::string("Cannot infer Uniform type from Python object: got ") +
+			py_type_name(h)
+		);
+	}
+
+	inline osg::Uniform* make_uniform_array(
+		osg::Uniform::Type type,
+		const std::string& name,
+		py::sequence elements
+	) {
+		auto n = static_cast<int>(elements.size());
+
+		if(!n) throw py::value_error("Cannot create array Uniform from empty sequence");
+
+		auto* u = new osg::Uniform(type, name.c_str(), n);
+
+		for(int i = 0; i < n; i++) uniform_set(
+			*u,
+			i,
+			py::cast<py::object>(elements[static_cast<py::size_t>(i)])
+		);
+
+		return u;
+	}
+
+	inline osg::Uniform* make_uniform_array_infer(const std::string& name, py::sequence elements) {
+		if(!elements.size()) throw py::value_error("Cannot create array Uniform from empty sequence");
+
+		return make_uniform_array(infer_uniform_type(elements[0]), name, elements);
+	}
+
+	// --------------------------------------------------------------------------------------------
+	// ARRAY ACCESS
+	// --------------------------------------------------------------------------------------------
 
 	inline py::object uniform_get_array(osg::Uniform& self) {
 		if(auto* a = self.getFloatArray()) return py::cast(a);
@@ -263,24 +372,23 @@ namespace detail {
 		throw py::type_error("Unsupported array type for Uniform.array");
 	}
 
-	// ------------------------------------------------------------
-	// ITERATOR (unchanged)
-	// ------------------------------------------------------------
+	// --------------------------------------------------------------------------------------------
+	// ITERATOR
+	// --------------------------------------------------------------------------------------------
 
 	struct UniformIterator {
 		osg::Uniform* u = nullptr;
 		std::size_t index = 0;
 
 		py::object next() {
-			if(!u || index >= u->getNumElements())
-				throw py::stop_iteration();
+			if(!u || index >= u->getNumElements()) throw py::stop_iteration();
 
 			return uniform_get(*u, static_cast<py::ssize_t>(index++));
 		}
 	};
 
-} // namespace detail
+}
 
 void bind_Uniform(py::module_& m);
 
-} // namespace pyosg
+}

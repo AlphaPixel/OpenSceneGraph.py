@@ -1,6 +1,7 @@
 #include "pyosg.hpp"
 #include "osg/ArgumentParser.hpp"
 #include "osg/Notify.hpp"
+#include "osg/Vec.hpp"
 #include "osg/Array.hpp"
 #include "osg/Bound.hpp"
 #include "osg/Buffer.hpp"
@@ -17,8 +18,9 @@
 #include "osg/Program.hpp"
 #include "osg/State.hpp"
 #include "osg/Texture.hpp"
+#include "osg/Image.hpp"
 #include "osg/Uniform.hpp"
-#include "osg/Vec.hpp"
+#include "osg/Operation.hpp"
 
 namespace pyosg {
 
@@ -49,7 +51,9 @@ void bind(py::module_& m) {
 	bind_Shader(m);
 	bind_Program(m);
 	bind_Texture(m);
+	bind_Image(m);
 	bind_GraphicsContext(m);
+	bind_Operation(m);
 }
 
 }

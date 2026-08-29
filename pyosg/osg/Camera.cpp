@@ -1,5 +1,87 @@
 #include "Camera.hpp"
 
+namespace pybind11x {
+	template<>
+	void kwargs_init_own(osg::Camera& self, const py::kwargs& kwargs) {
+		if(kwargs.contains("viewport")) pyosg::detail::camera_viewport_property_setter()(
+			self,
+			kwargs["viewport"]
+		);
+
+		if(kwargs.contains("clearColor")) self.setClearColor(
+			kwargs["clearColor"].cast<osg::Vec4>()
+		);
+
+		if(kwargs.contains("clearMask")) self.setClearMask(
+			kwargs["clearMask"].cast<GLbitfield>()
+		);
+
+		if(kwargs.contains("projectionMatrix")) {
+			pyosg::detail::camera_projection_matrix_property_setter()(
+				self,
+				kwargs["projectionMatrix"]
+			);
+		}
+
+		if(kwargs.contains("viewMatrix")) pyosg::detail::camera_view_matrix_property_setter()(
+			self,
+			kwargs["viewMatrix"]
+		);
+
+		if(kwargs.contains("renderOrder")) pyosg::detail::camera_render_order_property_setter()(
+			self,
+			kwargs["renderOrder"]
+		);
+
+		if(kwargs.contains("graphicsContext")) self.setGraphicsContext(
+			kwargs["graphicsContext"].cast<osg::GraphicsContext*>()
+		);
+
+		if(kwargs.contains("renderTargetImplementation")) {
+			pyosg::detail::camera_render_target_implementation_property_setter()(
+				self,
+				kwargs["renderTargetImplementation"]
+			);
+		}
+
+		if(kwargs.contains("allowEventFocus")) self.setAllowEventFocus(
+			kwargs["allowEventFocus"].cast<bool>()
+		);
+
+		if(kwargs.contains("computeNearFarMode")) self.setComputeNearFarMode(
+			kwargs["computeNearFarMode"].cast<osg::CullSettings::ComputeNearFarMode>()
+		);
+
+		if(kwargs.contains("nearFarRatio")) self.setNearFarRatio(
+			kwargs["nearFarRatio"].cast<double>()
+		);
+
+		if(kwargs.contains("initialDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
+			pyosg::detail::InitialDrawCallbackSlot,
+			pyosg::detail::InitialDrawCallbackSetter,
+			pyosg::detail::InitialDrawCallbackGetter
+		>()(self, kwargs["initialDrawCallback"]);
+
+		if(kwargs.contains("preDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
+			pyosg::detail::PreDrawCallbackSlot,
+			pyosg::detail::PreDrawCallbackSetter,
+			pyosg::detail::PreDrawCallbackGetter
+		>()(self, kwargs["preDrawCallback"]);
+
+		if(kwargs.contains("postDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
+			pyosg::detail::PostDrawCallbackSlot,
+			pyosg::detail::PostDrawCallbackSetter,
+			pyosg::detail::PostDrawCallbackGetter
+		>()(self, kwargs["postDrawCallback"]);
+
+		if(kwargs.contains("finalDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
+			pyosg::detail::FinalDrawCallbackSlot,
+			pyosg::detail::FinalDrawCallbackSetter,
+			pyosg::detail::FinalDrawCallbackGetter
+		>()(self, kwargs["finalDrawCallback"]);
+	}
+}
+
 namespace pyosg {
 
 void bind_Camera(py::module_& m) {
@@ -9,18 +91,43 @@ void bind_Camera(py::module_& m) {
 		// TODO: Implement this!
 		// osg::CullSettings,
 		osg::ref_ptr<osg::Camera>
-	>(m, "Camera")
-		.def(py::init<>())
+	>(
+		m,
+		"Camera",
+		"A Transform node that renders its subgraph from its own view/projection matrices, "
+		"optionally into an off-screen render target (FBO, PBuffer, etc.). "
+		".initialDrawCallback/.preDrawCallback/.postDrawCallback/.finalDrawCallback each "
+		"accept either a DrawCallback subclass instance or a plain Python callable."
+	)
+		.def(py::init<>(), "Create a Camera with default view/projection matrices and no render target.")
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Camera>()),
+			"Create a Camera, setting any of viewport/clearColor/clearMask/projectionMatrix/"
+			"viewMatrix/renderOrder/graphicsContext/renderTargetImplementation/allowEventFocus/"
+			"computeNearFarMode/nearFarRatio/initialDrawCallback/preDrawCallback/"
+			"postDrawCallback/finalDrawCallback from keyword arguments."
+		)
 	;
 
-	py::enum_<osg::Camera::RenderOrder>(camera, "RenderOrder")
+	py::enum_<osg::Camera::RenderOrder>(
+		camera,
+		"RenderOrder",
+		"When this Camera's subgraph renders relative to its parent View's main scene: "
+		"PRE_RENDER and POST_RENDER run outside the main render (ordered by .renderOrder's "
+		"secondary sort key), NESTED_RENDER runs inline at the Camera's position in the graph."
+	)
 		.value("PRE_RENDER", osg::Camera::PRE_RENDER)
 		.value("NESTED_RENDER", osg::Camera::NESTED_RENDER)
 		.value("POST_RENDER", osg::Camera::POST_RENDER)
 		.export_values()
 	;
 
-	py::enum_<osg::Camera::BufferComponent>(camera, "BufferComponent")
+	py::enum_<osg::Camera::BufferComponent>(
+		camera,
+		"BufferComponent",
+		"Which framebuffer attachment point .attach()/.detach() target; COLOR_BUFFER is an "
+		"alias for COLOR_BUFFER0."
+	)
 		.value("DEPTH_BUFFER", osg::Camera::DEPTH_BUFFER)
 		.value("STENCIL_BUFFER", osg::Camera::STENCIL_BUFFER)
 		.value("PACKED_DEPTH_STENCIL_BUFFER", osg::Camera::PACKED_DEPTH_STENCIL_BUFFER)
@@ -44,7 +151,12 @@ void bind_Camera(py::module_& m) {
 		.export_values()
 	;
 
-	py::enum_<osg::Camera::RenderTargetImplementation>(camera, "RenderTargetImplementation")
+	py::enum_<osg::Camera::RenderTargetImplementation>(
+		camera,
+		"RenderTargetImplementation",
+		"How .renderTargetImplementation renders off-screen: FRAME_BUFFER_OBJECT is the usual "
+		"modern choice; the others are legacy pbuffer/window fallbacks."
+	)
 		.value("FRAME_BUFFER_OBJECT", osg::Camera::FRAME_BUFFER_OBJECT)
 		.value("PIXEL_BUFFER_RTT", osg::Camera::PIXEL_BUFFER_RTT)
 		.value("PIXEL_BUFFER", osg::Camera::PIXEL_BUFFER)
@@ -53,128 +165,122 @@ void bind_Camera(py::module_& m) {
 		.export_values()
 	;
 
+	py::enum_<osg::CullSettings::ComputeNearFarMode>(
+		camera,
+		"ComputeNearFarMode",
+		"How .computeNearFarMode derives near/far clip planes each frame: from the scene's "
+		"bounding volumes, from actual primitives (tighter but slower), or not at all."
+	)
+		.value("DO_NOT_COMPUTE_NEAR_FAR", osg::CullSettings::DO_NOT_COMPUTE_NEAR_FAR)
+		.value(
+			"COMPUTE_NEAR_FAR_USING_BOUNDING_VOLUMES",
+			osg::CullSettings::COMPUTE_NEAR_FAR_USING_BOUNDING_VOLUMES
+		)
+		.value(
+			"COMPUTE_NEAR_FAR_USING_PRIMITIVES",
+			osg::CullSettings::COMPUTE_NEAR_FAR_USING_PRIMITIVES
+		)
+		.value(
+			"COMPUTE_NEAR_USING_PRIMITIVES",
+			osg::CullSettings::COMPUTE_NEAR_USING_PRIMITIVES
+		)
+		.export_values()
+	;
+
 	py::class_<
 		osg::Camera::DrawCallback,
 		detail::Camera::DrawCallback,
 		osg::Object,
 		osg::ref_ptr<osg::Camera::DrawCallback>
-	>(camera, "DrawCallback")
-		.def(py::init<>())
+	>(
+		camera,
+		"DrawCallback",
+		"Base class for Camera's initialDrawCallback/preDrawCallback/postDrawCallback/"
+		"finalDrawCallback - subclass and override run(renderInfo), or pass a plain callable "
+		"to those properties instead."
+	)
+		.def(py::init<>(), "Create a DrawCallback; subclasses override run(renderInfo).")
 	;
 
 	camera
 		.def_property(
+			"computeNearFarMode",
+			&osg::Camera::getComputeNearFarMode,
+			&osg::Camera::setComputeNearFarMode,
+			"How near/far clip planes are derived each frame; see ComputeNearFarMode."
+		)
+		.def_property(
+			"nearFarRatio",
+			&osg::Camera::getNearFarRatio,
+			&osg::Camera::setNearFarRatio,
+			"Minimum near/far ratio the auto-computed near plane is clamped to, guarding "
+			"against depth-buffer precision loss."
+		)
+		.def_property(
 			"renderOrder",
 			&osg::Camera::getRenderOrder,
-			[](osg::Camera& self, py::object obj) {
-				if(py::isinstance<osg::Camera::RenderOrder>(obj)) {
-					self.setRenderOrder(obj.cast<osg::Camera::RenderOrder>());
-				}
-
-				else if(py::isinstance<py::sequence>(obj)) {
-					auto seq = obj.cast<py::sequence>();
-
-					if(seq.size() != 2) throw py::value_error("Expected (RenderOrder, int)");
-
-					self.setRenderOrder(
-						seq[0].cast<osg::Camera::RenderOrder>(),
-						seq[1].cast<int>()
-					);
-				}
-
-				else throw py::value_error("Expected RenderOrder or (RenderOrder, int)");
-			}
+			detail::camera_render_order_property_setter(),
+			"Set as (RenderOrder, order_num) to also set the secondary sort key among "
+			"PRE_RENDER/POST_RENDER cameras, or just a RenderOrder to keep order_num at 0."
 		)
-		.def_property("clearMask", &osg::Camera::getClearMask, &osg::Camera::setClearMask)
-		.def_property("clearColor", &osg::Camera::getClearColor, &osg::Camera::setClearColor)
+		.def_property(
+			"clearMask",
+			&osg::Camera::getClearMask,
+			&osg::Camera::setClearMask,
+			"Bitwise-OR of GL_COLOR_BUFFER_BIT/GL_DEPTH_BUFFER_BIT/GL_STENCIL_BUFFER_BIT "
+			"cleared at the start of this Camera's render."
+		)
+		.def_property(
+			"clearColor",
+			&osg::Camera::getClearColor,
+			&osg::Camera::setClearColor,
+			"Vec4 RGBA color used to clear the color buffer when clearMask includes "
+			"GL_COLOR_BUFFER_BIT."
+		)
 		.def_property(
 			"allowEventFocus",
 			&osg::Camera::getAllowEventFocus,
-			&osg::Camera::setAllowEventFocus
+			&osg::Camera::setAllowEventFocus,
+			"Whether event handlers/manipulators attached to this Camera's View receive "
+			"events that occur within its viewport."
 		)
 		.def_property(
 			"view",
 			py::overload_cast<>(&osg::Camera::getView, py::const_),
 			&osg::Camera::setView,
-			py::return_value_policy::reference_internal
+			py::return_value_policy::reference_internal,
+			"The View this Camera belongs to, or None if unattached."
+		)
+		.def_property(
+			"graphicsContext",
+			py::overload_cast<>(&osg::Camera::getGraphicsContext),
+			&osg::Camera::setGraphicsContext,
+			py::return_value_policy::reference_internal,
+			"The GraphicsContext (window/FBO surface) this Camera renders into."
 		)
 		.def_property(
 			"viewport",
 			py::overload_cast<>(&osg::Camera::getViewport, py::const_),
-			// TODO: This should really just accept `osg.Viewpoint` (ONLY), but it's nice to know
-			// HOW to parse different types of args, so we'll leave it as an example...
-			// TODO: We should either settle on ONLY using `py::args` or `py::object`!
-			[](osg::Camera& self, const py::args& args) {
-				if(args.size() == 1) {
-					// camera.viewport = viewport
-					if(py::isinstance<osg::Viewport>(args[0])) {
-						auto* vp = args[0].cast<osg::Viewport*>();
-
-						self.setViewport(vp);
-
-						return;
-					}
-
-					// camera.viewport = (x, y, w, h)
-					if(py::isinstance<py::sequence>(args[0])) {
-						auto seq = args[0].cast<py::sequence>();
-
-						if(seq.size() != 4) throw py::value_error("viewport must have 4 elements");
-
-						self.setViewport(
-							seq[0].cast<int>(),
-							seq[1].cast<int>(),
-							seq[2].cast<int>(),
-							seq[3].cast<int>()
-						);
-
-						return;
-					}
-				}
-
-				throw py::type_error("viewport must be set to osg.Viewport or sequence");
-			},
+			detail::camera_viewport_property_setter(),
 			py::return_value_policy::reference_internal,
-			py::doc(
-				"Get or set the camera viewport.\n\n"
-				"Setter accepts either:\n"
-				"  - osg.Viewport\n"
-				"  - (x, y, width, height) tuple"
-			)
+			"The Viewport (pixel x/y/width/height) this Camera renders into; settable from "
+			"a Viewport instance or an (x, y, width, height) tuple."
 		)
 
 		.def_property(
 			"projectionMatrix",
 			py::overload_cast<>(&osg::Camera::getProjectionMatrix, py::const_),
-			[](osg::Camera& self, py::handle matrix) {
-				if(py::isinstance<osg::Matrixd>(matrix)) self.setProjectionMatrix(
-					matrix.cast<osg::Matrixd>()
-				);
-
-				else if(py::isinstance<osg::Matrixf>(matrix)) self.setProjectionMatrix(
-					matrix.cast<osg::Matrixf>()
-				);
-
-				else throw py::type_error("projectionMatrix must be osg.Matrixd or osg.Matrixf");
-			},
-			py::return_value_policy::reference_internal
+			detail::camera_projection_matrix_property_setter(),
+			py::return_value_policy::reference_internal,
+			"The projection matrix; settable from a Matrixd or a flat 16-value sequence."
 		)
 
 		.def_property(
 			"viewMatrix",
 			py::overload_cast<>(&osg::Camera::getViewMatrix, py::const_),
-			[](osg::Camera& self, py::handle matrix) {
-				if(py::isinstance<osg::Matrixd>(matrix)) self.setViewMatrix(
-					matrix.cast<osg::Matrixd>()
-				);
-
-				else if(py::isinstance<osg::Matrixf>(matrix)) self.setViewMatrix(
-					matrix.cast<osg::Matrixf>()
-				);
-
-				else throw py::type_error("viewMatrix must be osg.Matrixd or osg.Matrixf");
-			},
-			py::return_value_policy::reference_internal
+			detail::camera_view_matrix_property_setter(),
+			py::return_value_policy::reference_internal,
+			"The view (world-to-eye) matrix; settable from a Matrixd or a flat 16-value sequence."
 		)
 
 		.def_property(
@@ -186,7 +292,9 @@ void bind_Camera(py::module_& m) {
 				detail::InitialDrawCallbackSlot,
 				detail::InitialDrawCallbackSetter,
 				detail::InitialDrawCallbackGetter
-			>()
+			>(),
+			"Callback (DrawCallback subclass instance or plain callable) invoked before any "
+			"rendering for this Camera, once per graphics context."
 		)
 		.def_property(
 			"preDrawCallback",
@@ -197,7 +305,8 @@ void bind_Camera(py::module_& m) {
 				detail::PreDrawCallbackSlot,
 				detail::PreDrawCallbackSetter,
 				detail::PreDrawCallbackGetter
-			>()
+			>(),
+			"Callback invoked immediately before this Camera's subgraph is drawn."
 		)
 		.def_property(
 			"postDrawCallback",
@@ -208,7 +317,8 @@ void bind_Camera(py::module_& m) {
 				detail::PostDrawCallbackSlot,
 				detail::PostDrawCallbackSetter,
 				detail::PostDrawCallbackGetter
-			>()
+			>(),
+			"Callback invoked immediately after this Camera's subgraph is drawn."
 		)
 		.def_property(
 			"finalDrawCallback",
@@ -219,12 +329,16 @@ void bind_Camera(py::module_& m) {
 				detail::FinalDrawCallbackSlot,
 				detail::FinalDrawCallbackSetter,
 				detail::FinalDrawCallbackGetter
-			>()
+			>(),
+			"Callback invoked after all rendering for this Camera has completed, once per "
+			"graphics context."
 		)
 
 		.def(
 			"attach",
-			py::overload_cast<osg::Camera::BufferComponent, GLenum>(&osg::Camera::attach)
+			py::overload_cast<osg::Camera::BufferComponent, GLenum>(&osg::Camera::attach),
+			"Attach a raw GL buffer (e.g. GL_FRONT) to the given BufferComponent, for "
+			"non-FBO render targets."
 		)
 		.def(
 			"attach",
@@ -237,6 +351,7 @@ void bind_Camera(py::module_& m) {
 				unsigned int,
 				unsigned int
 			>(&osg::Camera::attach),
+			"Attach a Texture as the render target for the given BufferComponent (RTT).",
 			"buffer"_a,
 			"texture"_a,
 			"level"_a=0,
@@ -253,12 +368,14 @@ void bind_Camera(py::module_& m) {
 				unsigned int,
 				unsigned int
 			>(&osg::Camera::attach),
+			"Attach an Image as the render target for the given BufferComponent, so the "
+			"rendered pixels are read back into it (e.g. for screenshots or CPU readback).",
 			"buffer"_a,
 			"image"_a,
 			"multisampleSamples"_a=0,
 			"multisampleColorSamples"_a=0
 		)
-		.def("detach", &osg::Camera::detach)
+		.def("detach", &osg::Camera::detach, "Remove any attachment previously set on the given BufferComponent.")
 
 		.def_property(
 			"renderTargetImplementation",
@@ -268,24 +385,9 @@ void bind_Camera(py::module_& m) {
 					self.getRenderTargetFallback()
 				);
 			},
-			[](osg::Camera& self, py::object obj) {
-				if(py::isinstance<osg::Camera::RenderTargetImplementation>(obj)) {
-					self.setRenderTargetImplementation(obj.cast<osg::Camera::RenderTargetImplementation>());
-				}
-
-				else if(py::isinstance<py::sequence>(obj)) {
-					auto seq = obj.cast<py::sequence>();
-
-					if(seq.size() != 2) throw py::value_error("Expected (impl, fallback)");
-
-					self.setRenderTargetImplementation(
-						seq[0].cast<osg::Camera::RenderTargetImplementation>(),
-						seq[1].cast<osg::Camera::RenderTargetImplementation>()
-					);
-				}
-
-				else throw py::value_error("Expected RenderTargetImplementation or (impl, fallback)");
-			}
+			detail::camera_render_target_implementation_property_setter(),
+			"Read as (implementation, fallback); settable from a single RenderTargetImplementation "
+			"or an (implementation, fallback) tuple used if the primary choice is unavailable."
 		)
 	;
 }

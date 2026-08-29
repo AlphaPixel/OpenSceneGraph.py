@@ -2,13 +2,13 @@
 
 #include "lifetime-probe.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osg/Group>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
-#include "pybind11x.hpp"
+#include "pybind11x-osg.hpp"
 
 namespace pyx = pybind11x;
 
@@ -40,22 +40,15 @@ struct pyx::SequenceTraits<osg::Group> {
 	static void append(osg::Group* g, value_type n) {
 		g->addChild(n);
 	}
+
+	static void insert(osg::Group* g, size_t i, value_type n) {
+		g->insertChild(static_cast<unsigned int>(i), n);
+	}
 };
 
 namespace pyosg {
 
 namespace detail {
-	/* template<>
-	void kwargs_init(osg::Group& self, const py::kwargs& kwargs) {
-		kwargs_init(static_cast<osg::Node&>(self), kwargs);
-
-		if(kwargs.contains("children")) {
-			for(py::handle child : kwargs["children"]) {
-				self.addChild(child.cast<osg::Node*>());
-			}
-		}
-	} */
-
 	using ChildrenProxy = pyx::SequenceProxy<osg::Group>;
 	using ChildrenStorage = pyx::ProxyStorageOSG<osg::Group, ChildrenProxy>;
 }

@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-instanced-ssbo.py
 
-import os
+import sys
 import time
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6"
-})
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
+# example -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -45,7 +41,7 @@ VERTEX_SHADER = """
 
 		instanceID = gl_InstanceID;
 
-		gl_Position = gl_ModelViewProjectionMatrix * vec4(pos + v, 0.0, 1.0);
+		gl_Position = gl_ModelViewProjectionMatrix * vec4(pos.x + v.x, 0.0, pos.y + v.y, 1.0);
 	}
 """ % GRID_SIZE
 
@@ -64,9 +60,7 @@ FRAGMENT_SHADER = """
 	}
 """
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
-
+def build_scene(w, h):
 	c = osg.Vec4Array(NUM_INSTANCES)
 
 	# TODO: Do this in the constructor!
@@ -85,9 +79,9 @@ if __name__ == "__main__":
 	g = osg.Geometry()
 
 	# TODO: Convert to SequenceProxy!
-	g.addPrimitiveSet(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4, NUM_INSTANCES))
+	g.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4, NUM_INSTANCES))
 
-	g.initialBound = osg.BoundingBox(-10, -10, -1, 10, 10, 1)
+	g.initialBound = osg.BoundingBox(-10, -1, -10, 10, 1, 10)
 	# g.useVertexBufferObjects = True
 
 	p = osg.Program(name="gl_InstanceID_SSBO_DEMO", shaders=(
@@ -95,12 +89,22 @@ if __name__ == "__main__":
 		osg.Shader(osg.Shader.FRAGMENT, FRAGMENT_SHADER)
 	))
 
-	g.stateSet.setAttributeAndModes(p)
-	g.stateSet.setAttributeAndModes(ssbb)
+	g.stateSet.attributes.append(p)
+	g.stateSet.attributes.append(ssbb)
 
-	v = osgViewer.Viewer()
+	return g
 
-	v.sceneData = g
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	# osg.ArgumentParser here (rather than plain osgViewer.Viewer()) picks up OSG's own standard
+	# command-line options (--samples, --clear-color, ...) mentioned in the #vimrun! header above
+	# -- standalone-only; a runner-driven run constructs its own bare Viewer and won't parse those.
+	v = osgViewer.Viewer(osg.ArgumentParser("pyosg-instanced-ssbo.py", sys.argv))
+
+	W, H = window_size()
+
+	v.sceneData = build_scene(W, H)
 	v.cameraManipulator = osgGA.TrackballManipulator()
 
 	while not v.done:

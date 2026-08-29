@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-rtt.py
 
 import os
-import time
 
 # You might want to tweak or override these for your environment. However,
 # modifying the `OSG_THREADING` variable isn't advised, as properly interacting
@@ -66,9 +64,8 @@ void main() {
 	vec3 N = normalize(vNormal);
 
 	float diffuse = max(dot(N, L), 0.0);
-	diffuse = floor(diffuse * 3.0) / 3.0;  // add this line
+	diffuse = floor(diffuse * 3.0) / 3.0;
 
-	// float diffuse = max(dot(N, L), 0.0);
 	float ambient = 0.25;
 	float light = ambient + diffuse;
 
@@ -104,7 +101,6 @@ uniform sampler2D colorTex;
 uniform sampler2D depthTex;
 uniform float znear;
 uniform float zfar;
-uniform mat4 projMat;
 
 in vec2 uv;
 
@@ -117,75 +113,7 @@ float linearizeDepth(float d, float near, float far) {
 	return (2.0 * near * far) / (far + near - z * (far - near));
 }
 
-// Convert depth -> stable [0..1] visualization using absolute far plane.
-//
-// Good for visualizing things for debugging, but not PRACTICAL.
-float visualizeAbsoluteDepth(float depth, float near, float far) {
-	return linearizeDepth(depth, near, far) / far;
-}
-
-// Convert depth -> [0..1] relative to current near/far range.
-//
-// This is the standard, useful way to work with depth.
-float normalizeDepthToFrustum(float depth, float near, float far) {
-	float z = linearizeDepth(depth, near, far);
-
-	return (z - near) / (far - near);
-}
-
-// ===============================================================================
-// This only works on non-inversed (normal) projection matrices!
-float extractNear(mat4 proj) {
-	float A = proj[2][2];
-	float B = proj[2][3];
-
-	return B / (A - 1.0);
-}
-
-// This only works on non-inversed (normal) projection matrices!
-float extractFar(mat4 proj) {
-	float A = proj[2][2];
-	float B = proj[2][3];
-
-	return B / (A + 1.0);
-}
-
-float visualizeAbsoluteDepth_test(float depth, mat4 proj) {
-	float near = extractNear(proj);
-	float far = extractFar(proj);
-	float z = linearizeDepth(depth, near, far);
-
-	return z / far;
-}
-// ===============================================================================
-
-void main_depth_pos() {
-	float depth = texture(depthTex, uv).r;
-
-	vec4 clip = vec4(
-		uv * 2.0 - 1.0,
-		depth * 2.0 - 1.0,
-		1.0
-	);
-
-	mat4 invProj = inverse(projMat);
-	vec4 view = invProj * clip;
-	vec3 viewPos = view.xyz / view.w;
-
-	float z = -viewPos.z;
-
-	color = vec4(vec3(z / 32.0), 1.0);
-}
-
-void main_depth() {
-	float d = texture(depthTex, uv).r;
-
-	color = vec4(visualizeAbsoluteDepth(d, znear, zfar));
-	// color = vec4(normalizeDepthToFrustum(d, znear, zfar));
-	// color = vec4(visualizeAbsoluteDepth_test(d, projMat));
-}
-
-void main_toon() {
+void main() {
 	vec4 c = texture(colorTex, uv);
 	float d = texture(depthTex, uv).r;
 
@@ -212,31 +140,10 @@ void main_toon() {
 
 	// Threshold relative to depth (edges far away need less delta)
 	float threshold = z * 0.03;
-	// float outline = edge > threshold ? 1.0 : 0.0;
 	float outline = smoothstep(threshold * 0.5, threshold * 1.5, edge);
 
 	// Black outline over scene color
 	color = mix(c, vec4(0.0, 0.0, 0.0, 1.0), outline);
-}
-
-void main() {
-	// main_depth(); return;
-	main_toon(); return;
-
-	float d = texture(depthTex, uv).r;
-	vec4 c = texture(colorTex, uv);
-
-	// Ignore background pixels
-	if (d >= 1.0) {
-		color = c;
-
-		return;
-	}
-
-	float z = linearizeDepth(d, 1.0, 10000.0);
-	float fog = clamp(z / 10000.0, 0.0, 1.0);
-	vec4 fogColor = vec4(0.6, 0.7, 0.9, 1.0);
-	color = mix(c, fogColor, fog);
 }
 """
 
@@ -260,7 +167,7 @@ def create_scene():
 	p.shaders.append(osg.Shader(osg.Shader.VERTEX, SCENE_VERTEX_SHADER))
 	p.shaders.append(osg.Shader(osg.Shader.FRAGMENT, SCENE_FRAGMENT_SHADER))
 
-	g.stateSet.setAttributeAndModes(p)
+	g.stateSet.attributes.append(p)
 
 	return g
 
@@ -329,18 +236,13 @@ def create_hud_camera(cb, db):
 
 	cam.children.append(g)
 
-	cam.stateSet.setTextureAttributeAndModes(0, cb)
-	cam.stateSet.setTextureAttributeAndModes(1, db)
+	# cam.stateSet.setTextureAttributeAndModes(0, cb)
+	# cam.stateSet.setTextureAttributeAndModes(1, db)
+	cam.stateSet.textureAttributes[0] = cb
+	cam.stateSet.textureAttributes[1] = db
 
 	cam.stateSet.uniforms["colorTex"] = 0
 	cam.stateSet.uniforms["depthTex"] = 1
-
-	# cam.stateSet.addUniform(osg.Uniform("colorTex", 0))
-	# cam.stateSet.addUniform(osg.Uniform("depthTex", 1))
-	# cam.stateSet.uniforms.extend((
-	# 	osg.Uniform("colorTex", 0),
-	# 	osg.Uniform("depthTex", 1)
-	# ))
 
 	# Most properties on OSG.py objects can OPTIONALLY be set during creation using
 	# keyword arguments; key/value pairs are passed down the entire inheritance chain,
@@ -350,71 +252,67 @@ def create_hud_camera(cb, db):
 		osg.Shader(osg.Shader.FRAGMENT, HUD_FRAGMENT_SHADER)
 	))
 
-	g.stateSet.setAttributeAndModes(p)
+	g.stateSet.attributes.append(p)
 
 	return cam
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
-
-	v = osgViewer.Viewer()
-	r = osg.Group()
-
-	rttCam, cb, db = create_rtt_camera(400, 300)
+# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side
+# effects. This is what external tooling (e.g. etc/pyside6-glsl.py's shader-editor scaffold,
+# ../pyosg-cli) imports and calls directly, so it MUST stay side-effect-free w.r.t. any
+# global viewer state. Takes (w, h) explicitly rather than reading module-level constants.
+def build_scene(w, h):
+	rttCam, cb, db = create_rtt_camera(w, h)
 	hudCam = create_hud_camera(cb, db)
 
 	# This is how the RTT camera "knows" what to render...
 	rttCam.children.append(create_scene())
 
-	r.children.extend((rttCam, hudCam))
-
 	znear = osg.Uniform("znear", 0.0)
 	zfar = osg.Uniform("zfar", 0.0)
-	proj = osg.Uniform("projMat", osg.Matrixf.identity())
 
-	hudCam.stateSet.uniforms.extend((znear, zfar, proj))
+	hudCam.stateSet.uniforms.extend((znear, zfar))
 
-	# This function is used as the `Camera.DrawCallback` for the default `osgViewer.Viewer`
-	# camera, and injects the proper near/far Z values into our `Program` state every frame.
-	#
-	# OSG recomputes the znear/zfar every frame (based on its `CameraManipulator`) so that
-	# the resultant depth range has as much precision as possible. MANY post-processing
+	# Injects the proper near/far Z values into our `Program` state every frame. OSG
+	# recomputes the znear/zfar every frame (based on its `CameraManipulator`) so that the
+	# resultant depth range has as much precision as possible. MANY post-processing
 	# techniques rely on being able to properly query and/or "linearize" depth values, so
 	# it's important that you're always working with accurate values.
+	#
+	# state.projectionMatrix (osg::State::getProjectionMatrix()) is a SHARED per-context
+	# value, not scoped to whichever camera's callback reads it -- it reflects whatever was
+	# LAST applied to the GL state, not necessarily this camera's own matrix. rttCam is
+	# PRE_RENDER (draws FIRST each frame), so attaching this callback there would read a
+	# STALE value left over from the END of the previous frame (hudCam's own identity
+	# projectionMatrix, since hudCam draws last) -- confirmed the hard way on pyosg-mrt.py's
+	# equivalent gbuffer_cam (see [[project_pyosg_examples_runner]] memory): garbage
+	# near/far, and inverse(identity) breaking anything relying on invProjectionMatrix.
+	# hudCam is POST_RENDER (draws LAST), so by the time ITS preDrawCallback fires, the real
+	# viewer camera has already drawn in between and applied its real, this-frame-fresh
+	# projection -- the same timing guarantee this used to get directly from the caller's own
+	# v.camera.preDrawCallback, without build_scene() needing a viewer reference at all.
 	def update_uniforms(ri):
 		pm = ri.state.projectionMatrix
-
-		# osg.notice(f"update_uniforms: {pm}")
-
 		fovy, aspect, near, far = pm.getPerspective()
-
-		# OSG ALWAYS treats uniforms as ARRAYS (and only "pretends" to be scalar with an API
-		# that abstracts access to the `[0]` index. However, Python supports using either of the
-		# following methods for update:
-		#
-		# znear[0] = float(near)
-		# zfar[0] = float(far)
-		# proj[0] = osg.Matrixf(pm)
-
-		# Even though this LOOKS like setting a "scalar", the `.value` property is just a wrapper
-		# around using the style above!
-		#
-		# znear.value = float(near)
-		# zfar.value = float(far)
-		# proj.value = osg.Matrixf(pm)
 
 		hudCam.stateSet.uniforms["znear"] = float(near)
 		hudCam.stateSet.uniforms["zfar"] = float(far)
-		hudCam.stateSet.uniforms["projMat"] = osg.Matrixf(pm)
 
-	v.sceneData = r
+	hudCam.preDrawCallback = update_uniforms
+
+	root = osg.Group()
+	root.children.extend((rttCam, hudCam))
+
+	return root
+
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	v = osgViewer.Viewer()
+
+	v.sceneData = build_scene(800, 600)
 	v.cameraManipulator = osgGA.TrackballManipulator()
-	v.camera.preDrawCallback = update_uniforms
 
 	# You could just call `v.run()`, but it's informative to demonstrate different ways of
 	# "driving" the redraw/render process.
 	while not v.done:
 		v.frame()
-
-		# time.sleep(0.1)
-		# time.sleep(1.0 / 60.0)

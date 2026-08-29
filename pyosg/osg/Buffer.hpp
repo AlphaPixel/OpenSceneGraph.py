@@ -2,13 +2,13 @@
 
 #include "../pyosg.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osg/BufferObject>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
-#include "pybind11x.hpp"
+#include "pybind11x-osg.hpp"
 
 namespace pyx = pybind11x;
 

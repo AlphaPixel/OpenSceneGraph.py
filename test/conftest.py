@@ -4,6 +4,7 @@ import os
 
 import pytest
 
+sys.path.append("BUILD-g++-13.3.0-NOASAN")
 sys.path.append("BUILD-g++-15.2.1-NOASAN")
 
 os.putenv("OSG_THREADING", "SingleThreaded")
@@ -12,6 +13,66 @@ os.putenv("OSG_THREADING", "SingleThreaded")
 
 # with nativeio.silence():
 from OpenSceneGraph import *
+
+class FrameActions(osgGA.GUIActionAdapter):
+	"""Headless GUIActionAdapter that records OSG requests for test assertions."""
+
+	def __init__(self):
+		super().__init__()
+
+		self.redraws = 0
+		self.continuousUpdates = []
+		self.pointerWarps = []
+
+	def requestRedraw(self):
+		self.redraws += 1
+
+	def requestContinuousUpdate(self, needed=True):
+		self.continuousUpdates.append(needed)
+
+	def requestWarpPointer(self, x, y):
+		self.pointerWarps.append((x, y))
+
+class FrameSimulator:
+	"""Drive OSG's event and update visitors without a Viewer or graphics context."""
+
+	def __init__(self):
+		self.frameStamp = osg.FrameStamp()
+		self.events = osgGA.EventQueue()
+		self.actions = FrameActions()
+		self.eventVisitor = osgGA.EventVisitor()
+		self.updateVisitor = osgUtil.UpdateVisitor()
+
+		self.eventVisitor.actionAdapter = self.actions
+
+	def advance(self, simulationTime=0.0):
+		self.frameStamp.frameNumber += 1
+		self.frameStamp.referenceTime = simulationTime
+		self.frameStamp.simulationTime = simulationTime
+
+	def dispatchEvent(self, handler, event):
+		"""Use OSG's C++ GUIEventHandler dispatch path for one GUI event."""
+
+		return osgGA.GUIEventHandler.handle(handler, event, self.actions)
+
+	def traverseEvents(self, root):
+		self.eventVisitor.frameStamp = self.frameStamp
+		self.eventVisitor.traversalNumber = self.frameStamp.frameNumber
+
+		for event in self.events.takeEvents():
+			self.eventVisitor.reset()
+			self.eventVisitor.addEvent(event)
+			root.accept(self.eventVisitor)
+
+	def traverseUpdate(self, root):
+		self.updateVisitor.reset()
+		self.updateVisitor.frameStamp = self.frameStamp
+		self.updateVisitor.traversalNumber = self.frameStamp.frameNumber
+		root.accept(self.updateVisitor)
+
+@pytest.fixture
+def simulate_frame():
+	return FrameSimulator()
 
 def f32(x: float) -> float:
 	"""Convert Python float -> IEEE754 float32 -> float64 again."""

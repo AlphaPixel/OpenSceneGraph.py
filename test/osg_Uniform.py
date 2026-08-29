@@ -1,10 +1,53 @@
-#vimrun! pytest -sv ../test/osg_Uniform.py
-
 import pytest
 
 from .conftest import f32, floatif, refcmp
 
-from OpenSceneGraph.osg import Uniform, Vec3f, Matrixf
+from OpenSceneGraph.osg import StateSet, Uniform, Vec3f, Matrixf
+
+
+def test_kwargs_init_debug_and_name():
+	# Uniform's constructor used to bypass kwargs_init entirely (~20 raw py::init<...>
+	# overloads) -- debug=/name=/etc. failed with a pybind11 "incompatible constructor
+	# arguments" error on every overload. Fixed by routing them all through
+	# pyx::kwargs_ctor<osg::Uniform, ...>() (kwargs_base<osg::Uniform> -> osg::Object in
+	# pyosg.hpp), except the copy constructor, which deliberately stays kwargs-free (see
+	# below). Cover a representative spread of overloads, not all ~19.
+	deleted = []
+	dbg = lambda addr, cls, name: deleted.append(name)
+
+	u0 = Uniform(Uniform.Type.FLOAT, "u0", debug=dbg)  # (type, name, numElements=1) overload
+	u1 = Uniform("u1", 1.5, debug=dbg)  # (name, value) overload
+	u2 = Uniform(Uniform.Type.FLOAT_VEC3, "u2", (Vec3f(1, 0, 0), Vec3f(0, 1, 0)), debug=dbg)  # (type, name, elements)
+	u3 = Uniform(debug=dbg, name="renamed")  # default ctor, name= override via kwargs_init
+
+	assert u0.name == "u0"
+	assert u1.name == "u1" and pytest.approx(u1.value) == 1.5
+	assert len(u2) == 2
+	assert u3.name == "renamed"
+
+	del u0, u1, u2, u3
+
+	assert sorted(deleted) == ["renamed", "u0", "u1", "u2"]
+
+def test_copy_constructor_rejects_kwargs():
+	# Deliberate: a copy already fully initializes every field from the source object, so
+	# debug=/name= on TOP of a copy would mean overriding specific post-copy fields -- a
+	# different feature from what kwargs_ctor provides, matching the same convention already
+	# established for MatrixTransform/PositionAttitudeTransform's copy constructors.
+	src = Uniform("x", 1)
+
+	with pytest.raises(TypeError):
+		Uniform(src, debug=lambda *a: None)
+
+def test_uniform_mapping_update():
+	ss = StateSet()
+
+	ss.uniforms.update({"integer": 7}, floating=1.5)
+	ss.uniforms.update((("color", Vec3f(1, 2, 3)),))
+
+	assert ss.uniforms["integer"].value == 7
+	assert ss.uniforms["floating"].value == pytest.approx(1.5)
+	assert ss.uniforms["color"].value == Vec3f(1, 2, 3)
 
 def test_construction(uniform_init):
 	for ty, val in uniform_init:
@@ -106,3 +149,25 @@ def test_value_on_multi_element_rejected():
 
 	with pytest.raises(ValueError):
 		u.value = 1
+
+def test_array_init_from_tuple():
+	from OpenSceneGraph.osg import Vec3f
+
+	u = Uniform(Uniform.Type.FLOAT_VEC3, "colors", (Vec3f(1, 0, 0), Vec3f(0, 1, 0)))
+
+	assert len(u) == 2
+	assert u[0] == Vec3f(1, 0, 0)
+	assert u[1] == Vec3f(0, 1, 0)
+
+def test_array_init_from_list():
+	from OpenSceneGraph.osg import Vec3f
+
+	u = Uniform(Uniform.Type.FLOAT_VEC3, "colors", [Vec3f(1, 0, 0), Vec3f(0, 0, 1)])
+
+	assert len(u) == 2
+	assert u[0] == Vec3f(1, 0, 0)
+	assert u[1] == Vec3f(0, 0, 1)
+
+def test_array_init_empty_rejected():
+	with pytest.raises((ValueError, TypeError)):
+		Uniform(Uniform.Type.FLOAT_VEC3, "x", ())

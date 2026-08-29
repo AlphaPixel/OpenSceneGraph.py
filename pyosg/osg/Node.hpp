@@ -2,23 +2,24 @@
 
 #include "callable.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osg/NodeVisitor>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
-#include "pybind11x.hpp"
+#include "pybind11x-osg.hpp"
 
 namespace pyx = pybind11x;
 
 namespace pyosg {
 
 namespace detail {
-	using NodeSlots = pyx::PropertySlots<osg::Node, 1>;
+	using NodeSlots = pyx::PropertySlots<osg::Node, 2>;
 	using NodeStorage = pyx::ProxyStorageOSG<osg::Node, NodeSlots>;
 
 	constexpr size_t UpdateCallbackSlot = 0;
+	constexpr size_t EventCallbackSlot = 1;
 
 	using UpdateCallbackType = osg::NodeCallback;
 	using UpdateCallbackWrapper = CallableCallback<
@@ -40,6 +41,14 @@ namespace detail {
 		static_cast<void(osg::Node::*)(osg::Callback*)>(&osg::Node::setUpdateCallback)
 	;
 
+	constexpr auto EventCallbackGetter =
+		static_cast<osg::Callback*(osg::Node::*)()>(&osg::Node::getEventCallback)
+	;
+
+	constexpr auto EventCallbackSetter =
+		static_cast<void(osg::Node::*)(osg::Callback*)>(&osg::Node::setEventCallback)
+	;
+
 	// Slot-backed callback setter. We canonicalize the stored pointer via the getter so SlotCache
 	// compares the same pointer representation the getter will later return.
 	template<size_t I, auto Setter, auto Getter, typename Callback, typename Wrapper>
@@ -55,12 +64,33 @@ namespace detail {
 	}
 
 	// Combines all of the "glue" above into a single, reusable entry point.
+	//
+	// The isinstance-check/cast type here is osg::Callback, NOT UpdateCallbackType (NodeCallback) --
+	// real OSG's Node::setUpdateCallback()/setEventCallback() already take a plain osg::Callback*
+	// (the modern, unified callback entry point; NodeCallback::run() only exists to adapt IT to the
+	// "old style" operator()(Node*, NodeVisitor*) method, per NodeCallback's own doc comment in
+	// osg/Callback). Using osg::Callback here is a strict superset of the old NodeCallback-only
+	// check -- any NodeCallback instance still passes it (NodeCallback IS-A Callback) -- so this
+	// doesn't change behavior for existing NodeCallback-based code, it just also accepts a plain
+	// Callback subclass overriding run() directly. UpdateCallbackWrapper is UNCHANGED (still
+	// NodeCallback-shaped): it's a separate concern, wrapping a bare Python callable for the
+	// Node-visitor-specific (node, nv) convenience signature, not affected by this.
 	inline auto node_update_callback_property_setter() {
 		return node_callback_property_setter<
 			UpdateCallbackSlot,
 			UpdateCallbackSetter,
 			UpdateCallbackGetter,
-			UpdateCallbackType,
+			osg::Callback,
+			UpdateCallbackWrapper
+		>();
+	}
+
+	inline auto node_event_callback_property_setter() {
+		return node_callback_property_setter<
+			EventCallbackSlot,
+			EventCallbackSetter,
+			EventCallbackGetter,
+			osg::Callback,
 			UpdateCallbackWrapper
 		>();
 	}

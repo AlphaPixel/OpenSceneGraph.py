@@ -1,12 +1,14 @@
 #pragma once
 
+#include <limits>
+
 #include "../pyosg.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osg/Array>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
 namespace pyosg {
 
@@ -39,11 +41,11 @@ namespace detail {
 		py::class_<Slice>(m, name)
 			.def("__len__", &Slice::size)
 
-			.def("__getitem__", [](Slice& self, ssize_t index) {
+			.def("__getitem__", [](Slice& self, py::ssize_t index) {
 				return self[n_index(self.size(), index)];
 			})
 
-			.def("__setitem__", [](Slice& self, ssize_t index, const element_type& value) {
+			.def("__setitem__", [](Slice& self, py::ssize_t index, const element_type& value) {
 				self[n_index(self.size(), index)] = value;
 			})
 
@@ -110,20 +112,32 @@ namespace detail {
 
 	template<typename T>
 	auto bind_Array(py::module_& m, const char* name) {
-		auto arr = py::class_<T, osg::Array, osg::ref_ptr<T>>(m, name, py::buffer_protocol());
+		auto arr = py::class_<T, osg::Array, osg::ref_ptr<T>>(
+			m,
+			name,
+			py::buffer_protocol(),
+			"A typed osg::Array of elements; supports the Python buffer protocol (so numpy.asarray() "
+			"views it with no copy) plus indexing, slicing (step=1 only), iteration, and __repr__."
+		);
 
 		bind_ArraySlice<T>(arr, "_Slice");
 
 		arr
-			.def(py::init<>())
-			.def(py::init<size_t>(), py::arg("size"))
+			.def(py::init<>(), "Create an empty array with no elements.")
+			.def(py::init([](py::ssize_t size) {
+				if(size < 0 || size > static_cast<py::ssize_t>(std::numeric_limits<unsigned int>::max())) {
+					throw py::value_error("Array size must fit in an unsigned int");
+				}
+
+				return new T(static_cast<unsigned int>(size));
+			}), "size"_a, "Create an array of size default-constructed elements.")
 			.def(py::init([](const std::vector<typename T::ElementDataType>& vec) {
 				auto a = new T();
 
 				a->assign(vec.begin(), vec.end());
 
 				return a;
-			}))
+			}), "Create an array by copying every element from a Python sequence.")
 			.def(py::init([](py::buffer b) {
 				py::buffer_info info = b.request();
 
@@ -135,7 +149,7 @@ namespace detail {
 				auto comps = static_cast<py::ssize_t>(array_components<T>());
 
 				if(info.ndim == 1) {
-					if(info.shape[0] % comps != 0) throw py::value_error(
+					if(info.shape[0] % comps) throw py::value_error(
 						"Flat array size must be divisible by component count"
 					);
 				}
@@ -163,7 +177,11 @@ namespace detail {
 				);
 
 				return a;
-			}))
+			}),
+				"Create an array from a float32 buffer (e.g. a numpy array), copying its data; a 1D "
+				"buffer is grouped into elements by component count, a 2D buffer must be shape "
+				"(N, components)."
+			)
 
 			// .def("append", [](T& self, const T::ElementDataType& v) { self.push_back(v); })
 
@@ -205,11 +223,13 @@ namespace detail {
 				);
 			})
 
-			.def("__len__", [](const T& self) { return self.size(); })
+			.def("__len__", [](const T& self) { return self.size(); },
+				"Return the number of elements (not scalar components)."
+			)
 
 			.def("__getitem__", [](const T& self, py::ssize_t index) {
 				return self[n_index(self.size(), index)];
-			})
+			}, "Return the element at index (negative indices count from the end).")
 
 			.def("__getitem__", [](T& self, const py::slice& slice) {
 				size_t start, stop, step, length;
@@ -231,18 +251,21 @@ namespace detail {
 					length,
 					&self
 				);
-			}, py::keep_alive<0, 1>())
+			}, py::keep_alive<0, 1>(),
+				"Return an ArraySlice view (step=1 only) sharing this array's underlying storage; "
+				"writes through the slice mutate this array in place."
+			)
 
 			.def("__setitem__", [](T& self, py::ssize_t index, const T::ElementDataType& value) {
 				self[n_index(self.size(), index)] = value;
-			})
+			}, "Set the element at index (negative indices count from the end).")
 
 			// TODO: BROADCAST and NON-BROADCAST slice assignment!
 			// .def("__setitem__", [](T& self, py::ssize_t index, const T::ElementDataType& value) {
 
 			.def("__repr__", [name](const T& self) {
 				return py::str("{}(size={})").format(name, self.size());
-			})
+			}, "Return a constructor-style representation showing this array's element count.")
 
 			.def("dump", [name](const T& self) {
 				py::list items;
@@ -255,7 +278,7 @@ namespace detail {
 				for(size_t i = 0; i < n; ++i) items.append(py::repr(py::cast(self[i])));
 
 				return py::str("{}({})").format( name, py::str(", ").attr("join")(items));
-			})
+			}, "Return every element's repr, comma-joined and wrapped in the type name.")
 		;
 	}
 }

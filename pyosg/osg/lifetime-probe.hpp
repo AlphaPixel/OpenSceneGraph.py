@@ -1,14 +1,15 @@
 #pragma once
 
 #include "../pyosg.hpp"
+#include "pybind11x.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osg/observer_ptr>
 #include <osg/Object>
 #include <osg/UserDataContainer>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
 #include <sstream>
 
@@ -17,11 +18,11 @@ namespace pyosg {
 namespace detail {
 	class PYOSG_INTERNAL LifetimeProbe: public osg::Object {
 	public:
-		PYOSG_DISABLE_WARNINGS
+		OSGX_DISABLE_WARNINGS
 
 		META_Object(pyosg, LifetimeProbe)
 
-		PYOSG_ENABLE_WARNINGS
+		OSGX_ENABLE_WARNINGS
 
 		LifetimeProbe() = default;
 
@@ -37,22 +38,22 @@ namespace detail {
 		}
 
 		~LifetimeProbe() {
+			if(!Py_IsInitialized()) {
+				pybind11x::release_with_gil(_pyo);
+				return;
+			}
+
+			py::gil_scoped_acquire gil;
+
 			if(py::bool_(_pyo)) {
 				if(!PyCallable_Check(_pyo.ptr())) _notify("Destroying");
 
 				else {
 					try {
-						if(Py_IsInitialized()) {
-							// TODO: Remove me!
-							_notify("Destroying (Py_IsInitialized())");
-
-							py::gil_scoped_acquire gil;
-
-							_pyo(_addr, _type, _name);
-						}
-
 						// TODO: Remove me!
-						else _notify("Destroying (!Py_IsInitialized())");
+						_notify("Destroying (Py_IsInitialized())");
+
+						_pyo(_addr, _type, _name);
 					}
 
 					catch(const py::error_already_set& e) {
@@ -68,6 +69,8 @@ namespace detail {
 					}
 				}
 			}
+
+			pybind11x::release_with_gil(_pyo);
 		}
 
 		LifetimeProbe(

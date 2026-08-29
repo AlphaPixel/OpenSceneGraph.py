@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../pyosg.hpp"
+#include "pybind11x.hpp"
 
 // OSG's callback system mixes:
 //
@@ -78,6 +79,8 @@ namespace detail {
 	public:
 		explicit CallableCallback(py::object fn): _fn(std::move(fn)) {}
 
+		~CallableCallback() override { pybind11x::release_with_gil(_fn); }
+
 		void operator()(Args... args) override {
 			CallbackMethod<Base>::invoke(this, _fn, std::forward<Args>(args)...);
 		}
@@ -96,6 +99,8 @@ namespace detail {
 	class CallableCallback<Base, void(Args...) const, Traverse>: public Base {
 	public:
 		explicit CallableCallback(py::object fn): _fn(std::move(fn)) {}
+
+		~CallableCallback() override { pybind11x::release_with_gil(_fn); }
 
 		void operator()(Args... args) const override {
 			CallableImpl<Base, Traverse>::call(

@@ -1,0 +1,262 @@
+name: Build wheels
+
+on:
+  push:
+    branches: [main]
+    # Release tags build the same wheels, then unlock the publish job below.
+    tags: ["v*"]
+  workflow_dispatch:
+
+# The workflow only needs to read the repository and upload its wheel artifact.
+permissions:
+  contents: read
+
+jobs:
+  linux-x86_64-cp312:
+    name: Linux x86-64 / CPython 3.12 / manylinux_2_28
+    # Toggle for future disabling.
+    if: true
+    # Self-hosted VPS build, kept for reference now that the repo is public
+    # and GitHub-hosted runners are usable without spend concerns.
+    # runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # osgx is part of the pinned wheel dependency graph.
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up cibuildwheel host Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.11 - 3.14"
+
+      - name: Build and test repaired wheel
+        uses: pypa/cibuildwheel@v3.4.1
+        with:
+          # Keep the action's output location explicit for the following
+          # inspection and artifact-upload steps.
+          output-dir: ${{ github.workspace }}/wheelhouse
+        env:
+          CIBW_BUILD: cp312-manylinux_x86_64
+          CIBW_ARCHS_LINUX: x86_64
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+          # osgx::platform and the PNG/JPEG/TIFF plugins require these
+          # development packages. Install them inside the manylinux container,
+          # not on the self-hosted runner host.
+          CIBW_BEFORE_ALL: >-
+            dnf install -y libXrandr-devel libjpeg-turbo-devel libpng-devel libtiff-devel
+          # auditwheel needs the usual ELF link chain while it analyzes the
+          # wheel. Afterwards compact the ZIP-flattened aliases and rebuild
+          # RECORD, keeping only each library's ABI SONAME.
+          CIBW_REPAIR_WHEEL_COMMAND: >-
+            auditwheel repair -w {dest_dir} {wheel} &&
+            python /project/etc/scripts/compact-wheel-libraries.py {dest_dir}
+          # cibuildwheel installs the repaired wheel into an isolated test
+          # environment before executing this command.
+          CIBW_TEST_COMMAND: >-
+            python -c "import OpenSceneGraph;
+            from OpenSceneGraph.osg import Node;
+            from OpenSceneGraph.GL import GL_RGBA;
+            assert Node is OpenSceneGraph.osg.Node, 'osg.Node identity mismatch';
+            assert GL_RGBA == OpenSceneGraph.GL.GL_RGBA, 'GL_RGBA identity mismatch';
+            registry = OpenSceneGraph.osgDB.Registry.instance();
+            extensions = ('osg', 'obj', 'stl', 'bmp', 'dds', 'hdr', 'jpeg',
+            'jpg', 'pnm', 'png', 'rgb', 'tga', 'tif', 'tiff', 'gltf', 'ktx2');
+            missing = [extension for extension in extensions
+            if not registry.getReaderWriterForExtension(extension)];
+            assert not missing, f'missing osgDB plugins: {missing}';
+            import osgx"
+
+      - name: Inspect repaired wheel dependencies
+        run: |
+          wheel="$(find "${{ github.workspace }}/wheelhouse" -maxdepth 1 -name '*.whl' -print -quit)"
+          test -n "$wheel"
+          docker run --rm \
+            --volume "${{ github.workspace }}/wheelhouse:/wheelhouse:ro" \
+            quay.io/pypa/manylinux_2_28_x86_64 \
+            auditwheel show "/wheelhouse/$(basename "$wheel")"
+
+      - name: Upload repaired wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenSceneGraph-cp312-manylinux_2_28-x86_64
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  linux-aarch64-cp312:
+    name: Linux ARM64 / CPython 3.12 / manylinux_2_28
+    # Toggle for future disabling.
+    if: true
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # osgx is part of the pinned wheel dependency graph.
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up cibuildwheel host Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.11 - 3.14"
+
+      - name: Build and test repaired wheel
+        uses: pypa/cibuildwheel@v3.4.1
+        with:
+          output-dir: ${{ github.workspace }}/wheelhouse
+        env:
+          CIBW_BUILD: cp312-manylinux_aarch64
+          CIBW_ARCHS_LINUX: aarch64
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
+          # This is a one-off ARM compatibility probe. The launcher appends
+          # -Wno-error after each target's own compiler flags.
+          CIBW_ENVIRONMENT_LINUX: >-
+            CMAKE_ARGS="-DCMAKE_C_COMPILER_LAUNCHER=/project/.ci-no-werror -DCMAKE_CXX_COMPILER_LAUNCHER=/project/.ci-no-werror"
+          CIBW_BEFORE_ALL: >-
+            dnf install -y libXrandr-devel libjpeg-turbo-devel libpng-devel libtiff-devel &&
+            printf '%s\n' '#!/bin/sh' 'exec "$@" -Wno-error' > /project/.ci-no-werror &&
+            chmod +x /project/.ci-no-werror
+          CIBW_REPAIR_WHEEL_COMMAND: >-
+            auditwheel repair -w {dest_dir} {wheel} &&
+            python /project/etc/scripts/compact-wheel-libraries.py {dest_dir}
+          CIBW_TEST_COMMAND: >-
+            python -c "import OpenSceneGraph;
+            from OpenSceneGraph.osg import Node;
+            from OpenSceneGraph.GL import GL_RGBA;
+            assert Node is OpenSceneGraph.osg.Node, 'osg.Node identity mismatch';
+            assert GL_RGBA == OpenSceneGraph.GL.GL_RGBA, 'GL_RGBA identity mismatch';
+            registry = OpenSceneGraph.osgDB.Registry.instance();
+            extensions = ('osg', 'obj', 'stl', 'bmp', 'dds', 'hdr', 'jpeg',
+            'jpg', 'pnm', 'png', 'rgb', 'tga', 'tif', 'tiff', 'gltf', 'ktx2');
+            missing = [extension for extension in extensions
+            if not registry.getReaderWriterForExtension(extension)];
+            assert not missing, f'missing osgDB plugins: {missing}';
+            import osgx"
+
+      - name: Inspect repaired wheel dependencies
+        run: |
+          wheel="$(find "${{ github.workspace }}/wheelhouse" -maxdepth 1 -name '*.whl' -print -quit)"
+          test -n "$wheel"
+          docker run --rm \
+            --volume "${{ github.workspace }}/wheelhouse:/wheelhouse:ro" \
+            quay.io/pypa/manylinux_2_28_aarch64 \
+            auditwheel show "/wheelhouse/$(basename "$wheel")"
+
+      - name: Upload repaired wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenSceneGraph-cp312-manylinux_2_28-aarch64
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  windows-x86_64-cp312:
+    name: Windows x86-64 / CPython 3.12
+    # Toggle for future disabling.
+    if: true
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Match Linux exactly: the wheel builds the pinned osgx source.
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up cibuildwheel host Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      # OSG itself is fetched from its pinned revision; vcpkg supplies the
+      # Windows development dependencies needed by the OSG libraries/plugins
+      # selected in CMakeLists.txt. Use the normal shared triplet: OSG's older
+      # TIFF plugin only links tiff.lib, while the TIFF DLL itself correctly
+      # carries its JPEG/LZMA dependency graph for delvewheel to bundle.
+      - name: Set up vcpkg dependencies
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git C:\vcpkg
+          & C:\vcpkg\bootstrap-vcpkg.bat
+          & C:\vcpkg\vcpkg.exe install --triplet x64-windows freetype libjpeg-turbo libpng opengl tiff
+
+      - name: Build and test Windows wheel
+        uses: pypa/cibuildwheel@v3.4.1
+        with:
+          output-dir: ${{ github.workspace }}\wheelhouse
+        env:
+          CIBW_BUILD: cp312-win_amd64
+          CIBW_ARCHS_WINDOWS: AMD64
+          # Custom repair commands are not given delvewheel automatically by
+          # cibuildwheel's isolated build environment. Install it there and
+          # invoke the module through that environment's Python below.
+          CIBW_BEFORE_BUILD_WINDOWS: >-
+            python -m pip install delvewheel
+          # scikit-build-core forwards CMAKE_ARGS to the native configure.
+          # vcpkg's toolchain makes CMake's FindJPEG/FindPNG/FindTIFF and
+          # FindFreetype resolve to the Windows libraries above. The linker
+          # flags ask MSVC for a .map file next to every DLL/module it links
+          # (osg*.dll, osgx*.pyd, etc.) -- diagnostic-only, see the "Collect
+          # linker maps" step below, which is what actually finds and
+          # preserves them since cibuildwheel builds in a temp directory
+          # that doesn't survive past this step.
+          CIBW_ENVIRONMENT_WINDOWS: >-
+            CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows -DPYOSG_MSVC_WARNINGS_AS_ERRORS=OFF -DCMAKE_SHARED_LINKER_FLAGS=/MAP -DCMAKE_MODULE_LINKER_FLAGS=/MAP"
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >-
+            python -m delvewheel repair --ignore-existing --analyze-existing --add-path C:/vcpkg/installed/x64-windows/bin -w {dest_dir} {wheel} &&
+            python etc/scripts/repair-windows-wheel.py {dest_dir}
+          CIBW_TEST_COMMAND: >-
+            python -c "import OpenSceneGraph; from OpenSceneGraph.osg import Node; from OpenSceneGraph.GL import GL_RGBA; assert Node is OpenSceneGraph.osg.Node; assert GL_RGBA == OpenSceneGraph.GL.GL_RGBA; registry = OpenSceneGraph.osgDB.Registry.instance(); extensions = ('osg', 'obj', 'stl', 'bmp', 'dds', 'hdr', 'jpeg', 'jpg', 'pnm', 'png', 'rgb', 'tga', 'tif', 'tiff', 'gltf', 'ktx2'); missing = [extension for extension in extensions if not registry.getReaderWriterForExtension(extension)]; assert not missing, f'Missing osgDB plugins: {missing}'; import osgx"
+
+      # Runs whether or not the build/link above succeeded -- the whole point is to capture a
+      # .map file from a FAILED link for diagnosis. cibuildwheel/scikit-build-core build inside
+      # a per-run temp directory under $env:TEMP that isn't part of the checkout and wouldn't
+      # otherwise be reachable by upload-artifact below; this just relocates any .map files
+      # found there into the workspace first. Finds nothing (harmlessly) once this diagnostic
+      # is no longer needed and the /MAP flags above are removed.
+      - name: Collect linker maps
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path mapfiles | Out-Null
+          Get-ChildItem -Path $env:TEMP -Filter *.map -Recurse -ErrorAction SilentlyContinue |
+            Copy-Item -Destination mapfiles -Force
+
+      - name: Upload linker maps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenSceneGraph-cp312-win-amd64-mapfiles
+          path: mapfiles/*.map
+          if-no-files-found: warn
+
+      - name: Upload Windows wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenSceneGraph-cp312-win-amd64
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    # Pushes to `main` (and manual test runs) produce build artifacts only.
+    # Publishing requires an explicit versioned release tag, e.g. v0.1.1.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-x86_64-cp312, linux-aarch64-cp312, windows-x86_64-cp312]
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/openscenegraph/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: OpenSceneGraph-*
+          path: dist/
+          merge-multiple: true
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

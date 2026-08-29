@@ -1,0 +1,41 @@
+[build-system]
+requires = ["scikit-build-core>=1.0"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "OpenSceneGraph"
+dynamic = ["version"]
+description = "Modern Python bindings for OpenSceneGraph"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+
+[project.scripts]
+# Runs one of the curated OpenSceneGraph.examples modules standalone (no Qt
+# required), e.g. `pyosg mrt` or `pyosg blur -- model.gltf`. Equivalent to
+# `python -m OpenSceneGraph.examples <name> ...`, which also works.
+pyosg = "OpenSceneGraph.examples.__main__:main"
+
+[project.entry-points."aipython.skills"]
+# aipython reads this package's OpenSceneGraph/aipython/*.md resources without
+# requiring a source checkout or importing the native bindings.
+OpenSceneGraph = "OpenSceneGraph"
+
+[tool.scikit-build]
+# Distribution builds always use the project-pinned OSG rather than inheriting
+# an arbitrary system installation.
+# OpenSceneGraph 3.6.5 still declares pre-3.5 policy compatibility. CMake 4
+# requires this explicit compatibility floor while configuring that pinned
+# third-party source.
+cmake.args = [
+    "-DPYOSG_FETCH_OSG=ON",
+    "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+]
+
+# Pulls the single version of record out of CMakeLists.txt's `project(... VERSION x.y.z ...)`
+# call, so PROJECT_VERSION/PYOSG_VERSION and the wheel's metadata version can never drift apart.
+[[tool.dynamic-metadata]]
+provider = "scikit_build_core.metadata.regex"
+field = "version"
+input = "CMakeLists.txt"
+regex = 'project\([^)]*VERSION\s+(?P<value>[0-9.]+)'

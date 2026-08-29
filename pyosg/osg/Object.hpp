@@ -2,11 +2,15 @@
 
 #include "lifetime-probe.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osgDB/Registry>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
+
+#include "pybind11x-osg.hpp"
+
+namespace pyx = pybind11x;
 
 namespace pyosg {
 
@@ -14,12 +18,12 @@ namespace detail {
 	// This class exists to permit Python code like: `o = osg.Object`.
 	class Object: public osg::Object {
 	public:
-		PYOSG_DISABLE_WARNINGS
+		OSGX_DISABLE_WARNINGS
 
 		// It's weird not using `pyosg` here, but doing so would break serialization.
 		META_Object(osg, Object)
 
-		PYOSG_ENABLE_WARNINGS
+		OSGX_ENABLE_WARNINGS
 
 		using osg::Object::Object;
 
@@ -70,11 +74,11 @@ namespace detail {
 
 	template<typename T>
 	std::uintptr_t objectAddress(const T& self) {
-		PYOSG_DISABLE_WARNINGS
+		OSGX_DISABLE_WARNINGS
 
 			const void* ptr = dynamic_cast<const void*>(&self);
 
-		PYOSG_ENABLE_WARNINGS
+		OSGX_ENABLE_WARNINGS
 
 		return reinterpret_cast<std::uintptr_t>(ptr);
 	}

@@ -1,12 +1,8 @@
 #include "Group.hpp"
 
-namespace pyosg {
-
-namespace detail {
+namespace pybind11x {
 	template<>
-	void kwargs_init(osg::Group& self, const py::kwargs& kwargs) {
-		kwargs_init(static_cast<osg::Node&>(self), kwargs);
-
+	void kwargs_init_own(osg::Group& self, const py::kwargs& kwargs) {
 		if(kwargs.contains("children")) {
 			for(py::handle child : kwargs["children"]) {
 				self.addChild(child.cast<osg::Node*>());
@@ -15,23 +11,28 @@ namespace detail {
 	}
 }
 
-void bind_Group(py::module_& m) {
-	auto group = py::class_<osg::Group, osg::Node, osg::ref_ptr<osg::Group>>(m, "Group");
+namespace pyosg {
 
-	detail::ChildrenProxy::bind(group, "_Children");
+void bind_Group(py::module_& m) {
+	auto group = py::class_<osg::Group, osg::Node, osg::ref_ptr<osg::Group>>(
+		m,
+		"Group",
+		"A node that owns an ordered list of child Nodes, forming the branches of the scene "
+		"graph. Children are exposed via the .children sequence proxy (indexing, iteration, "
+		"append/insert/remove) rather than addChild()/removeChild()/getChild()."
+	);
+
+	pyx::bind_proxy_property<detail::ChildrenProxy, osg::Group, detail::ChildrenStorage>(
+		group, "_Children", "children",
+		"Sequence proxy over this Group's child Nodes (indexing, iteration, append/extend)."
+	);
 
 	group
-		.def(py::init<>())
-		.def(py::init([](py::args args, py::kwargs kwargs) {
-			osg::ref_ptr<osg::Group> g = new osg::Group();
-
-			detail::kwargs_init(*g, kwargs);
-
-			return g;
-		}))
-		.def_property_readonly("children", [](osg::Group& self) -> detail::ChildrenProxy& {
-			return detail::ChildrenStorage::get(self)->template proxy<detail::ChildrenProxy>();
-		}, py::return_value_policy::reference_internal)
+		.def(py::init<>(), "Create a Group with no children.")
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Group>()),
+			"Create a Group, optionally populating .children from a children= sequence of Nodes."
+		)
 
 		.def_static("test_cpp", []() {
 			auto* g = new osg::Group();
@@ -56,7 +57,9 @@ void bind_Group(py::module_& m) {
 			addNode("n2");
 
 			return g;
-		})
+		}, "Internal C++-side lifetime probe: build a Group with 3 named, tracked child Nodes "
+			"for testing ref_ptr/identity lifecycle behavior, not for general use."
+		)
 	;
 }
 

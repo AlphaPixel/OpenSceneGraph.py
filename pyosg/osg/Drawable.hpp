@@ -2,13 +2,13 @@
 
 #include "callable.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osg/Drawable>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
-#include "pybind11x.hpp"
+#include "pybind11x-osg.hpp"
 
 namespace pyx = pybind11x;
 
@@ -70,6 +70,8 @@ namespace detail {
 	public:
 		explicit CallableCallback(py::object fn): _fn(std::move(fn)) {}
 
+		~CallableCallback() override { pyx::release_with_gil(_fn); }
+
 		void drawImplementation(osg::RenderInfo& ri, const osg::Drawable* d) const override {
 			py::gil_scoped_acquire gil;
 
@@ -94,8 +96,6 @@ namespace detail {
 	public:
 		struct DrawCallback: public osg::Drawable::DrawCallback {
 			void drawImplementation(osg::RenderInfo& ri, const osg::Drawable* d) const override {
-				py::gil_scoped_acquire gil;
-
 				PYBIND11_OVERRIDE(
 					void,
 					osg::Drawable::DrawCallback,
@@ -107,8 +107,6 @@ namespace detail {
 		};
 
 		void drawImplementation(osg::RenderInfo& ri) const override {
-			py::gil_scoped_acquire gil;
-
 			PYBIND11_OVERRIDE(
 				void,
 				osg::Drawable,

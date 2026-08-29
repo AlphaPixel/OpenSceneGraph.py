@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-fragcoordxyz
 
-import os
 import time
 import random
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6"
-})
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
+# example -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -303,6 +298,95 @@ void main() {
 }
 """
 
+FRAGMENT_SHADER_PUKUU = """
+#version 330 core
+uniform vec2 u_resolution;
+uniform float u_time;
+out vec4 fragColor;
+
+float dot2(vec2 p){
+    return dot(p,p);
+}
+
+float Sd_heart( in vec2 p )
+{
+    p.x = abs(p.x);
+
+    if( p.y+p.x>1.0 )
+        return sqrt(dot2(p-vec2(0.25,0.75))) - sqrt(2.0)/4.0;
+    return sqrt(min(dot2(p-vec2(0.00,1.00)),
+                    dot2(p-0.5*max(p.x+p.y,0.0)))) * sign(p.x-p.y);
+}
+
+void main() {
+    vec2 frag_coord = vec2(gl_FragCoord.x, gl_FragCoord.y);
+
+    vec2 uv =  (frag_coord * 2.0) / u_resolution ;
+    uv -= 1.0;
+    uv.x *= u_resolution.x / u_resolution.y;
+
+    float dist = Sd_heart(uv - vec2(0, -0.5));
+    float heart = abs(dist);
+
+    vec2 lightDirection = normalize(vec2(sin(u_time),cos(u_time)));
+
+    float spotlight = dot(uv, lightDirection);
+
+    vec3 baseColor = vec3(0.8, 0.1, 0.2);
+
+    vec3 finalColor = baseColor * (spotlight + 1.0) * (0.09 / heart);
+
+    fragColor = vec4(finalColor, 1.0);
+}
+"""
+
+FRAGMENT_SHADER_HALFTONE = """
+#version 330 core
+uniform vec2 u_resolution;
+uniform float u_time;
+out vec4 fragColor;
+
+float mod289(float x){return x-floor(x*(1./289.))*289.;}
+vec2 mod289(vec2 x){return x-floor(x*(1./289.))*289.;}
+vec3 mod289(vec3 x){return x-floor(x*(1./289.))*289.;}
+vec4 mod289(vec4 x){return x-floor(x*(1./289.))*289.;}
+float permute(float x){return mod289(((x*34.)+1.)*x);}
+vec3 permute(vec3 x){return mod289(((x*34.)+1.)*x);}
+vec4 permute(vec4 x){return mod289(((x*34.)+1.)*x);}
+float taylorInvSqrt(float r){return 1.79284291400159-.85373472095314*r;}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-.85373472095314*r;}
+float snoise2D(vec2 v){
+const vec4 C=vec4(.211324865405187,.366025403784439,-.577350269189626,.024390243902439);
+vec2 i=floor(v+dot(v,C.yy));vec2 x0=v-i+dot(i,C.xx);
+vec2 i1=(x0.x>x0.y)?vec2(1,0):vec2(0,1);
+vec4 x12=x0.xyxy+C.xxzz;x12.xy-=i1;i=mod289(i);
+vec3 p=permute(permute(i.y+vec3(0,i1.y,1))+i.x+vec3(0,i1.x,1));
+vec3 m=max(.5-vec3(dot(x0,x0),dot(x12.xy,x12.xy),dot(x12.zw,x12.zw)),0.);m=m*m;m=m*m;
+vec3 x=2.*fract(p*C.www)-1.;vec3 h=abs(x)-.5;vec3 ox=floor(x+.5);vec3 a0=x-ox;
+m*=1.79284291400159-.85373472095314*(a0*a0+h*h);
+vec3 g;g.x=a0.x*x0.x+h.x*x0.y;g.yz=a0.yz*x12.xz+h.yz*x12.yw;
+return 130.*dot(m,g);}
+mat2 rotate2D(float r){return mat2(cos(r),sin(r),-sin(r),cos(r));}
+
+void main() {
+	fragColor = vec4(0.0);
+	#define L(a)length(f=fract(p=(c/s+u_time)*rotate2D(a))-.5)-min(sin(snoise2D(rotate2D(a)*(p-=f)/3e1)*4.+f.x/3e1+u_time+a),.5)
+	vec2 c=gl_FragCoord.xy-u_resolution*.5,s=20.-c.yy/8e1,p,f;fragColor=vec4(L(1.),L(2.),L(3.),1)*.5*s.x+.5;
+}
+"""
+
+FRAGMENT_SHADER_GLASS = """
+#version 330 core
+uniform vec2 u_resolution;
+uniform float u_time;
+out vec4 fragColor;
+
+void main() {
+	fragColor = vec4(0.0);
+	vec2 p=(gl_FragCoord.xy*2.-u_resolution)/u_resolution.y/.9;float l=length(p)-1.;fragColor=.5+.5*tanh(.1/max(l/.1,-l)-sin(l+p.y*max(1.,-l/.1)+u_time+vec4(0,1,2,0)));
+}
+"""
+
 class ProgramHandler(osgGA.GUIEventHandler):
 	def __init__(self, program):
 		super().__init__()
@@ -317,6 +401,9 @@ class ProgramHandler(osgGA.GUIEventHandler):
 			("bitshift", FRAGMENT_SHADER_BITSHIFT),
 			("blackhole_portal", FRAGMENT_SHADER_BLACKHOLE_PORTAL),
 			("loading_icon", FRAGMENT_SHADER_LOADING_ICON),
+			("pukuu", FRAGMENT_SHADER_PUKUU),
+			("halftone", FRAGMENT_SHADER_HALFTONE),
+			("glass", FRAGMENT_SHADER_GLASS)
 		]
 
 		self.index = random.randrange(len(self.fragmentShaders))
@@ -359,12 +446,26 @@ class ProgramHandler(osgGA.GUIEventHandler):
 
 		return False
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+class TimeUpdateCallback:
+	"""Refreshes u_time every update traversal -- runs under the standard
+	`while not viewer.done: viewer.frame()` loop (runner-driven or standalone) instead of
+	depending on a Python-side loop of its own, the same "OSG already provides a per-frame hook"
+	idea as pyosg-taa.py's FRAME-event handler."""
 
+	def __init__(self, stateset):
+		self.stateset = stateset
+		self.t0 = time.time()
+
+	def __call__(self, node, nv):
+		self.stateset.uniforms["u_time"] = float(time.time() - self.t0)
+
+		return True
+
+# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+def build_scene(w, h):
 	g = osg.Geometry()
 
-	g.addPrimitiveSet(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4))
+	g.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4))
 	g.initialBound = osg.BoundingBox(-1, -1, -1, 1, 1, 1)
 
 	p = osg.Program(name="FragCoord.xyz")
@@ -374,21 +475,34 @@ if __name__ == "__main__":
 
 	ss = r.stateSet
 
-	ss.setAttributeAndModes(p)
-	ss.uniforms["u_resolution"] = osg.Vec2(800.0, 600.0)
+	ss.attributes.append(p)
+	ss.uniforms["u_resolution"] = osg.Vec2(float(w), float(h))
 	ss.uniforms["u_time"] = 0.0
 
+	r.updateCallback = TimeUpdateCallback(ss)
+
+	return r
+
+# ProgramHandler needs the live viewer to register as an event handler, which build_scene()
+# never receives -- the Program itself is recovered straight back out of the returned root's
+# StateSet, same as pyosg_visitor.py's own GatherVisitor introspection.
+def configure_viewer(viewer, root):
+	p = root.stateSet.attributes[osg.StateAttribute.PROGRAM]
+
+	viewer.eventHandlers.append(ProgramHandler(p))
+
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	W, H = window_size()
+
 	v = osgViewer.Viewer()
+	root = build_scene(W, H)
 
-	v.sceneData = r
+	v.sceneData = root
 	v.cameraManipulator = osgGA.TrackballManipulator()
-	v.eventHandlers.append(ProgramHandler(p))
 
-	t = time.time()
+	configure_viewer(v, root)
 
 	while not v.done:
-		ss.uniforms["u_time"] = float(time.time() - t)
-
 		v.frame()
-
-		time.sleep(0.01)

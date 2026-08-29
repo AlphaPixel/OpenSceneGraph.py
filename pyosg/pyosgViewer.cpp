@@ -3,15 +3,15 @@
 
 #include "osg/ArgumentParser.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osgGA/TrackballManipulator>
 #include <osgViewer/Viewer>
 #include <osgViewer/ViewerEventHandlers>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
-#include "pybind11x.hpp"
+#include "pybind11x-osg.hpp"
 
 namespace pyx = pybind11x;
 
@@ -61,14 +61,16 @@ struct pyx::SequenceTraits<osgViewer::View> {
 		}
 
 		auto it = ehs.begin();
+
 		std::advance(it, static_cast<list_type::difference_type>(i));
+
 		return it;
 	}
 
 	static element_type* get(osgViewer::View* v, size_t i) {
 		auto* eh = nth(v, i)->get();
-
 		auto* gui = dynamic_cast<osgGA::GUIEventHandler*>(eh);
+
 		if(!gui) {
 			throw py::type_error(
 				"View event handler is not an osgGA::GUIEventHandler; "
@@ -85,12 +87,14 @@ struct pyx::SequenceTraits<osgViewer::View> {
 		}
 
 		auto it = nth(v, i);
+
 		*it = eh;
 	}
 
 	static void del(osgViewer::View* v, size_t i) {
 		auto& ehs = v->getEventHandlers();
 		auto it = nth(v, i);
+
 		ehs.erase(it);
 	}
 
@@ -100,6 +104,23 @@ struct pyx::SequenceTraits<osgViewer::View> {
 		}
 
 		v->addEventHandler(eh);
+	}
+
+	// std::list::insert(), so this is the actual native primitive the original
+	// eventHandlers.insert(0, handler) request wanted -- not an append()/del() emulation.
+	// Unlike nth() above, `i == size()` (insert-at-end) is a valid, in-range request here,
+	// so this walks to ehs.end() itself instead of reusing nth()'s stricter bounds check.
+	static void insert(osgViewer::View* v, size_t i, value_type eh) {
+		if(!eh) {
+			throw py::type_error("EventHandler cannot be None");
+		}
+
+		auto& ehs = v->getEventHandlers();
+		auto it = ehs.begin();
+
+		std::advance(it, static_cast<list_type::difference_type>(i));
+
+		ehs.insert(it, eh);
 	}
 };
 
@@ -124,21 +145,78 @@ namespace detail {
 	};
 
 	using EventHandlersProxy = pyx::SequenceProxy<osgViewer::View>;
-	using EventHandlersStorage = pyx::ProxyStorageOSG<osgViewer::View, EventHandlersProxy>;
+
+	constexpr size_t SceneDataSlot = 0;
+	constexpr size_t CameraManipulatorSlot = 1;
+	constexpr size_t EventQueueSlot = 2;
+
+	using ViewSlots = pyx::PropertySlots<osgViewer::View, 3>;
+	using ViewStorage = pyx::ProxyStorageOSG<osgViewer::View, EventHandlersProxy, ViewSlots>;
+
+	// setCameraManipulator() takes a second `resetPosition` argument that plain attribute
+	// assignment can't supply directly (`obj.attr = value` only ever passes one value) -
+	// matching the (eye, center, up) tuple convention `CameraManipulator.homePosition`
+	// already uses (pyosgGA.cpp), accept either a bare manipulator (resetPosition=True) or a
+	// (manip, resetPosition) pair:
+	//
+	// view.cameraManipulator = manip
+	// view.cameraManipulator = (manip, False)
+	auto view_camera_manipulator_setter() {
+		return [](osgViewer::View& self, py::object obj) {
+			py::object manip_obj = obj;
+			bool resetPosition = true;
+
+			if(auto vals = pyx::try_unpack_sequence<py::object, bool>(obj)) {
+				manip_obj = std::get<0>(*vals);
+				resetPosition = std::get<1>(*vals);
+			}
+
+			else if(!obj.is_none() && !py::isinstance<osgGA::CameraManipulator>(obj)) throw py::type_error(
+				"Expected CameraManipulator, None, or (manip, resetPosition) pair"
+			);
+
+			auto* manip = manip_obj.is_none() ? nullptr : manip_obj.cast<osgGA::CameraManipulator*>();
+
+			self.setCameraManipulator(manip, resetPosition);
+
+			auto& slots = ViewStorage::get(self)->template proxy<ViewSlots>();
+
+			slots.set(CameraManipulatorSlot, manip_obj, manip);
+		};
+	}
+
+	constexpr size_t RealizeOperationSlot = 0;
+
+	using ViewerBaseSlots = pyx::PropertySlots<osgViewer::ViewerBase, 1>;
+	using ViewerBaseStorage = pyx::ProxyStorageOSG<osgViewer::ViewerBase, ViewerBaseSlots>;
 }
 
 void bind(py::module_& m) {
-	py::class_<osgViewer::Scene, osg::Referenced, osg::ref_ptr<osgViewer::Scene>>(m, "Scene")
+	py::class_<osgViewer::Scene, osg::Referenced, osg::ref_ptr<osgViewer::Scene>>(
+		m,
+		"Scene",
+		"Wraps the scene graph data a View renders, shareable across multiple Views."
+	)
+		// NOT a straightforward PropertySlot conversion like the ones just done for
+		// osgViewer::View: pyx::ProxyStorageOSG needs getOrCreateUserDataContainer(), an
+		// osg::Object method, but osgViewer::Scene derives from osg::Referenced only. Needs a
+		// new ref_ptr-backed ProxyStorage variant first (ProxyStorageShared exists but is
+		// shared_ptr-based, doesn't fit). No keep_alive here currently either, so this is an
+		// identity-stability gap, not a lifetime leak: Scene holds its own ref_ptr<Node>
+		// internally, so the C++ side already keeps sceneData alive independent of Python.
 		.def_property(
 			"data",
 			py::cpp_function(
 				py::overload_cast<>(&osgViewer::Scene::getSceneData),
 				py::return_value_policy::reference_internal
 			),
-			&osgViewer::Scene::setSceneData
+			&osgViewer::Scene::setSceneData,
+			"The root node rendered by this scene."
 		)
 
-		.def("updateSceneGraph", &osgViewer::Scene::updateSceneGraph)
+		.def("updateSceneGraph", &osgViewer::Scene::updateSceneGraph,
+			"Run update callbacks throughout the scene graph."
+		)
 
 		// virtual bool requiresUpdateSceneGraph() const;
 		// virtual bool requiresRedraw() const;
@@ -151,101 +229,100 @@ void bind(py::module_& m) {
 		// does NOT support usage with `osg::ref_ptr` (and causes the pybind11 chain to explode).
 		// osgGA::GUIActionAdapter,
 		osg::ref_ptr<osgViewer::GraphicsWindow>
-	>(m, "GraphicsWindow");
+	>(
+		m,
+		"GraphicsWindow",
+		"A GraphicsContext backed by a real or embedded native window."
+	)
+		// setWindowName's base implementation is a no-op (just an OSG_NOTICE) on backends that
+		// don't have a native window at all (GraphicsWindowEmbedded, offscreen pbuffers); real
+		// windowed backends (X11 confirmed) override it to actually retitle the OS window.
+		.def_property(
+			"windowName",
+			&osgViewer::GraphicsWindow::getWindowName,
+			&osgViewer::GraphicsWindow::setWindowName,
+			"The native window title, when supported by the graphics backend."
+		)
+	;
 
 	py::class_<
 		osgViewer::GraphicsWindowEmbedded,
 		osgViewer::GraphicsWindow,
 		osg::ref_ptr<osgViewer::GraphicsWindowEmbedded>
-	>(m, "GraphicsWindowEmbedded");
+	>(
+		m,
+		"GraphicsWindowEmbedded",
+		"A GraphicsWindow with no native window of its own, for embedding OSG rendering "
+		"inside a host toolkit's own widget (e.g. Qt's QOpenGLWidget)."
+	);
 
-	// We LEAVE OUT osgGA::GUIActionAdapter here as a base class...
-	auto view = py::class_<osgViewer::View, osg::View, osg::ref_ptr<osgViewer::View>>(m, "View");
+	// osgGA::GUIActionAdapter is deliberately LEFT OUT of the base classes here! It doesn't use
+	// a `ref_ptr` as a "holder", and pybind can't "mix" them!
+	auto view = py::class_<osgViewer::View, osg::View, osg::ref_ptr<osgViewer::View>>(
+		m,
+		"View",
+		"A View that adds a CameraManipulator, EventQueue, and a list of GUIEventHandlers "
+		"on top of osg.View's camera/scene pairing. .eventHandlers is a sequence proxy "
+		"(append/insert instead of addEventHandler()) that also accepts a plain Python "
+		"callable in place of a GUIEventHandler subclass instance."
+	);
 
-	detail::EventHandlersProxy::bind(view, "_EventHandlers");
+	pyx::bind_proxy_property<detail::EventHandlersProxy, osgViewer::View, detail::ViewStorage>(
+		view,
+		"_EventHandlers",
+		"eventHandlers",
+		"Sequence of event handlers and Python callables invoked for this view's events."
+	);
 
 	view
-		.def(py::init<>())
+		.def(py::init<>(), "Create a viewer view.")
 
-		.def_property_readonly(
-			"eventHandlers",
-			[](osgViewer::View& self) -> detail::EventHandlersProxy& {
-				return detail::EventHandlersStorage::get(self)->template proxy<
-					detail::EventHandlersProxy
-				>();
-			},
-			py::return_value_policy::reference_internal
-		)
-
-		// TODO: Convert to SequenceProxy!
-		.def("addEventHandler", [](osgViewer::View& self, py::object obj) {
-			auto* handler = obj.cast<osgGA::GUIEventHandler*>();
-
-			self.addEventHandler(handler);
-		}, py::keep_alive<1, 2>())
-
-		/* .def_property(
-			"sceneData",
-			[](osgViewer::View& self) { return self.getSceneData(); },
-			[](osgViewer::View& self, osg::Node* node) { self.setSceneData(node); },
-			py::return_value_policy::reference_internal,
-			py::keep_alive<1, 2>()
-		) */
-
+		// No addEventHandler() method binding - use `.eventHandlers.append(handler)` above
+		// instead (same removal as Geometry.addPrimitiveSet -> `.primitiveSets.append(...)`).
+		// Also a strict capability upgrade, not just a rename: EventHandlersProxy's from_python
+		// already accepts a plain Python callable (wrapping it in CallableGUIEventHandler), which
+		// this method's raw `.cast<GUIEventHandler*>()` never did.
 		.def_property_readonly(
 			"scene",
 			py::overload_cast<>(&osgViewer::View::getScene),
-			py::return_value_policy::reference_internal
+			py::return_value_policy::reference_internal,
+			"The Scene wrapper associated with this view."
 		)
 
 		.def_property(
 			"sceneData",
-			py::cpp_function(
-				[](osgViewer::View& self) { return self.getSceneData(); },
-				py::return_value_policy::reference_internal
+			detail::ViewSlots::getter<detail::SceneDataSlot>(
+				static_cast<osg::Node*(osgViewer::View::*)()>(&osgViewer::View::getSceneData)
 			),
-			py::cpp_function(
-				[](osgViewer::View& self, osg::Node* node) { self.setSceneData(node); },
-				py::keep_alive<1, 2>()
-			)
+			detail::ViewSlots::setter<detail::SceneDataSlot, osg::Node*>(
+				static_cast<void(osgViewer::View::*)(osg::Node*)>(&osgViewer::View::setSceneData)
+			),
+			"The root node rendered by this view."
 		)
 
 		.def_property(
 			"cameraManipulator",
-			py::cpp_function(
-				[](osgViewer::View& self) { return self.getCameraManipulator(); },
-				py::return_value_policy::reference_internal
+			detail::ViewSlots::getter<detail::CameraManipulatorSlot>(
+				static_cast<osgGA::CameraManipulator*(osgViewer::View::*)()>(
+					&osgViewer::View::getCameraManipulator
+				)
 			),
-			py::cpp_function(
-				[](
-					osgViewer::View& self,
-					osgGA::CameraManipulator* manip,
-					bool resetPosition
-				) { self.setCameraManipulator(manip, resetPosition); },
-				py::keep_alive<1, 2>(),
-				"self"_a,
-				"manip"_a,
-				"resetPosition"_a=true
-			)
+			detail::view_camera_manipulator_setter(),
+			"The camera manipulator that controls this view."
 		)
 
 		.def_property(
 			"eventQueue",
-			py::cpp_function(
-				[](osgViewer::View& self) { return self.getEventQueue(); },
-				py::return_value_policy::reference_internal
+			detail::ViewSlots::getter<detail::EventQueueSlot>(
+				static_cast<osgGA::EventQueue*(osgViewer::View::*)()>(&osgViewer::View::getEventQueue)
 			),
-			py::cpp_function(
-				[](osgViewer::View& self, osgGA::EventQueue* eq) { self.setEventQueue(eq); },
-				py::keep_alive<1, 2>()
-			)
+			detail::ViewSlots::setter<detail::EventQueueSlot, osgGA::EventQueue*>(
+				static_cast<void(osgViewer::View::*)(osgGA::EventQueue*)>(
+					&osgViewer::View::setEventQueue
+				)
+			),
+			"The queue supplying input events to this view."
 		)
-
-		/* .def_property_readonly(
-			"eventQueue",
-			py::overload_cast<>(&osgViewer::View::getEventQueue),
-			py::return_value_policy::reference_internal
-		) */
 	;
 
 	auto vb = py::class_<
@@ -253,16 +330,52 @@ void bind(py::module_& m) {
 		detail::ViewerBase,
 		osg::Object,
 		osg::ref_ptr<osgViewer::ViewerBase>
-	>(m, "ViewerBase")
+	>(
+		m,
+		"ViewerBase",
+		"Base class for running the frame loop (realize/frame) over one or more Views, "
+		"with a configurable ThreadingModel."
+	)
 		// .def(py::init_alias<>())
 		.def("frame", [](osgViewer::ViewerBase& self) {
-			py::gil_scoped_release release;
+			// Only release the GIL for genuinely multi-threaded models (real OSG cull/draw
+			// threads that would otherwise contend with Python for no reason). Under
+			// SingleThreaded (this project's standing default - see CLAUDE.md/examples),
+			// there is no concurrency benefit to releasing it, only a hazard: OSG defers
+			// actual GL-object teardown (dropping the last ref_ptr on an old Program/Uniform/
+			// etc.) to a flush pass that can run *inside* this call, and if that drop is the
+			// last reference to a pybind11-tracked object, its destructor needs the GIL to
+			// deregister the Python wrapper - which isn't held, aborting the process
+			// (confirmed via a minimal repro: attach a scene with a Program+Uniform, replace
+			// it with a second one, keep calling frame()-- reliably crashes without this).
+			if(self.getThreadingModel() == osgViewer::ViewerBase::SingleThreaded) {
+				self.frame();
+			}
 
-			self.frame();
-		})
+			else {
+				py::gil_scoped_release release;
+
+				self.frame();
+			}
+		},
+			"Advance one frame, updating, culling, and drawing every view."
+		)
+
+		.def_property(
+			"realizeOperation",
+			detail::ViewerBaseSlots::getter<detail::RealizeOperationSlot>(
+				&osgViewer::ViewerBase::getRealizeOperation
+			),
+			detail::ViewerBaseSlots::setter<detail::RealizeOperationSlot, osg::Operation*>(
+				&osgViewer::ViewerBase::setRealizeOperation
+			),
+			"Operation run while realizing the viewer."
+		)
 	;
 
-	py::enum_<osgViewer::ViewerBase::ThreadingModel>(vb, "ThreadingModel")
+	py::enum_<osgViewer::ViewerBase::ThreadingModel>(vb, "ThreadingModel",
+		"Choose how viewer update, cull, and draw work is threaded."
+	)
 		.value("SingleThreaded", osgViewer::ViewerBase::SingleThreaded)
 		.value("CullDrawThreadPerContext", osgViewer::ViewerBase::CullDrawThreadPerContext)
 		.value("ThreadPerContext", osgViewer::ViewerBase::ThreadPerContext)
@@ -273,22 +386,29 @@ void bind(py::module_& m) {
 		)
 		.value("ThreadPerCamera", osgViewer::ViewerBase::ThreadPerCamera)
 		.value("AutomaticSelection", osgViewer::ViewerBase::AutomaticSelection)
+		.export_values()
 	;
 
 	vb
 		// TODO: So, I'm cheating here... C++ will properly virtually dispatch this upwards to
 		// subclasses, but a PYTHON SUBCLASS WON't (without a trampoline).
-		.def("realize", &osgViewer::ViewerBase::realize)
-		.def_property_readonly("realized", &osgViewer::ViewerBase::isRealized)
+		.def("realize", &osgViewer::ViewerBase::realize,
+			"Create graphics contexts and initialize the viewer."
+		)
+		.def_property_readonly("realized", &osgViewer::ViewerBase::isRealized,
+			"Whether the viewer has been realized."
+		)
 		.def_property(
 			"threadingModel",
 			&osgViewer::ViewerBase::getThreadingModel,
-			&osgViewer::ViewerBase::setThreadingModel
+			&osgViewer::ViewerBase::setThreadingModel,
+			"How viewer work is distributed across threads."
 		)
 		.def_property(
 			"done",
 			&osgViewer::ViewerBase::done,
-			&osgViewer::ViewerBase::setDone
+			&osgViewer::ViewerBase::setDone,
+			"Whether the frame loop should stop."
 		)
 		/* .def("frame", [](osgViewer::ViewerBase& self) {
 			py::gil_scoped_release release;
@@ -302,23 +422,49 @@ void bind(py::module_& m) {
 		osgViewer::ViewerBase,
 		osgViewer::View,
 		osg::ref_ptr<osgViewer::Viewer>
-	>(m, "Viewer")
-		.def(py::init<>())
+	>(
+		m,
+		"Viewer",
+		"The standard single-view application entry point: a ViewerBase and osgViewer.View "
+		"combined, plus window-setup convenience methods."
+	)
+		.def(py::init<>(), "Create a viewer with default settings.")
 		// .def(py::init<osg::ArgumentParser&>())
 		.def(py::init([](pyosg::detail::ArgumentParser& args) {
 			return new osgViewer::Viewer(args.parser);
-		}))
+		}),
+			"Create a viewer configured from an osg.ArgumentParser."
+		)
 
 		.def(
 			"setUpViewerAsEmbeddedInWindow",
 			&osgViewer::Viewer::setUpViewerAsEmbeddedInWindow,
-			py::return_value_policy::reference_internal
+			py::return_value_policy::reference_internal,
+			"Configure this viewer to render into an existing native window."
+		)
+		.def(
+			"setUpViewInWindow",
+			&osgViewer::Viewer::setUpViewInWindow,
+			"x"_a,
+			"y"_a,
+			"width"_a,
+			"height"_a,
+			"screenNum"_a=0,
+			"Create a window at x, y with the given dimensions and attach this view."
 		)
 
 		// TODO: This is where I put stuff I NEED to call, but haven't wrapped (YET)!
 		.def("TODO", [](osgViewer::Viewer& self, bool glModern) {
-			// self.setUpViewInWindow(1970, 50, 800, 600);
-			// self.setThreadingModel(osgViewer::Viewer::SingleThreaded);
+			// Confirmed 2026-08-28: leaving this unset means whatever OSG's default threading
+			// model resolves to (a real background draw thread on multi-core machines, not just
+			// SingleThreaded like every example's own OSG_THREADING env var requests) -- close()
+			// destructing a Viewer while that thread is still alive and parked in
+			// Renderer::ThreadSafeQueue::takeFront() hangs forever in pthread_cond_destroy()
+			// (POSIX forbids destroying a condvar another thread is still waiting on). close()
+			// below is now defensive regardless, but setting this here means anything driven
+			// through the runners (OpenSceneGraph.examples/pyosg-cli, both of which call TODO()
+			// before their frame loop) never spins up that thread in the first place.
+			self.setThreadingModel(osgViewer::Viewer::SingleThreaded);
 			// self.setCameraManipulator(new osgGA::TrackballManipulator());
 			self.addEventHandler(new osgViewer::StatsHandler());
 
@@ -328,16 +474,29 @@ void bind(py::module_& m) {
 					state->setUseVertexAttributeAliasing(true);
 				}
 			}
-		}, "glModern"_a=false)
+		}, "glModern"_a=false,
+			"Add a StatsHandler, force SingleThreaded, and optionally enable modern OpenGL uniform conventions."
+		)
 		.def("close", [](osgViewer::Viewer& self) {
 			if(auto* gc = self.getCamera()->getGraphicsContext(); gc) {
-				OSG_WARN << "Calling (Python-only) close!" << std::endl;
+				OSG_INFO << "Calling (Python-only) close!" << std::endl;
 
 				self.setDone(true);
 
+				// Must happen before closeImplementation()/destruction, regardless of threading
+				// model: with anything other than SingleThreaded, a background draw thread is
+				// still alive and parked in Renderer::ThreadSafeQueue::takeFront() at this point.
+				// Destructing the Viewer (Camera -> Renderer -> ~Condition()) while that thread is
+				// still waiting on it is undefined by POSIX and hangs forever in
+				// pthread_cond_destroy() on glibc, rather than erroring -- confirmed 2026-08-28 via
+				// a real core dump (SIGQUIT) after a Viewer created without SingleThreaded was
+				// close()'d then left to be garbage-collected. stopThreading() is a safe no-op
+				// under SingleThreaded, so this doesn't special-case that.
+				self.stopThreading();
+
 				gc->closeImplementation();
 			}
-		})
+		}, "Stop any running viewer threads, close the graphics context if present, and mark the viewer done.")
 	;
 }
 

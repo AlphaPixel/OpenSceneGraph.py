@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
-#vimrun! ../examples/pyosg-instanced.py
 
-import os
 import time
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6"
-})
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py) for anything this file doesn't set itself -- nothing below overrides them.
+# Deliberately BEFORE `from OpenSceneGraph import *`, matching every other example: these need to
+# land before OSG's DisplaySettings reads them, not just before a Viewer gets constructed.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -51,7 +47,7 @@ void main() {
 	// A smidge of padding...
 	pos *= 1.2;
 
-	gl_Position = gl_ModelViewProjectionMatrix * vec4(pos + v, 0.0, 1.0);
+	gl_Position = gl_ModelViewProjectionMatrix * vec4(pos.x + v.x, 0.0, pos.y + v.y, 1.0);
 }
 """
 
@@ -64,16 +60,14 @@ FRAGMENT_SHADER = """
 	}
 """
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
-
+def build_scene(w, h):
 	g = osg.Geometry()
 
 	# TODO: Convert to SequenceProxy!
-	# g.addPrimitiveSet(osg.DrawArrays(GL_TRIANGLE_FAN, 0, 4, 16 * 16))
-	g.addPrimitiveSet(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4, 16 * 16))
+	# g.primitiveSets.append(osg.DrawArrays(GL_TRIANGLE_FAN, 0, 4, 16 * 16))
+	g.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4, 16 * 16))
 
-	g.initialBound = osg.BoundingBox(-10, -10, -1, 10, 10, 1)
+	g.initialBound = osg.BoundingBox(-10, -1, -10, 10, 1, 10)
 	# g.useVertexBufferObjects = True
 
 	p = osg.Program(name="gl_InstanceID_DEMO", shaders=(
@@ -84,11 +78,18 @@ if __name__ == "__main__":
 	r = osg.Geode()
 
 	r.drawables.append(g)
-	r.stateSet.setAttributeAndModes(p)
+	r.stateSet.attributes.append(p)
+
+	return r
+
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	W, H = window_size()
 
 	v = osgViewer.Viewer()
 
-	v.sceneData = r
+	v.sceneData = build_scene(W, H)
 	v.cameraManipulator = osgGA.TrackballManipulator()
 
 	while not v.done:

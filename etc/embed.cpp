@@ -2,13 +2,13 @@
 
 #include "pyosg.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osg/Node>
 #include <osgDB/ReadFile>
 #include <osgViewer/Viewer>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
 #include <algorithm>
 #include <cstddef>

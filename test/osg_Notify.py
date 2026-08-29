@@ -1,5 +1,3 @@
-#vimrun! pytest -v ..
-
 from .conftest import f32
 
 import os

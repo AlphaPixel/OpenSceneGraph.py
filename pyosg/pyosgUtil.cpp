@@ -1,10 +1,10 @@
 #include "pyosgUtil.hpp"
 
-PYOSG_DISABLE_WARNINGS
+OSGX_DISABLE_WARNINGS
 
 #include <osgUtil/UpdateVisitor>
 
-PYOSG_ENABLE_WARNINGS
+OSGX_ENABLE_WARNINGS
 
 namespace pyosgUtil {
 
@@ -13,8 +13,13 @@ void bind(py::module_& m) {
 		osgUtil::UpdateVisitor,
 		osg::NodeVisitor,
 		osg::ref_ptr<osgUtil::UpdateVisitor>
-	>(m, "UpdateVisitor")
-		.def(py::init<>())
+	>(
+		m,
+		"UpdateVisitor",
+		"A NodeVisitor that runs each Node's updateCallback once per frame, driving "
+		"animation and other per-frame logic."
+	)
+		.def(py::init<>(), "Create an update visitor.")
 	;
 }
 
