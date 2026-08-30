@@ -10,6 +10,12 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 
+[project.urls]
+# Standard PEP 621 metadata, readable via `pip show`/`importlib.metadata` with no network access --
+# the canonical answer to "where's the real source" for anyone (or any agent) working against a
+# pip-installed wheel with no source checkout.
+Repository = "https://github.com/AlphaPixel/OpenSceneGraph.py"
+
 [project.scripts]
 # Runs one of the curated OpenSceneGraph.examples modules standalone (no Qt
 # required), e.g. `pyosg mrt` or `pyosg blur -- model.gltf`. Equivalent to
