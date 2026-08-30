@@ -38,6 +38,37 @@ cmake.args = [
     "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
 ]
 
+[tool.scikit-build.sdist]
+# scikit-build-core's sdist step packages the raw filesystem, filtered by every .gitignore it
+# finds anywhere in the tree -- including ones vendored deep inside third-party deps. These paths
+# are confirmed (by a real cmake --build, not just configure) to be unreferenced by osgx's build
+# graph with its forced-OFF feature flags (KTX_FEATURE_TESTS, etc.), and account for ~330MB of a
+# clean-clone sdist that would otherwise be ~350MB.
+exclude = [
+    "etc/osgx/ext/KTX-Software/tests",
+    "etc/osgx/ext/KTX-Software/external/basis_universal/webgl",
+    "etc/osgx/ext/KTX-Software/external/basis_universal/test_files",
+    "etc/osgx/ext/KTX-Software/external/basis_universal/shader_deblocking",
+    "etc/osgx/ext/KTX-Software/external/basis_universal/python",
+    "etc/osgx/ext/KTX-Software/external/astc-encoder/Test",
+    "etc/osgx/ext/KTX-Software/external/astc-encoder/Docs",
+    "etc/osgx/ext/tinygltf/attic",
+]
+
+# The exclude/gitignore walk above also hides these git-tracked files as collateral damage from
+# vendored .gitignore rules elsewhere in the tree (astc-encoder's own `.gitignore` has a bare
+# `/*.txt` that matches its CMakeLists.txt/LICENSE.txt; trimming KTX-Software/tests/ above removes
+# tests/CMakeLists.txt, which KTX-Software's top-level CMakeLists.txt add_subdirectory()s
+# unconditionally). Without these, sdist configure fails even on an unmodified sdist with none of
+# the excludes above applied -- this is a pre-existing packaging bug, not something the trimming
+# introduces. sdist.include is checked before exclude/gitignore filtering, so listing them here
+# forces them back in.
+include = [
+    "etc/osgx/ext/KTX-Software/external/astc-encoder/CMakeLists.txt",
+    "etc/osgx/ext/KTX-Software/external/astc-encoder/LICENSE.txt",
+    "etc/osgx/ext/KTX-Software/tests/CMakeLists.txt",
+]
+
 # Pulls the single version of record out of CMakeLists.txt's `project(... VERSION x.y.z ...)`
 # call, so PROJECT_VERSION/PYOSG_VERSION and the wheel's metadata version can never drift apart.
 [[tool.dynamic-metadata]]

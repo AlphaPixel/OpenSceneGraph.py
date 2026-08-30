@@ -240,12 +240,73 @@ jobs:
           path: wheelhouse/*.whl
           if-no-files-found: error
 
+  sdist:
+    name: Source distribution
+    if: true
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # osgx is part of the pinned sdist contents, same as the wheel jobs.
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist
+        run: |
+          python -m pip install build
+          python -m build --sdist
+
+      # Mirrors the manylinux CIBW_BEFORE_ALL package list above (linux-x86_64-cp312 job),
+      # translated to apt names, plus the X11/GL headers OSG's windowing plugin needs. This host
+      # is a plain Ubuntu runner, not the manylinux container the wheel jobs build in, so its
+      # package set isn't otherwise guaranteed to match.
+      - name: Install build-time system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxrandr-dev libjpeg-turbo8-dev libpng-dev libtiff-dev libgl1-mesa-dev libglu1-mesa-dev
+
+      # The actual point of this job: confirm [tool.scikit-build.sdist]'s exclude/include lists
+      # leave a tree that self-builds under a normal `pip install`, exercising the same fallback
+      # path any platform/Python combination without a prebuilt wheel above would hit on PyPI.
+      - name: Install sdist into a clean venv
+        run: |
+          python -m venv sdist-venv
+          sdist-venv/bin/pip install dist/*.tar.gz
+
+      - name: Smoke-test installed sdist build
+        run: >-
+          sdist-venv/bin/python -c "import OpenSceneGraph;
+          from OpenSceneGraph.osg import Node;
+          from OpenSceneGraph.GL import GL_RGBA;
+          assert Node is OpenSceneGraph.osg.Node, 'osg.Node identity mismatch';
+          assert GL_RGBA == OpenSceneGraph.GL.GL_RGBA, 'GL_RGBA identity mismatch';
+          registry = OpenSceneGraph.osgDB.Registry.instance();
+          extensions = ('osg', 'obj', 'stl', 'bmp', 'dds', 'hdr', 'jpeg',
+          'jpg', 'pnm', 'png', 'rgb', 'tga', 'tif', 'tiff', 'gltf', 'ktx2');
+          missing = [extension for extension in extensions
+          if not registry.getReaderWriterForExtension(extension)];
+          assert not missing, f'missing osgDB plugins: {missing}';
+          import osgx"
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenSceneGraph-sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
   publish:
     name: Publish to PyPI
     # Pushes to `main` (and manual test runs) produce build artifacts only.
     # Publishing requires an explicit versioned release tag, e.g. v0.1.1.
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux-x86_64-cp312, linux-aarch64-cp312, windows-x86_64-cp312]
+    needs: [linux-x86_64-cp312, linux-aarch64-cp312, windows-x86_64-cp312, sdist]
     runs-on: ubuntu-24.04
     environment:
       name: pypi
