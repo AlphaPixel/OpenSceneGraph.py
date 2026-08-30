@@ -456,6 +456,55 @@ direct DRM/KMS scanout with no X server running at all.
 
 **TODO**: Detailed CMake compilation guide (but honestly, it's NOT hard).
 
+Most users never need any of this -- `pip install OpenSceneGraph` grabs a prebuilt wheel
+(Linux x86-64/aarch64 `manylinux_2_28`, Windows x86-64; CPython 3.12 currently) with OSG already
+compiled in. The notes below are for anyone on a platform/Python version without a matching
+wheel, or who wants to build against a local checkout.
+
+**From a git checkout.** `git clone --recurse-submodules` is required -- `etc/osgx` (the
+companion utility layer) is a submodule, and `pip install .`/CMake will fail without it:
+
+```
+git clone --recurse-submodules https://github.com/AlphaPixel/OpenSceneGraph.py
+cd OpenSceneGraph.py
+pip install .
+```
+
+or drive CMake directly if you want more control:
+
+```
+cmake -S . -B build -DPYOSG_FETCH_OSG=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+cmake --build build
+```
+
+`PYOSG_FETCH_OSG=ON` (the default via `pyproject.toml`) fetches and builds the pinned
+OpenSceneGraph revision itself via `FetchContent` -- there's no separate "install OSG first"
+step, but expect the first build to take a while, since it's compiling OSG too, not just the
+bindings. On Linux you'll need the usual X11/GL/image-format dev headers (`libXrandr`,
+`libjpeg-turbo`, `libpng`, `libtiff`, GL/GLU); see `.github/workflows/wheels.yml`'s
+`CIBW_BEFORE_ALL` steps for the exact package lists used in CI (Linux and Windows/vcpkg).
+
+**Forcing a source build without a fresh clone.** If you have a source distribution (`sdist`)
+tarball already -- built locally with `python -m build --sdist`, downloaded from a
+[GitHub Actions run artifact](https://github.com/AlphaPixel/OpenSceneGraph.py/actions), or
+pulled from [PyPI](https://pypi.org/project/openscenegraph/#files) -- point pip straight at the
+file to build it, bypassing wheel resolution entirely:
+
+```
+pip install ./OpenSceneGraph-<version>.tar.gz
+```
+
+To instead make pip resolve `OpenSceneGraph` by name from PyPI but refuse any matching wheel and
+build from the sdist anyway:
+
+```
+pip install --no-binary OpenSceneGraph OpenSceneGraph
+```
+
+(`--no-binary :all:` applies that to every package in the resolve, not just this one.) There's
+no dedicated "build from source" flag beyond `--no-binary` -- pip's `--src` flag is unrelated,
+it only controls where editable/VCS checkouts land, not whether a build happens.
+
 # The Elephant in the Room
 
 Yes: OpenSceneGraph, and OpenGL itself, are old. Vulkan is widely supported,
