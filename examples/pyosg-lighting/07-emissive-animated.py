@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import pathlib
 import sys
 import os
 
@@ -12,6 +13,20 @@ os.environ.update({
 })
 
 from OpenSceneGraph import *
+
+import osgx
+
+# Bare name (e.g. "Corset") -> glTF-Sample-Assets/Models/<name>/glTF/<name>.gltf via
+# osgx.findDataFile(), same convention pyosg-khronos-viewer.py's own resolve_model() uses.
+def resolve_model(value):
+	path = pathlib.Path(value).expanduser()
+
+	if path.is_file():
+		return str(path)
+
+	return osgx.findDataFile(value) or osgx.findDataFile(
+		path.stem, ("glTF-Sample-Assets/Models/{}/glTF/{}.gltf",)
+	) or None
 
 # Animated lights — the only change from step 7 is that light POSITIONS are
 # no longer uniforms. Instead we use `osg_SimulationTime` (an OSG built-in
@@ -182,10 +197,7 @@ void main() {
 if __name__ == "__main__":
 	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
-	path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-		os.path.dirname(os.path.abspath(__file__)),
-		"data/BoomBox/glTF/BoomBox.gltf"
-	)
+	path = resolve_model(sys.argv[1] if len(sys.argv) > 1 else "BoomBox")
 
 	root = osgDB.readNodeFile(path)
 
