@@ -6,16 +6,34 @@ on:
     # Release tags build the same wheels, then unlock the publish job below.
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      build:
+        description: Build release artifacts
+        required: true
+        default: false
+        type: boolean
+      target:
+        description: Artifact set to build
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - linux-x86_64
+          - linux-aarch64
+          - windows-x86_64
+          - sdist
 
 # The workflow only needs to read the repository and upload its wheel artifact.
 permissions:
   contents: read
 
 jobs:
-  linux-x86_64-cp312:
-    name: Linux x86-64 / CPython 3.12 / manylinux_2_28
-    # Toggle for future disabling.
-    if: true
+  linux-x86_64:
+    name: Linux x86-64 / CPython 3.12-3.14 / manylinux_2_28
+    # Pushes remain visible in Actions but do not consume build capacity.
+    # Run manually with: gh workflow run wheels.yml -f build=true
+    if: inputs.build && (inputs.target == 'all' || inputs.target == 'linux-x86_64')
     # Self-hosted VPS build, kept for reference now that the repo is public
     # and GitHub-hosted runners are usable without spend concerns.
     # runs-on: [self-hosted, linux, x64]
@@ -40,7 +58,7 @@ jobs:
           # inspection and artifact-upload steps.
           output-dir: ${{ github.workspace }}/wheelhouse
         env:
-          CIBW_BUILD: cp312-manylinux_x86_64
+          CIBW_BUILD: cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64
           CIBW_ARCHS_LINUX: x86_64
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           # osgx::platform and the PNG/JPEG/TIFF plugins require these
@@ -82,14 +100,13 @@ jobs:
       - name: Upload repaired wheel
         uses: actions/upload-artifact@v4
         with:
-          name: OpenSceneGraph-cp312-manylinux_2_28-x86_64
+          name: OpenSceneGraph-manylinux_2_28-x86_64
           path: wheelhouse/*.whl
           if-no-files-found: error
 
-  linux-aarch64-cp312:
-    name: Linux ARM64 / CPython 3.12 / manylinux_2_28
-    # Toggle for future disabling.
-    if: true
+  linux-aarch64:
+    name: Linux ARM64 / CPython 3.12-3.14 / manylinux_2_28
+    if: inputs.build && (inputs.target == 'all' || inputs.target == 'linux-aarch64')
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -109,7 +126,7 @@ jobs:
         with:
           output-dir: ${{ github.workspace }}/wheelhouse
         env:
-          CIBW_BUILD: cp312-manylinux_aarch64
+          CIBW_BUILD: cp312-manylinux_aarch64 cp313-manylinux_aarch64 cp314-manylinux_aarch64
           CIBW_ARCHS_LINUX: aarch64
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
           # This is a one-off ARM compatibility probe. The launcher appends
@@ -149,14 +166,13 @@ jobs:
       - name: Upload repaired wheel
         uses: actions/upload-artifact@v4
         with:
-          name: OpenSceneGraph-cp312-manylinux_2_28-aarch64
+          name: OpenSceneGraph-manylinux_2_28-aarch64
           path: wheelhouse/*.whl
           if-no-files-found: error
 
-  windows-x86_64-cp312:
-    name: Windows x86-64 / CPython 3.12
-    # Toggle for future disabling.
-    if: true
+  windows-x86_64:
+    name: Windows x86-64 / CPython 3.12-3.14
+    if: inputs.build && (inputs.target == 'all' || inputs.target == 'windows-x86_64')
     runs-on: windows-latest
 
     steps:
@@ -188,7 +204,7 @@ jobs:
         with:
           output-dir: ${{ github.workspace }}\wheelhouse
         env:
-          CIBW_BUILD: cp312-win_amd64
+          CIBW_BUILD: cp312-win_amd64 cp313-win_amd64 cp314-win_amd64
           CIBW_ARCHS_WINDOWS: AMD64
           # Custom repair commands are not given delvewheel automatically by
           # cibuildwheel's isolated build environment. Install it there and
@@ -229,20 +245,20 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: OpenSceneGraph-cp312-win-amd64-mapfiles
+          name: OpenSceneGraph-win-amd64-mapfiles
           path: mapfiles/*.map
           if-no-files-found: warn
 
       - name: Upload Windows wheel
         uses: actions/upload-artifact@v4
         with:
-          name: OpenSceneGraph-cp312-win-amd64
+          name: OpenSceneGraph-win-amd64
           path: wheelhouse/*.whl
           if-no-files-found: error
 
   sdist:
     name: Source distribution
-    if: true
+    if: inputs.build && (inputs.target == 'all' || inputs.target == 'sdist')
     runs-on: ubuntu-24.04
 
     steps:
@@ -305,8 +321,8 @@ jobs:
     name: Publish to PyPI
     # Pushes to `main` (and manual test runs) produce build artifacts only.
     # Publishing requires an explicit versioned release tag, e.g. v0.1.1.
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux-x86_64-cp312, linux-aarch64-cp312, windows-x86_64-cp312, sdist]
+    if: inputs.build && inputs.target == 'all' && startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-x86_64, linux-aarch64, windows-x86_64, sdist]
     runs-on: ubuntu-24.04
     environment:
       name: pypi
