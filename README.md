@@ -13,11 +13,11 @@
 
 </div>
 
-# Key Features (July, 2026)
+# Key Features (September, 2026)
 
-- Covers most of the core `osg` namespace, as well as significant portions of
-  `osgViewer`, `osgUtil`, `osgGA`, and `osgDB`. Any missing or unwrapped
-  objects can be added quickly as needed.
+- Covers most of the core `osg` namespace, as well as the immediately useful
+  portions of `osgViewer`, `osgUtil`, `osgGA`, and `osgDB`. Any missing or
+  unwrapped objects can be added quickly as needed.
 
 - Implements only the modern, non-FFP parts of OpenSceneGraph; all testing is
   done with GL3/GLCORE as the minimum target.
