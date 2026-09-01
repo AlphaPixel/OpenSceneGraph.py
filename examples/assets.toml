@@ -1,0 +1,90 @@
+# Curated third-party payload for openscenegraph-examples. Source revisions are
+# pinned so release preparation is reproducible and reviewable.
+
+[sources.khronos_environments]
+repository = "https://github.com/KhronosGroup/glTF-Sample-Environments.git"
+commit = "83d50e3aa24052872569c33568809c08bec1bcba"
+
+[sources.khronos_assets]
+repository = "https://github.com/KhronosGroup/glTF-Sample-Assets.git"
+commit = "2bac6f8c57bf471df0d2a1e8a8ec023c7801dddf"
+
+[[environments]]
+source = "khronos_environments"
+name = "chromatic"
+path = "chromatic.hdr"
+
+[[environments]]
+source = "khronos_environments"
+name = "directional"
+path = "directional.hdr"
+
+[[environments]]
+source = "khronos_environments"
+name = "doge2"
+path = "doge2.hdr"
+
+[[environments]]
+source = "khronos_environments"
+name = "ennis"
+path = "ennis.hdr"
+
+[[environments]]
+source = "khronos_environments"
+name = "field"
+path = "field.hdr"
+
+[[environments]]
+source = "khronos_environments"
+name = "footprint_court"
+path = "footprint_court.hdr"
+
+[[environments]]
+source = "khronos_environments"
+name = "helipad"
+path = "helipad.hdr"
+
+[[environments]]
+source = "khronos_environments"
+name = "neutral"
+path = "neutral.hdr"
+
+[[environments]]
+source = "khronos_environments"
+name = "papermill"
+path = "papermill.hdr"
+
+[[environments]]
+source = "khronos_environments"
+name = "pisa"
+path = "pisa.hdr"
+
+[[models]]
+source = "khronos_assets"
+name = "BoomBox"
+path = "Models/BoomBox/glTF"
+entrypoint = "BoomBox.gltf"
+
+[[models]]
+source = "khronos_assets"
+name = "Corset"
+path = "Models/Corset/glTF"
+entrypoint = "Corset.gltf"
+
+[[models]]
+source = "khronos_assets"
+name = "MetalRoughSpheresNoTextures"
+path = "Models/MetalRoughSpheresNoTextures/glTF"
+entrypoint = "MetalRoughSpheresNoTextures.gltf"
+
+[[models]]
+source = "khronos_assets"
+name = "AlphaBlendModeTest"
+path = "Models/AlphaBlendModeTest/glTF"
+entrypoint = "AlphaBlendModeTest.gltf"
+
+[[models]]
+source = "khronos_assets"
+name = "TextureEncodingTest"
+path = "Models/TextureEncodingTest/glTF"
+entrypoint = "TextureEncodingTest.gltf"

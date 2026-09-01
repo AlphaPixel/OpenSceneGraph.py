@@ -33,7 +33,8 @@ from OpenSceneGraph.GL import *
 import osgx
 
 THIS_DIR = pathlib.Path(__file__).resolve().parent
-DATA_DIR = THIS_DIR / "pyosg-lighting" / "data"
+PACKAGE_ASSET_DIR = THIS_DIR / "assets"
+SOURCE_DATA_DIR = THIS_DIR / "pyosg-lighting" / "data"
 CLEAR_COLOR = (48.0 / 255.0, 53.0 / 255.0, 66.0 / 255.0, 1.0)
 DEBUG_MODES = {
 	"combined": 0,
@@ -64,12 +65,13 @@ def resolve_asset(value, suffix, candidates=()):
 	if resolved:
 		return pathlib.Path(resolved)
 
-	path = DATA_DIR / f"{value}.{suffix}"
+	for data_dir in (PACKAGE_ASSET_DIR, SOURCE_DATA_DIR):
+		path = data_dir / f"{value}.{suffix}"
 
-	if path.is_file():
-		return path
+		if path.is_file():
+			return path
 
-	raise FileNotFoundError(f"Cannot find {value!r} or {path}")
+	raise FileNotFoundError(f"Cannot find {value!r} in configured data paths")
 
 def resolve_model(value):
 	path = pathlib.Path(value).expanduser()
@@ -81,6 +83,12 @@ def resolve_model(value):
 
 	if resolved:
 		return pathlib.Path(resolved)
+
+	for data_dir in (PACKAGE_ASSET_DIR, SOURCE_DATA_DIR):
+		path = data_dir / "models" / path.stem / f"{path.stem}.gltf"
+
+		if path.is_file():
+			return path
 
 	resolved = osgx.findDataFile(
 		path.stem,
@@ -94,6 +102,7 @@ def resolve_model(value):
 
 def resolve_environment_manifest(value):
 	path = pathlib.Path(value).expanduser()
+	name = path.stem
 
 	if path.is_file():
 		return path
@@ -108,7 +117,13 @@ def resolve_environment_manifest(value):
 	if resolved:
 		return pathlib.Path(resolved)
 
-	raise FileNotFoundError(f"Cannot find environment manifest {value!r}")
+	for data_dir in (PACKAGE_ASSET_DIR, SOURCE_DATA_DIR):
+		path = data_dir / "env" / f"{name}.gltf"
+
+		if path.is_file():
+			return path
+
+	raise FileNotFoundError(f"Cannot find environment manifest {value!r} in configured data paths")
 
 def load_camera(path):
 	"""Read a Khronos Sample Viewer camera export into OSG's Z-up basis."""

@@ -20,7 +20,14 @@ def _load_module(name):
 	try:
 		return importlib.import_module(f"OpenSceneGraph.examples.{name}")
 
-	except ModuleNotFoundError:
+	except ModuleNotFoundError as error:
+		# Only turn failure to locate the requested example itself into the
+		# friendly availability list. A ModuleNotFoundError raised by one of the
+		# example's own imports is a real diagnostic and must not be disguised as
+		# an unknown runner name.
+		if error.name != f"OpenSceneGraph.examples.{name}":
+			raise
+
 		import OpenSceneGraph.examples as _examples
 
 		available = sorted(
