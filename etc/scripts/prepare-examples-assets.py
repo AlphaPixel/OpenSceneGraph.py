@@ -24,7 +24,7 @@ def copy_model(source_root, entry, output_root):
 	shutil.copytree(model_source, model_output)
 
 
-def bake_environment(source_root, entry, output_root, asset_tool, software):
+def bake_environment(source_root, entry, output_root, asset_tool, software, quality):
 	hdr_path = source_root / entry["path"]
 	output = output_root / "env" / entry["name"]
 	command = [str(asset_tool), str(hdr_path), str(output)]
@@ -34,6 +34,10 @@ def bake_environment(source_root, entry, output_root, asset_tool, software):
 
 	if software:
 		command.append("--software")
+
+	for option, value in quality.items():
+		if value is not None:
+			command.extend((option, str(value)))
 
 	output.parent.mkdir(parents=True, exist_ok=True)
 	print("Baking environment:", entry["name"], flush=True)
@@ -83,6 +87,10 @@ def main():
 	parser.add_argument("--khronos-environments-dir", type=pathlib.Path, required=True)
 	parser.add_argument("--khronos-assets-dir", type=pathlib.Path, required=True)
 	parser.add_argument("--software", action="store_true")
+	parser.add_argument("--prefilter-size", type=int)
+	parser.add_argument("--samples", type=int)
+	parser.add_argument("--diffuse-cube-size", type=int)
+	parser.add_argument("--diffuse-samples", type=int)
 	arguments = parser.parse_args()
 
 	if arguments.output.exists():
@@ -102,10 +110,24 @@ def main():
 	for name, path in sources.items():
 		verify_source(name, path, document["sources"][name]["commit"])
 
+	quality = {
+		"--prefilter-size": arguments.prefilter_size,
+		"--samples": arguments.samples,
+		"--diffuse-cube-size": arguments.diffuse_cube_size,
+		"--diffuse-samples": arguments.diffuse_samples
+	}
+
 	arguments.output.mkdir(parents=True)
 
 	for entry in document.get("environments", []):
-		bake_environment(sources[entry["source"]], entry, arguments.output, arguments.asset_tool, arguments.software)
+		bake_environment(
+			sources[entry["source"]],
+			entry,
+			arguments.output,
+			arguments.asset_tool,
+			arguments.software,
+			quality
+		)
 
 	for entry in document.get("models", []):
 		copy_model(sources[entry["source"]], entry, arguments.output)

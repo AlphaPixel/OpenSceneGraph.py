@@ -16,8 +16,13 @@ hdr_input="${PYOSG_HDR:-}"
 asset_name="${PYOSG_ASSET_NAME:-}"
 software_bake="${PYOSG_PBRIBL_SOFTWARE:-0}"
 prepare_catalog_assets="${PYOSG_PREPARE_CATALOG_ASSETS:-0}"
+catalog_asset_dir="${PYOSG_CATALOG_ASSET_DIR:-$scratch/catalog-assets}"
 khronos_environments_dir="${PYOSG_KHRONOS_ENVIRONMENTS_DIR:-/home/cubicool/dev/OpenSceneGraph-Data/glTF-Sample-Environments}"
 khronos_assets_dir="${PYOSG_KHRONOS_ASSETS_DIR:-/home/cubicool/dev/OpenSceneGraph-Data/glTF-Sample-Assets}"
+pbribl_prefilter_size="${PYOSG_PBRIBL_PREFILTER_SIZE:-}"
+pbribl_samples="${PYOSG_PBRIBL_SAMPLES:-}"
+pbribl_diffuse_cube_size="${PYOSG_PBRIBL_DIFFUSE_CUBE_SIZE:-}"
+pbribl_diffuse_samples="${PYOSG_PBRIBL_DIFFUSE_SAMPLES:-}"
 build_base_wheel="${PYOSG_BUILD_BASE_WHEEL:-1}"
 build_examples_wheel="${PYOSG_BUILD_EXAMPLES_WHEEL:-0}"
 examples_asset_dir="${PYOSG_EXAMPLES_ASSET_DIR:-}"
@@ -86,7 +91,6 @@ fi
 echo "Prepared asset tool: $asset_tool"
 
 if [[ "$prepare_catalog_assets" == "1" ]]; then
-	catalog_asset_dir="$scratch/catalog-assets"
 	prepare_args=(
 		--manifest "$repo_root/examples/assets.toml"
 		--output "$catalog_asset_dir"
@@ -97,6 +101,22 @@ if [[ "$prepare_catalog_assets" == "1" ]]; then
 
 	if [[ "$software_bake" == "1" ]]; then
 		prepare_args+=(--software)
+	fi
+
+	if [[ -n "$pbribl_prefilter_size" ]]; then
+		prepare_args+=(--prefilter-size "$pbribl_prefilter_size")
+	fi
+
+	if [[ -n "$pbribl_samples" ]]; then
+		prepare_args+=(--samples "$pbribl_samples")
+	fi
+
+	if [[ -n "$pbribl_diffuse_cube_size" ]]; then
+		prepare_args+=(--diffuse-cube-size "$pbribl_diffuse_cube_size")
+	fi
+
+	if [[ -n "$pbribl_diffuse_samples" ]]; then
+		prepare_args+=(--diffuse-samples "$pbribl_diffuse_samples")
 	fi
 
 	# Catalog preparation requires a new staging directory. This prevents stale,
