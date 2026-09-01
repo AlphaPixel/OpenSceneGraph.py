@@ -300,7 +300,13 @@ void bind(py::module_& m) {
 			const osgGA::GUIEventAdapter&,
 			osgGA::GUIActionAdapter&
 		>(&osgGA::CameraManipulator::home), "Reset the camera to its home position.")
-		.def("home", py::overload_cast<double>(&osgGA::CameraManipulator::home))
+		.def(
+			"home",
+			py::overload_cast<double>(&osgGA::CameraManipulator::home),
+			"currentTime"_a=0.0,
+			"Reset the camera to its home position; currentTime only matters to a manipulator "
+			"that animates the transition."
+		)
 		// Bound as a plain method (not just made overridable in the trampoline) for the same
 		// reason updateCamera() is: lets test code (and real callers) invoke it through a
 		// genuine C++ virtual call, which is the only way to actually prove a trampoline
