@@ -26,6 +26,11 @@ option(PYOSG_MSVC_WARNINGS_AS_ERRORS "Treat MSVC warnings as errors" ON)
 # so contributors can keep developing the two projects side by side.
 option(PYOSG_BUILD_OSGX "Build osgx alongside a manually supplied OpenSceneGraph" OFF)
 
+# The normal bindings/wheel build has no need for standalone osgx utilities.
+# Asset-preparation builds opt in to osgx-pbribl through this project-owned
+# switch, keeping the default distribution graph unchanged.
+option(PYOSG_BUILD_OSGX_UTILS "Build osgx standalone utilities" OFF)
+
 set(PYOSG_OSGX_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/etc/osgx"
 	CACHE PATH "Path to the osgx source checkout"
 )
@@ -46,6 +51,10 @@ set(PYOSG_PACKAGED_EXAMPLES
 	"pyosg-blur.py=blur.py"
 	"pyosg-mrt.py=mrt.py"
 	"pyosg-info.py=info.py"
+	# Shared source/example bootstrap helpers belong to the base package, so
+	# optional example distributions can import them without owning package
+	# scaffolding files.
+	"pyosg_example.py=pyosg_example.py"
 	"pyosg_visitor.py=pyosg_visitor.py"
 )
 
@@ -183,7 +192,7 @@ if(PYOSG_FETCH_OSG OR PYOSG_BUILD_OSGX)
 	# module and its deliberately supported osgDB plugins, but no examples or
 	# standalone installation rules.
 	set(OSGX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-	set(OSGX_BUILD_UTILS OFF CACHE BOOL "" FORCE)
+	set(OSGX_BUILD_UTILS ${PYOSG_BUILD_OSGX_UTILS} CACHE BOOL "" FORCE)
 	set(OSGX_BUILD_PYTHON ON CACHE BOOL "" FORCE)
 	set(OSGX_BUILD_KTX2 ON CACHE BOOL "" FORCE)
 	set(OSGX_BUILD_GLTF ON CACHE BOOL "" FORCE)

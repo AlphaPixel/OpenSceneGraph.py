@@ -1,0 +1,34 @@
+[build-system]
+requires = ["scikit-build-core>=1.0"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "OpenSceneGraph-examples"
+dynamic = ["version", "dependencies"]
+description = "Official asset-bearing examples for OpenSceneGraph Python bindings"
+requires-python = ">=3.9"
+license = "MIT"
+
+[project.urls]
+Repository = "https://github.com/AlphaPixel/OpenSceneGraph.py"
+
+[tool.scikit-build]
+# This CMake project installs Python/data files only, so produce one universal
+# wheel rather than a Python- or platform-specific native wheel.
+wheel.platlib = false
+
+# The root CMake project remains the one place a version is declared. This
+# add-on wheel reads it back rather than maintaining a second version field.
+[[tool.dynamic-metadata]]
+provider = "scikit_build_core.metadata.regex"
+field = "version"
+input = "../CMakeLists.txt"
+regex = 'project\([^)]*VERSION\s+(?P<value>[0-9.]+)'
+
+# The add-on contributes files to the base package's examples directory, so it
+# initially requires that exact base package release. The template provider
+# consumes the dynamic version resolved by the preceding regex provider.
+[[tool.dynamic-metadata]]
+provider = "scikit_build_core.metadata.template"
+field = "dependencies"
+result = ["OpenSceneGraph == {project[version]}"]

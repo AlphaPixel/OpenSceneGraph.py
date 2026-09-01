@@ -1,0 +1,21 @@
+# Curated third-party payload for openscenegraph-examples. Source revisions are
+# pinned so release preparation is reproducible and reviewable.
+
+[sources.khronos_environments]
+repository = "https://github.com/KhronosGroup/glTF-Sample-Environments.git"
+commit = "83d50e3aa24052872569c33568809c08bec1bcba"
+
+[sources.khronos_assets]
+repository = "https://github.com/KhronosGroup/glTF-Sample-Assets.git"
+commit = "2bac6f8c57bf471df0d2a1e8a8ec023c7801dddf"
+
+[[environments]]
+source = "khronos_environments"
+name = "papermill"
+path = "papermill.hdr"
+
+[[models]]
+source = "khronos_assets"
+name = "BoomBox"
+path = "Models/BoomBox/glTF"
+entrypoint = "BoomBox.gltf"
