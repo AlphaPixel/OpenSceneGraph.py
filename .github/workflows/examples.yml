@@ -1,0 +1,78 @@
+name: Build examples package
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: Build the curated examples-package artifact
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  examples-package:
+    name: Examples package / CPU asset preparation
+    # This is deliberately opt-in. Run manually with:
+    # gh workflow run examples.yml -f build=true --ref 5-examples-package
+    if: inputs.build
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # osgx and its ImGui dependency are both required by osgx-pbribl.
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      # This is a plain Ubuntu build, not the manylinux container used by the
+      # base-wheel workflow. These are the native headers needed by the OSG
+      # dependency graph used to build the headless asset-preparation tool.
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxrandr-dev \
+            libjpeg-turbo8-dev \
+            libpng-dev \
+            libtiff-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev
+
+      - name: Check out pinned Khronos asset sources
+        shell: bash
+        run: |
+          read -r environments_repository environments_commit assets_repository assets_commit < <(
+            python -c 'import tomllib; document = tomllib.load(open("examples/assets.toml", "rb")); environments = document["sources"]["khronos_environments"]; assets = document["sources"]["khronos_assets"]; print(environments["repository"], environments["commit"], assets["repository"], assets["commit"])'
+          )
+          git clone "$environments_repository" "$RUNNER_TEMP/glTF-Sample-Environments"
+          git -C "$RUNNER_TEMP/glTF-Sample-Environments" checkout --detach "$environments_commit"
+          git clone "$assets_repository" "$RUNNER_TEMP/glTF-Sample-Assets"
+          git -C "$RUNNER_TEMP/glTF-Sample-Assets" checkout --detach "$assets_commit"
+
+      - name: Build curated examples wheel
+        env:
+          PYOSG_SCRATCH: ${{ runner.temp }}/pyosg
+          PYOSG_KHRONOS_ENVIRONMENTS_DIR: ${{ runner.temp }}/glTF-Sample-Environments
+          PYOSG_KHRONOS_ASSETS_DIR: ${{ runner.temp }}/glTF-Sample-Assets
+          PYOSG_PREPARE_CATALOG_ASSETS: "1"
+          PYOSG_PBRIBL_SOFTWARE: "1"
+          PYOSG_BUILD_BASE_WHEEL: "0"
+          PYOSG_BUILD_EXAMPLES_WHEEL: "1"
+        run: |
+          python -m pip install build
+          etc/scripts/build-local-wheel.sh
+
+      - name: Upload examples wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenSceneGraph-examples
+          path: ${{ runner.temp }}/pyosg/wheelhouse/openscenegraph_examples-*.whl
+          if-no-files-found: error
