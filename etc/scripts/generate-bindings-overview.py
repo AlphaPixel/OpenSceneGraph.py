@@ -13,15 +13,25 @@ runtime" in the output rather than silently vanishing, which is the signal to go
 or the binding, whichever is wrong.
 
 Usage:
-	generate-bindings-overview.py [--source-dir DIR] [--build-dir DIR] [--output FILE]
+	generate-bindings-overview.py [--source-dir DIR] [--build-dir DIR] [--output FILE] [--module NAME]
 
 --build-dir defaults to the newest BUILD-*/ directory (checked from the repo root) that has an
-importable OpenSceneGraph package sitting in it.
+importable --module package/extension sitting in it.
+
+--module (default "OpenSceneGraph") is the top-level module imported and checked against. A
+binding-file heading is normally resolved as an attribute of that module by name (osg/Camera ->
+native.osg, osgAnimation -> native.osgAnimation, ...), which is how OpenSceneGraph.py's own
+per-submodule pyosg/ layout works. A project whose binding files are instead named
+"<module>-topic.cpp" but bind most of "topic" flat onto the module's own top level (osgx et al.)
+gets a fallback: if "topic" isn't itself a real submodule, the whole group resolves against
+--module directly instead of reporting everything in it as missing.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib
+import inspect
 import re
 import sys
 
@@ -106,6 +116,12 @@ MODULE_CALL_RE = re.compile(
 	r'\b(\w+)\s*\.\s*(def_static|def_property_readonly|def_property|def_readwrite|def_readonly|def)\s*\('
 )
 ATTR_ASSIGN_RE = re.compile(r'\b(\w+)\.attr\(\s*"([^"]+)"\s*\)\s*=')
+# `auto VAR = OTHER.def_submodule("name", ...)` -- a nested py::module_ a binding file creates for
+# itself (osgx-gltf.cpp's `m_gltf_shader`/`m_gltf_pbribl`, off the `m_gltf` parameter). Recorded so
+# render_group() can walk VAR back to a real attribute path off the group's own resolved base
+# module, instead of only ever recognizing symbols bound directly on that base -- see scan_text()'s
+# `submodules` return and resolve_submodule_chain() below.
+SUBMODULE_DECL_RE = re.compile(r'(?:auto\s+)?(\w+)\s*=\s*(\w+)\s*\.\s*def_submodule\s*\(\s*"([^"]+)"')
 
 # OpenSceneGraph-python.cpp is the one file that binds directly onto several different
 # py::module_ variables in the same source (the root module `m`, plus each submodule it creates)
@@ -420,17 +436,23 @@ def scan_template_binders(text: str) -> dict[str, Symbol]:
 	return templates
 
 
-def scan_text(text: str) -> tuple[list[Symbol], dict[str, str]]:
-	"""Returns (top_level_symbols, owner_by_name). `owner_by_name` records, for each top-level
-	symbol, the C++ identifier its binding call was made on -- meaningless for most files (every
-	chain there is built on the same module variable), but needed for OpenSceneGraph-python.cpp,
-	which binds directly onto several different py::module_ variables in one file."""
+def scan_text(text: str) -> tuple[list[Symbol], dict[str, str], dict[str, tuple[str, str]]]:
+	"""Returns (top_level_symbols, owner_by_name, submodule_by_var). `owner_by_name` records, for
+	each top-level symbol, the C++ identifier its binding call was made on -- meaningless for most
+	files (every chain there is built on the same module variable), but needed for
+	OpenSceneGraph-python.cpp, which binds directly onto several different py::module_ variables in
+	one file. `submodule_by_var` records, for each local `auto VAR = OTHER.def_submodule("name",
+	...)`, the (OTHER, "name") it was declared with -- see SUBMODULE_DECL_RE."""
 
 	text = strip_comments(text)
 	symbols: list[Symbol] = []
 	owners: dict[str, str] = {}
+	submodules: dict[str, tuple[str, str]] = {}
 	var_to_symbol: dict[str, Symbol] = {}
 	consumed: list[tuple[int, int]] = []
+
+	for m in SUBMODULE_DECL_RE.finditer(text):
+		submodules[m.group(1)] = (m.group(2), m.group(3))
 
 	for decl in DECL_RE.finditer(text):
 		var_name, decl_kind = decl.group(1), decl.group(2)
@@ -439,6 +461,15 @@ def scan_text(text: str) -> tuple[list[Symbol], dict[str, str]]:
 
 		if paren_open == -1:
 			continue
+
+		# Direct-initialization idiom (osgx's own style): `> varname(m, "Name")`, with no `auto
+		# varname =` prefix for DECL_RE to have captured. Whatever sits between the declaration's
+		# closing '>' and its constructor call's opening '(' is that variable name, if anything.
+		if var_name is None:
+			direct_init = re.match(r"\s*(\w+)\s*$", text[angle_close:paren_open])
+
+			if direct_init:
+				var_name = direct_init.group(1)
 
 		paren_close = find_matching(text, paren_open, "(", ")", skip_strings=True)
 		chain_end = find_chain_end(text, paren_close)
@@ -598,7 +629,7 @@ def scan_text(text: str) -> tuple[list[Symbol], dict[str, str]]:
 		symbols.append(symbol)
 		owners[exposed_name] = first_identifier(call_args) or ""
 
-	return symbols, owners
+	return symbols, owners, submodules
 
 
 # ------------------------------------------------------------------------------------------------
@@ -730,11 +761,35 @@ def render_symbol(
 		render_symbol(lines, child_base, child, depth + 1, stats, checklist_only)
 
 
+def resolve_submodule_chain(owner_var: str, submodules: dict[str, tuple[str, str]]) -> list[str]:
+	"""Walks `owner_var` back through consecutive local `def_submodule()` declarations (see
+	SUBMODULE_DECL_RE) to the first ancestor that ISN'T itself one -- that ancestor is assumed to
+	be whatever the caller already resolved as the group's own base module. Returns the chain of
+	submodule names to `getattr()` through, in parent-to-child order (usually just one name; a
+	multi-level chain isn't exercised by any file today but falls out of the same walk)."""
+
+	names: list[str] = []
+	var = owner_var
+	seen: set[str] = set()
+
+	while var in submodules and var not in seen:
+		seen.add(var)
+		parent_var, name = submodules[var]
+		names.append(name)
+		var = parent_var
+
+	names.reverse()
+
+	return names
+
+
 def render_group(
 	heading: str,
 	symbols: list[Symbol],
 	owners: dict[str, str],
+	submodules: dict[str, tuple[str, str]],
 	native,
+	module: str,
 	checklist_only: bool
 ) -> tuple[list[str], tuple[int, int]]:
 	lines: list[str] = []
@@ -752,6 +807,25 @@ def render_group(
 		else:
 			base = getattr(native, heading.split("/", 1)[0], None)
 
+			# "<module>-topic.cpp" naming (osgx et al.) with most groups bound flat onto the
+			# module's own top level rather than a real "topic" submodule -- try the stripped
+			# topic name as a submodule first, otherwise the group's symbols live on `native`
+			# itself. Gated on the "<module>-" prefix so OpenSceneGraph.py's own headings (none
+			# of which start with "OpenSceneGraph-") never take this path -- unchanged behavior.
+			if base is None and heading.startswith(f"{module}-"):
+				candidate = getattr(native, heading[len(module) + 1:], None)
+
+				base = candidate if inspect.ismodule(candidate) else native
+
+			# A symbol bound on a submodule the file created for itself via def_submodule() (e.g.
+			# osgx-gltf.cpp's `m_gltf_pbribl`) lives one or more attribute levels deeper than
+			# `base` -- walk the chain SUBMODULE_DECL_RE recorded rather than reporting it missing.
+			for part in resolve_submodule_chain(owners.get(symbol.name, ""), submodules):
+				if base is None:
+					break
+
+				base = getattr(base, part, None)
+
 		render_symbol(lines, base, symbol, 0, stats, checklist_only)
 
 	return lines, (stats[0], stats[1])
@@ -759,9 +833,19 @@ def render_group(
 
 # ------------------------------------------------------------------------------------------------
 
-def find_default_build_dir() -> Path | None:
+def _module_available(build_dir: Path, module: str) -> bool:
+	"""True if `module` looks importable from build_dir -- either a real package directory
+	(OpenSceneGraph/__init__.py) or a single compiled extension module (osgx.cpython-*.so)."""
+
+	if (build_dir / module / "__init__.py").exists():
+		return True
+
+	return any(build_dir.glob(f"{module}.*.so")) or any(build_dir.glob(f"{module}.pyd"))
+
+
+def find_default_build_dir(module: str) -> Path | None:
 	for candidate in sorted(REPO_ROOT.glob("BUILD-*"), reverse=True):
-		if (candidate / "OpenSceneGraph" / "__init__.py").exists():
+		if _module_available(candidate, module):
 			return candidate
 
 	return None
@@ -774,34 +858,40 @@ def main() -> None:
 	parser.add_argument("--build-dir", type=Path, default=None)
 	parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
 	parser.add_argument(
+		"--module", default="OpenSceneGraph",
+		help="Top-level module to import and check docstrings against (default: OpenSceneGraph)."
+	)
+	parser.add_argument(
 		"--checklist-only", action="store_true",
 		help="Drop entries that never get a checkbox (enum VALUES, raw constants) -- an enum's "
 		"own type entry stays, only its members are dropped."
 	)
 
 	args = parser.parse_args()
-	build_dir = args.build_dir or find_default_build_dir()
+	build_dir = args.build_dir or find_default_build_dir(args.module)
 
 	if build_dir is None:
 		raise SystemExit(
-			"No BUILD-*/OpenSceneGraph/ found under the repo root -- pass --build-dir explicitly."
+			f"No BUILD-*/{args.module} found under the repo root -- pass --build-dir explicitly."
 		)
 
 	sys.path.insert(0, str(build_dir))
 
-	import OpenSceneGraph as native  # local import: only importable once sys.path is set up
+	native = importlib.import_module(args.module)  # only importable once sys.path is set up
 
 	groups = discover_groups(args.source_dir)
 	rendered: list[tuple[str, list[str], tuple[int, int]]] = []
 
 	for heading, paths in sorted(groups.items()):
 		text = "\n".join(path.read_text() for path in paths)
-		symbols, owners = scan_text(text)
+		symbols, owners, submodules = scan_text(text)
 
 		if not symbols:
 			continue
 
-		lines, stats = render_group(heading, symbols, owners, native, args.checklist_only)
+		lines, stats = render_group(
+			heading, symbols, owners, submodules, native, args.module, args.checklist_only
+		)
 
 		rendered.append((heading, lines, stats))
 
