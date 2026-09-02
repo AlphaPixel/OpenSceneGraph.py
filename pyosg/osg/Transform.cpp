@@ -27,6 +27,21 @@ namespace pybind11x {
 		if(kwargs.contains("scale")) self.setScale(kwargs["scale"].cast<osg::Vec3d>());
 		if(kwargs.contains("pivotPoint")) self.setPivotPoint(kwargs["pivotPoint"].cast<osg::Vec3d>());
 	}
+
+	template<>
+	void kwargs_init_own(osg::AutoTransform& self, const py::kwargs& kwargs) {
+		// Same Vec3d-explicit reasoning as PositionAttitudeTransform above: position/scale/
+		// pivotPoint all getter/setter as Vec3d, not the Vec3f-aliased osg::Vec3.
+		if(kwargs.contains("position")) self.setPosition(kwargs["position"].cast<osg::Vec3d>());
+		if(kwargs.contains("scale")) self.setScale(kwargs["scale"].cast<osg::Vec3d>());
+		if(kwargs.contains("pivotPoint")) self.setPivotPoint(kwargs["pivotPoint"].cast<osg::Vec3d>());
+		if(kwargs.contains("autoRotateMode")) self.setAutoRotateMode(
+			kwargs["autoRotateMode"].cast<osg::AutoTransform::AutoRotateMode>()
+		);
+		if(kwargs.contains("autoScaleToScreen")) self.setAutoScaleToScreen(
+			kwargs["autoScaleToScreen"].cast<bool>()
+		);
+	}
 }
 
 namespace pyosg {
@@ -151,6 +166,115 @@ void bind_Transform(py::module_& m) {
 			py::return_value_policy::reference_internal,
 			"Return this Transform as a PositionAttitudeTransform if it is one, else None."
 		)
+		.def(
+			"asAutoTransform",
+			py::overload_cast<>(&osg::Transform::asAutoTransform),
+			py::return_value_policy::reference_internal,
+			"Return this Transform as an AutoTransform if it is one, else None."
+		)
+	;
+
+	auto autoTransform = py::class_<
+		osg::AutoTransform,
+		osg::Transform,
+		osg::ref_ptr<osg::AutoTransform>
+	>(m, "AutoTransform",
+		"A Transform that automatically scales and/or rotates each frame to keep its children "
+		"aligned with screen coordinates -- e.g. billboards, or text/HUD geometry that should "
+		"stay a constant pixel size regardless of camera distance."
+	)
+		.def(py::init<>(), "Create an AutoTransform at the identity, with auto-scale/rotate off.")
+		.def(py::init<const osg::AutoTransform&>(), "Create a shallow copy of another AutoTransform.")
+		.def(py::init(pyx::kwargs_ctor<osg::AutoTransform>()),
+			"Create an AutoTransform, optionally setting position/scale/pivotPoint/"
+			"autoRotateMode/autoScaleToScreen via keyword arguments."
+		)
+		.def_property(
+			"position",
+			&osg::AutoTransform::getPosition,
+			&osg::AutoTransform::setPosition,
+			"World-space (or parent-relative, under RELATIVE_RF) translation, as a Vec3d."
+		)
+		// TODO: Implement `osg::Quat` wrapper! (see PositionAttitudeTransform.attitude's same TODO)
+		/* .def_property(
+			"rotation",
+			&osg::AutoTransform::getRotation,
+			&osg::AutoTransform::setRotation
+		) */
+		.def_property(
+			"scale",
+			&osg::AutoTransform::getScale,
+			py::overload_cast<const osg::Vec3d&>(&osg::AutoTransform::setScale),
+			"Per-axis scale factor applied about pivotPoint, as a Vec3d. Recomputed automatically "
+			"each frame while autoScaleToScreen is True."
+		)
+		.def_property(
+			"minimumScale",
+			&osg::AutoTransform::getMinimumScale,
+			&osg::AutoTransform::setMinimumScale,
+			"Lower clamp on the auto-computed scale."
+		)
+		.def_property(
+			"maximumScale",
+			&osg::AutoTransform::getMaximumScale,
+			&osg::AutoTransform::setMaximumScale,
+			"Upper clamp on the auto-computed scale."
+		)
+		.def_property(
+			"pivotPoint",
+			&osg::AutoTransform::getPivotPoint,
+			&osg::AutoTransform::setPivotPoint,
+			"Point (in the node's own local space) that scale and rotation are applied about, "
+			"as a Vec3d."
+		)
+		.def_property(
+			"autoUpdateEyeMovementTolerance",
+			&osg::AutoTransform::getAutoUpdateEyeMovementTolerance,
+			&osg::AutoTransform::setAutoUpdateEyeMovementTolerance,
+			"Eye-movement threshold below which the cached transform is reused instead of "
+			"recomputed; 0 recomputes every frame."
+		)
+		.def_property(
+			"autoRotateMode",
+			&osg::AutoTransform::getAutoRotateMode,
+			&osg::AutoTransform::setAutoRotateMode,
+			"Whether/how this node rotates to face the screen, camera, or a fixed axis."
+		)
+		.def_property(
+			"axis",
+			&osg::AutoTransform::getAxis,
+			&osg::AutoTransform::setAxis,
+			"Rotation axis used when autoRotateMode == ROTATE_TO_AXIS."
+		)
+		.def_property(
+			"normal",
+			&osg::AutoTransform::getNormal,
+			&osg::AutoTransform::setNormal,
+			"Front-face direction of the child nodes when unrotated."
+		)
+		.def_property(
+			"autoScaleToScreen",
+			&osg::AutoTransform::getAutoScaleToScreen,
+			&osg::AutoTransform::setAutoScaleToScreen,
+			"When True, scale is recomputed each frame to keep children a constant pixel size."
+		)
+		.def_property(
+			"autoScaleTransitionWidthRatio",
+			&osg::AutoTransform::getAutoScaleTransitionWidthRatio,
+			&osg::AutoTransform::setAutoScaleTransitionWidthRatio,
+			"Width (as a ratio of the minimum/maximum scale transition) over which scale clamping "
+			"is smoothed rather than hard-clamped."
+		)
+	;
+
+	py::enum_<osg::AutoTransform::AutoRotateMode>(autoTransform, "AutoRotateMode",
+		"Selects how an AutoTransform rotates its children to face the viewer."
+	)
+		.value("NO_ROTATION", osg::AutoTransform::NO_ROTATION)
+		.value("ROTATE_TO_SCREEN", osg::AutoTransform::ROTATE_TO_SCREEN)
+		.value("ROTATE_TO_CAMERA", osg::AutoTransform::ROTATE_TO_CAMERA)
+		.value("ROTATE_TO_AXIS", osg::AutoTransform::ROTATE_TO_AXIS)
+		.export_values()
 	;
 
 	m

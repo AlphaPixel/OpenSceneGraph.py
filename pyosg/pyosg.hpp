@@ -90,6 +90,7 @@ namespace osg {
 	class Transform;
 	class MatrixTransform;
 	class PositionAttitudeTransform;
+	class AutoTransform;
 	class Camera;
 	class Texture;
 	class Texture2D;
@@ -120,6 +121,7 @@ namespace pybind11x {
 	template<> struct kwargs_base<osg::Transform> { using type = osg::Group; };
 	template<> struct kwargs_base<osg::MatrixTransform> { using type = osg::Transform; };
 	template<> struct kwargs_base<osg::PositionAttitudeTransform> { using type = osg::Transform; };
+	template<> struct kwargs_base<osg::AutoTransform> { using type = osg::Transform; };
 	template<> struct kwargs_base<osg::Camera> { using type = osg::Transform; };
 	template<> struct kwargs_base<osg::Texture> { using type = osg::StateAttribute; };
 	template<> struct kwargs_base<osg::Texture2D> { using type = osg::Texture; };
@@ -134,6 +136,7 @@ namespace pybind11x {
 	template<> void kwargs_init_own(osg::Transform& self, const py::kwargs& kwargs);
 	template<> void kwargs_init_own(osg::MatrixTransform& self, const py::kwargs& kwargs);
 	template<> void kwargs_init_own(osg::PositionAttitudeTransform& self, const py::kwargs& kwargs);
+	template<> void kwargs_init_own(osg::AutoTransform& self, const py::kwargs& kwargs);
 	template<> void kwargs_init_own(osg::Camera& self, const py::kwargs& kwargs);
 	template<> void kwargs_init_own(osg::Texture& self, const py::kwargs& kwargs);
 	template<> void kwargs_init_own(osg::Texture2D& self, const py::kwargs& kwargs);

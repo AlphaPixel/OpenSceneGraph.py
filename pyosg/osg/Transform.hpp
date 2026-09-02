@@ -4,6 +4,7 @@
 
 OSGX_DISABLE_WARNINGS
 
+#include <osg/AutoTransform>
 #include <osg/MatrixTransform>
 #include <osg/PositionAttitudeTransform>
 
