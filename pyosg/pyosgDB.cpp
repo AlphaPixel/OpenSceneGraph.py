@@ -234,14 +234,20 @@ void bind(py::module_& m) {
 		"Write an OSG object (e.g. osg.TextureCubeMap) to the specified filename"
 	);
 
-	// m.def("readNodeFile", py::overload_cast<const std::string&>(&osgDB::readNodeFile));
+	m.def(
+		"readNodeFile", [](const std::string& filename, const osgDB::Options* options) {
+			auto* node = osgDB::readNodeFile(filename, options);
 
-	/* m.def(
-		"readNodeFile",
-		py::overload_cast<const std::string&, const osgDB::Options*>(&osgDB::readNodeFile),
+			if(!node) pyosg::detail::file_not_found(filename);
+
+			return node;
+		},
 		"filename"_a,
-		"options"_a
-	); */
+		"options"_a,
+		"Read an OSG node from a file, honoring plugin-specific `options` "
+		"(e.g. `options.optionString = \"gltfStripPNGColorMetadata\"`), and return it as an "
+		"osg.Node"
+	);
 }
 
 }
