@@ -30,9 +30,12 @@ def _load_module(name):
 
 		import OpenSceneGraph.examples as _examples
 
+		# pyosg_* are shared helper modules (pyosg_example, pyosg_visitor, pyosg_repl,
+		# pyosg_dice), not runnable examples -- they have no build_scene() and were never meant
+		# to appear here, same reason a leading "_" is already excluded.
 		available = sorted(
 			mod.name for mod in pkgutil.iter_modules(_examples.__path__)
-			if not mod.name.startswith("_")
+			if not mod.name.startswith("_") and not mod.name.startswith("pyosg_")
 		)
 
 		sys.exit(f"error: no such example: {name!r} (available: {', '.join(available)})")

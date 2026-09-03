@@ -134,6 +134,12 @@ HALF_H = GRID_ROWS / 2.0
 # shader-side `margin`/`inMargin` fraction the SECOND REVISION used (see docstring above).
 PANEL_GAP = 0.03
 
+# Pixel width of the docked ImGui panel (see configure_viewer()) -- carved OUT of whatever window
+# width the viewer actually has, not added on top of it, so this works identically whether the
+# window came from this file's own __main__ or the shared runner's --width/--height (which knows
+# nothing about this file's ImGui panel and can't be asked to grow the window for it).
+PANEL_WIDTH = 280
+
 # Full 1x1 world-space cell for a given noiseID, WITHOUT the PANEL_GAP inset -- build_scene()
 # insets this itself for the quad's actual vertices; inspect mode (see __main__) uses the
 # un-inset cell directly so the zoomed-in view fills the frame edge-to-edge instead of showing
@@ -871,33 +877,35 @@ WORLEY_PARAMS = [
 # etc/pyside6-glsl.py both import and call this directly, always as build_scene(w, h) -- w/h are
 # kept as parameters to match that contract even though the body no longer uses them (the noise
 # domain is world-space now, not screen-resolution-dependent; see FRAGMENT_SHADER_NOISE/
-# VERTEX_SHADER). Picking/ImGui are viewer-level concerns and live only in __main__ (see this
-# file's own "ARCHITECTURE, THIRD REVISION" docstring section) -- this function returns a Group
-# of 24 plain Geodes (children[i] == noiseID i, pickID i + 1), each carrying its own
-# noiseID/tint/pickID uniforms on top of the ONE shared Program.
+# VERTEX_SHADER). Picking is set up here too (see below), but ImGui/camera/manipulator are
+# viewer-level concerns and live only in configure_viewer() (see this file's own "ARCHITECTURE,
+# THIRD REVISION" docstring section) -- same build_scene()/configure_viewer() split as
+# pyosg-picking.py. Returns a Group of [pick_cam, grid]; grid is 24 plain Geodes (children[i] ==
+# noiseID i, pickID i + 1), each carrying its own noiseID/tint/pickID uniforms on top of the ONE
+# shared Program.
 def build_scene(w, h):
 	program = osg.Program(name="pyosg-noise", shaders=(
 		osg.Shader(osg.Shader.VERTEX, VERTEX_SHADER),
 		osg.Shader(osg.Shader.FRAGMENT, FRAGMENT_SHADER_NOISE),
 	))
 
-	root = osg.Group(name="pyosg-noise-grid")
+	grid = osg.Group(name="pyosg-noise-grid")
 
-	root.stateSet.attributes.append(program)
-	root.stateSet.uniforms["u_time"] = 0.0
+	grid.stateSet.attributes.append(program)
+	grid.stateSet.uniforms["u_time"] = 0.0
 
-	# Global/per-noise panel defaults -- set here, not just in __main__'s ImGui wiring, so this
-	# shader renders correctly standalone (../pyosg-cli, etc/pyside6-glsl.py both call
+	# Global/per-noise panel defaults -- set here, not just in configure_viewer()'s ImGui wiring,
+	# so this shader renders correctly standalone (../pyosg-cli, etc/pyside6-glsl.py both call
 	# build_scene(w, h) directly with no ImGui panel attached at all). See GLOBAL_DEFAULTS/
-	# WAVELET_DEFAULTS above -- shared with the Reset buttons in __main__.
+	# WAVELET_DEFAULTS above -- shared with the Reset buttons in configure_viewer().
 	for _name, _value in GLOBAL_DEFAULTS.items():
-		root.stateSet.uniforms[_name] = _value
+		grid.stateSet.uniforms[_name] = _value
 
 	for _name, _value in WAVELET_DEFAULTS.items():
-		root.stateSet.uniforms[_name] = _value
+		grid.stateSet.uniforms[_name] = _value
 
 	for _name, _value in WORLEY_DEFAULTS.items():
-		root.stateSet.uniforms[_name] = _value
+		grid.stateSet.uniforms[_name] = _value
 
 	for noise_id, name in enumerate(LEGEND):
 		x0, y0, x1, y1 = cell_bounds(noise_id)
@@ -929,51 +937,56 @@ def build_scene(w, h):
 
 		ss.uniforms.extend((pick_id,))
 
-		root.children.append(geode)
+		grid.children.append(geode)
 
-	return root
+	# Picking: same 1x1 continuous sub-frustum shape as pyosg-hover.py, so hover tinting is
+	# always-on at zero per-frame GPU cost; PickHandler(rb, True) (configure_viewer()) additionally
+	# lets a left-click resolve against whatever's currently hovered (see osgx/Picking.hpp's
+	# PickHandler doc). w/h here are the pixel dimensions of the 3D viewport specifically -- the
+	# PANEL_WIDTH-wide ImGui dock is carved OUT of whatever window size the caller passes (see
+	# PANEL_WIDTH above), so it's excluded here too, matching the viewport configure_viewer()
+	# actually sets up. rb is stashed as pick_cam's updateCallback purely so configure_viewer()
+	# can recover it back out of the returned root -- build_scene()'s contract is "return a Node",
+	# no second channel to hand back a plain Python object it also needs later (same convention as
+	# pyosg-picking.py's build_scene()).
+	pick_w = max(w - PANEL_WIDTH, 1)
 
-if __name__ == "__main__":
-	W, H = 800, 600
-
-	# The ImGui panel sits in a dead strip the 3D camera's viewport never covers, instead of
-	# overlapping the grid -- see the viewport setup below. Window is grown by this much so W x H
-	# stays the grid's actual on-screen size either way. Kept equal to gui_opts.dock_width below.
-	PANEL_WIDTH = 280
-
-	print(f"pyosg-noise: 6 columns x 4 rows, row-major from the bottom-left:")
-
-	for name in LEGEND:
-		print(f"  {name}")
-
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
-
-	os.environ["OSG_WINDOW"] = f"50 50 {W + PANEL_WIDTH} {H}"
-
-	viewer = osgViewer.Viewer()
-	scene = build_scene(W, H)
-
-	# --- Picking: same 1x1 continuous sub-frustum shape as pyosg-hover.py, so hover tinting is
-	# always-on at zero per-frame GPU cost; PickHandler(rb, True) additionally lets a left-click
-	# resolve against whatever's currently hovered (see osgx/Picking.hpp's PickHandler doc). --- #
 	pick_image = osg.Image()
 
 	pick_image.allocateImage(1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE)
 
 	pick_cam = osgx.makePickCamera(1, 1, pick_image)
 
-	pick_cam.children.append(scene)
+	pick_cam.children.append(grid)
 
 	rb = osgx.PickReadbackSync(
-		1, pick_image, W, H,
+		1, pick_image, pick_w, h,
 		rule=osgx.PickRule.SPIRAL,
 		mode=osgx.PickReadbackSync.Mode.CONTINUOUS,
 	)
 
-	quads = list(scene.children)
+	pick_cam.updateCallback = rb
+
+	root = osg.Group(name="root")
+
+	root.children.append(pick_cam)
+	root.children.append(grid)
+
+	return root
+
+# Everything above is buildable without a Viewer. Picking's live half (PickCameraSync, which
+# needs viewer.camera), the fixed ortho camera/manipulator, ImGui, and the per-frame u_time/
+# inspect-camera update are all viewer-level concerns and configure_viewer()'s job -- same
+# build_scene()/configure_viewer() split as pyosg-picking.py. rb is recovered from pick_cam's
+# updateCallback, which build_scene() stashed it in purely to hand it back out through the
+# returned root (build_scene()'s contract is "return a Node", no second channel).
+def configure_viewer(viewer, root):
+	pick_cam, grid = root.children
+	rb = pick_cam.updateCallback
+	quads = list(grid.children)
 	selected = [0]
 
-	# Master animation toggle -- freezes u_time itself (see the main loop below) instead of
+	# Master animation toggle -- freezes u_time itself (see the update callback below) instead of
 	# gating individual shader effects, so it silences EVERY time-based source at once: the
 	# Global "Animate Speed" domain scroll AND Wavelet's own phase animation (wavelet12_helper
 	# reads u_time directly, independent of Global's u_animSpeed -- freezing u_time is the only
@@ -985,7 +998,7 @@ if __name__ == "__main__":
 	# --- Inspect mode: two states, "grid" (pick_id 0, full 6x4 framing) and "inspect" (a single
 	# panel's cell filling the frame) -- toggled by select() below. No new geometry/camera/shader:
 	# since the master camera's viewMatrix looks straight down -z with no x/y rotation (see
-	# lookAt() above), an asymmetric ortho(l, r, b, t) directly reframes whatever world-space rect
+	# lookAt() below), an asymmetric ortho(l, r, b, t) directly reframes whatever world-space rect
 	# we want, and FRAGMENT_SHADER_NOISE's vPos domain just shows more/less of itself as the
 	# bounds shrink/grow -- same reasoning as this file's own "stay flat" design notes. -- #
 	INSPECT_MARGIN = 0.08
@@ -1010,6 +1023,30 @@ if __name__ == "__main__":
 
 		return tuple(a + (b - a) * t for a, b in zip(view_state["from"], view_state["to"]))
 
+	# Aspect-corrects a world-space (l, r, b, top) rect against the 3D viewport's actual pixel
+	# aspect (vp_aspect, set up below) before it becomes an ortho() matrix -- otherwise every
+	# panel/cell renders stretched by however far the viewport's aspect happens to differ from
+	# the content's (see PANEL_WIDTH's own comment: the viewport is whatever's left after the
+	# ImGui dock, essentially never a clean 1.5:1 or 1:1 match). `cover=False` (grid/overview,
+	# FULL_BOUNDS) grows the shorter axis to add a touch of letterbox margin rather than crop a
+	# column/row off-screen; `cover=True` (a single zoomed-in panel) shrinks the longer axis
+	# instead, cropping a sliver of the panel rather than adding a margin -- see this file's own
+	# aspect-ratio fix history for why: a letterboxed single panel looked worse than a lightly
+	# cropped one, but cropping whole grid columns/rows would be a real regression.
+	def fit_bounds(l, r, b, top, cover):
+		cx = (l + r) * 0.5
+		cy = (b + top) * 0.5
+		w = r - l
+		h = top - b
+		content_aspect = w / h
+
+		if (vp_aspect < content_aspect) != cover:
+			h = w / vp_aspect
+		else:
+			w = h * vp_aspect
+
+		return cx - w * 0.5, cx + w * 0.5, cy - h * 0.5, cy + h * 0.5
+
 	def on_enter(pick_id):
 		quads[pick_id - 1].stateSet.uniforms["tint"] = 1.0
 
@@ -1019,64 +1056,66 @@ if __name__ == "__main__":
 	rb.onEnter = on_enter
 	rb.onLeave = on_leave
 
-	sync = osgx.PickCameraSync(viewer.camera, True, W, H, rb)
-	hover = osgx.PickHoverCallback(rb)
-
-	pick_cam.updateCallback = osgx.NodeCallbacksGroup([sync, hover, rb])
-
-	root = osg.Group(name="root")
-
-	root.children.append(pick_cam)
-	root.children.append(scene)
-
-	viewer.sceneData = root
-	viewer.camera.clearColor = osg.Vec4(0, 0, 0, 1)
-	viewer.eventHandlers.append(osgx.PickHandler(rb, True))
-
 	# Realize BEFORE setting the camera's own view/projection, not after -- confirmed live
 	# (aipython REPL, 2026-08-22) that OSG's Camera::ProjectionResizePolicy machinery latches
 	# its "reference" viewport size the first time realize() establishes a real one. Setting a
 	# custom projection matrix before that point (the mistake this file had) gets its horizontal
 	# extent silently zeroed out on the very next frame() (vertical extent, set via the same
 	# ortho() call, is untouched -- HORIZONTAL is the resize policy's default). Setting it after
-	# realize() is completely stable. No osgGA manipulator either -- there's nothing 3D here to
-	# orbit around, and a manipulator would fight a fixed camera anyway. projectionMatrix itself
-	# is no longer set here -- inspect mode (see view_bounds()/current_bounds() below) owns it
-	# every frame from here on, and the first frame() call still happens after this point, so the
-	# ordering constraint above still holds.
+	# realize() is completely stable. Safe to call again here even under the shared runner, which
+	# already realized the window via setUpViewInWindow() before calling build_scene()/
+	# configure_viewer() -- same pattern pyosg-info.py's configure_viewer() uses. projectionMatrix
+	# itself is no longer set here -- inspect mode (see view_bounds()/current_bounds() below) owns
+	# it every frame from here on, and the first frame() call still happens after this point, so
+	# the ordering constraint above still holds.
 	viewer.realize()
 
-	viewer.camera.viewMatrix = osg.Matrix.lookAt(osg.Vec3(0, 0, 10), osg.Vec3(0, 0, 0), osg.Vec3(0, 1, 0))
+	# No osgGA manipulator -- there's nothing 3D here to orbit around, and a manipulator would
+	# fight the fixed lookAt/ortho camera below. The shared runner (OpenSceneGraph/examples/
+	# __main__.py) unconditionally installs a TrackballManipulator before calling build_scene()/
+	# configure_viewer(), so this MUST be cleared here, not just left unset, or it silently
+	# overwrites viewMatrix every frame -- same fix as pyosg-khronos-viewer.py's --camera handling.
+	viewer.cameraManipulator = None
 
-	# Confine the 3D camera to the WxH strip right of the panel, instead of the whole (W +
-	# PANEL_WIDTH)-wide window -- the panel's own dock sits in the untouched strip to its left,
-	# so the two no longer fight over the same pixels. The noise domain is world-space now (see
+	viewer.camera.viewMatrix = osg.Matrix.lookAt(osg.Vec3(0, 0, 10), osg.Vec3(0, 0, 0), osg.Vec3(0, 1, 0))
+	viewer.camera.clearColor = osg.Vec4(0, 0, 0, 1)
+
+	# Confine the 3D camera to the strip right of the panel, instead of the whole window -- the
+	# panel's own dock sits in the untouched strip to its left, so the two no longer fight over
+	# the same pixels. Derived from the REAL post-realize window size (not a hardcoded literal),
+	# so this works whether the window came from this file's own __main__ or the shared runner's
+	# --width/--height, neither of which know about PANEL_WIDTH (see PANEL_WIDTH's own comment
+	# above) -- must agree with build_scene()'s own pick_w computation, which assumes its w/h
+	# argument IS this window's real eventual size. The noise domain is world-space now (see
 	# VERTEX_SHADER/FRAGMENT_SHADER_NOISE), so it doesn't care where the viewport sits -- but
 	# picking still does: PickHandler's mouse coordinates are window-absolute while
-	# PickCameraSync's sub-frustum math (both set up above) treats them as viewport-local, so
+	# PickCameraSync's sub-frustum math (both set up below) treats them as viewport-local, so
 	# hover/click targeting is currently off by PANEL_WIDTH pixels in X. Not yet fixed.
-	viewer.camera.viewport = osg.Viewport(PANEL_WIDTH, 0, W, H)
+	traits = viewer.camera.graphicsContext.traits
+	pick_w = max(traits.width - PANEL_WIDTH, 1)
+	pick_h = traits.height
+
+	# The 3D viewport's pixel aspect essentially never matches FULL_BOUNDS'/view_bounds()'s
+	# world-space aspect (see the update callback below, which corrects for this every frame) --
+	# fixed here rather than recomputed per-frame since the viewport itself never changes size
+	# after this point (no resize handling in this file).
+	vp_aspect = pick_w / pick_h
+
+	viewer.camera.viewport = osg.Viewport(PANEL_WIDTH, 0, pick_w, pick_h)
 
 	# All 24 quads sit exactly at z=0 -- a perfectly flat, zero-depth scene. OSG's default
 	# COMPUTE_NEAR_FAR_USING_BOUNDING_VOLUME recomputes near/far from the scene bounds every
 	# frame during cull; harmless for this exact flat layout (the computed range still contains
 	# the geometry) but fragile in general for a zero-thickness bounding volume, and needless
-	# work for a camera that never moves. Same fix as
-	# examples/pyosg-lighting/09-ibl-animation.py's own custom camera setup.
+	# work for a camera that never moves.
 	viewer.camera.computeNearFarMode = osg.Camera.DO_NOT_COMPUTE_NEAR_FAR
 
-	# --- ImGui panel: docked left, one CollapsingHeader section per noise type plus a pinned
-	# "Overview" section holding the button that clears the selection. Selecting/deselecting a
-	# panel forces its section open/closed via setSectionOpen() -- see this file's own docstring
-	# for why that needed a small osgx addition rather than SectionOptions.default_open alone. -- #
-	gui_opts = osgx.imgui.Options()
-	gui_opts.dock = osgx.imgui.Dock.LEFT
-	gui_opts.dock_width = float(PANEL_WIDTH)
+	sync = osgx.PickCameraSync(viewer.camera, True, pick_w, pick_h, rb)
+	hover = osgx.PickHoverCallback(rb)
 
-	# No explicit draw_camera -- unlike 11-sketchfab.py, pick_cam renders into its own 1x1 FBO,
-	# never the default framebuffer, so there's no downstream POST_RENDER camera to conflict
-	# with ImGui's own PostDrawCallback on the master camera; the default guess is enough here.
-	gui = osgx.imgui.Widget(viewer, options=gui_opts)
+	pick_cam.updateCallback = osgx.NodeCallbacksGroup([sync, hover, rb])
+
+	viewer.eventHandlers.append(osgx.PickHandler(rb, True))
 
 	def select(pick_id):
 		if pick_id == selected[0]:
@@ -1121,6 +1160,19 @@ if __name__ == "__main__":
 
 	viewer.eventHandlers.append(OverviewShortcut())
 
+	# --- ImGui panel: docked left, one CollapsingHeader section per noise type plus a pinned
+	# "Overview" section holding the button that clears the selection. Selecting/deselecting a
+	# panel forces its section open/closed via setSectionOpen() -- see this file's own docstring
+	# for why that needed a small osgx addition rather than SectionOptions.default_open alone. -- #
+	gui_opts = osgx.imgui.Options()
+	gui_opts.dock = osgx.imgui.Dock.LEFT
+	gui_opts.dock_width = float(PANEL_WIDTH)
+
+	# No explicit draw_camera -- unlike 11-sketchfab.py, pick_cam renders into its own 1x1 FBO,
+	# never the default framebuffer, so there's no downstream POST_RENDER camera to conflict
+	# with ImGui's own PostDrawCallback on the master camera; the default guess is enough here.
+	gui = osgx.imgui.Widget(viewer, options=gui_opts)
+
 	def draw_overview(ri):
 		if selected[0]:
 			osgx.imgui.text(f"Selected: {LEGEND[selected[0] - 1]}")
@@ -1138,7 +1190,7 @@ if __name__ == "__main__":
 
 		if osgx.imgui.button("Reset##global"):
 			for name, value in GLOBAL_DEFAULTS.items():
-				scene.stateSet.uniforms[name] = value
+				grid.stateSet.uniforms[name] = value
 
 	# Forced open every frame (never toggled off) -- this section IS the "Overview" button, so
 	# it has no reason to ever collapse.
@@ -1153,7 +1205,7 @@ if __name__ == "__main__":
 	# that might want their own "Scale"-named control (see osgx.imgui's own section/label
 	# collision gotcha).
 	def draw_global_knobs(ri):
-		uniforms = scene.stateSet.uniforms
+		uniforms = grid.stateSet.uniforms
 
 		changed, value = osgx.imgui.slider_float("Scale##global", uniforms["u_scale"].value, 0.5, 10.0)
 		if changed: uniforms["u_scale"] = value
@@ -1178,10 +1230,10 @@ if __name__ == "__main__":
 
 		osgx.imgui.separator()
 
-		# Master toggle -- freezes u_time in the main loop (see animate_enabled's own comment
-		# above); distinct label from "Animate Speed" below on purpose, not just an ID suffix,
-		# since a checkbox and a slider both meaning slightly different things but both named
-		# bare "Animate" would be genuinely confusing, not just an ID collision risk.
+		# Master toggle -- freezes u_time in the update callback below (see animate_enabled's own
+		# comment above); distinct label from "Animate Speed" below on purpose, not just an ID
+		# suffix, since a checkbox and a slider both meaning slightly different things but both
+		# named bare "Animate" would be genuinely confusing, not just an ID collision risk.
 		changed, value = osgx.imgui.checkbox("Animate", animate_enabled[0])
 		if changed: animate_enabled[0] = value
 
@@ -1205,7 +1257,7 @@ if __name__ == "__main__":
 
 	def make_param_section(defaults, params, scope):
 		def draw(ri):
-			uniforms = scene.stateSet.uniforms
+			uniforms = grid.stateSet.uniforms
 
 			for name, label, lo, hi in params:
 				changed, value = osgx.imgui.slider_float(label, uniforms[name].value, lo, hi)
@@ -1237,25 +1289,53 @@ if __name__ == "__main__":
 
 		gui.addSection(name, draw, osgx.imgui.SectionOptions(default_open=False))
 
-	# elapsed/last_time (a running accumulator), not the original plain `now - t` epoch delta --
-	# accumulating only while animate_enabled[0] is true means u_time genuinely freezes in place
-	# while paused and resumes from exactly where it left off, instead of jumping forward by
-	# however long the pause lasted the moment it's re-enabled.
+	# u_time/inspect-camera per-frame update -- an update callback instead of a Python-side loop
+	# of its own, so this runs correctly under ANY frame-loop driver (the shared runner's generic
+	# `while not viewer.done: viewer.frame()`, this file's own __main__ below, or a future
+	# Qt-embedded host) instead of depending on one of its own -- same "OSG already provides a
+	# per-frame hook" idea as pyosg-fragcoordxyz.py's TimeUpdateCallback. Attached to the master
+	# camera itself (not the scene graph) purely so `node` below IS viewer.camera, letting this
+	# set projectionMatrix directly with no extra viewer reference to close over. elapsed/
+	# last_time is a running accumulator, not a plain `now - t` epoch delta -- accumulating only
+	# while animate_enabled[0] is true means u_time genuinely freezes in place while paused and
+	# resumes from exactly where it left off, instead of jumping forward by however long the
+	# pause lasted the moment it's re-enabled.
 	elapsed = [0.0]
 	last_time = [time.time()]
 
-	while not viewer.done:
+	def update(node, nv):
 		now = time.time()
 		dt = now - last_time[0]
+
 		last_time[0] = now
 
 		if animate_enabled[0]:
 			elapsed[0] += dt
 
-		scene.stateSet.uniforms["u_time"] = float(elapsed[0])
+		grid.stateSet.uniforms["u_time"] = float(elapsed[0])
 
-		l, r, b, top = current_bounds(now)
+		l, r, b, top = fit_bounds(*current_bounds(now), cover=bool(selected[0]))
 
-		viewer.camera.projectionMatrix = osg.Matrix.ortho(l, r, b, top, 0.1, 100.0)
+		node.projectionMatrix = osg.Matrix.ortho(l, r, b, top, 0.1, 100.0)
 
+		return True
+
+	viewer.camera.updateCallback = update
+
+if __name__ == "__main__":
+	print(f"pyosg-noise: 6 columns x 4 rows, row-major from the bottom-left:")
+
+	for name in LEGEND:
+		print(f"  {name}")
+
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
+	viewer = osgViewer.Viewer()
+	root = build_scene(800, 600)
+
+	viewer.sceneData = root
+
+	configure_viewer(viewer, root)
+
+	while not viewer.done:
 		viewer.frame()

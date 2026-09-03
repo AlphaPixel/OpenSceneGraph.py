@@ -13,14 +13,31 @@ set(PYOSG_EXAMPLES_ASSET_DIR ""
 	CACHE PATH "Prepared examples asset directory to include in the wheel"
 )
 
+# PYOSG_OFFICIAL_EXAMPLES is defined once in manifest.cmake (this directory)
+# and shared with the root CMakeLists.txt's dev-tree overlay; see that file for the
+# curated list itself.
+include("${CMAKE_CURRENT_SOURCE_DIR}/manifest.cmake")
+
 # Keep this mapping explicit: the add-on wheel may install only files it owns
 # below the base package's examples directory. In particular, it must never
 # install OpenSceneGraph/__init__.py, OpenSceneGraph/examples/__init__.py, or
 # OpenSceneGraph/examples/__main__.py.
-install(FILES "pyosg-khronos-viewer.py"
-	DESTINATION "OpenSceneGraph/examples"
-	RENAME "khronos_viewer.py"
-)
+foreach(PYOSG_EXAMPLE_ENTRY IN LISTS PYOSG_OFFICIAL_EXAMPLES)
+	string(REPLACE "=" ";" PYOSG_EXAMPLE_ENTRY "${PYOSG_EXAMPLE_ENTRY}")
+	list(GET PYOSG_EXAMPLE_ENTRY 0 PYOSG_EXAMPLE_SRC)
+	list(GET PYOSG_EXAMPLE_ENTRY 1 PYOSG_EXAMPLE_DST)
+
+	# A dst containing "/" (e.g. "lighting/lambert.py") places it in a subpackage --
+	# RENAME only accepts a bare filename, so the subdirectory (if any) goes on
+	# DESTINATION instead.
+	get_filename_component(PYOSG_EXAMPLE_DST_DIR "${PYOSG_EXAMPLE_DST}" DIRECTORY)
+	get_filename_component(PYOSG_EXAMPLE_DST_NAME "${PYOSG_EXAMPLE_DST}" NAME)
+
+	install(FILES "${PYOSG_EXAMPLE_SRC}"
+		DESTINATION "OpenSceneGraph/examples/${PYOSG_EXAMPLE_DST_DIR}"
+		RENAME "${PYOSG_EXAMPLE_DST_NAME}"
+	)
+endforeach()
 
 if(NOT PYOSG_EXAMPLES_ASSET_DIR STREQUAL "")
 	if(NOT IS_DIRECTORY "${PYOSG_EXAMPLES_ASSET_DIR}")

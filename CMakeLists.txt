@@ -41,22 +41,10 @@ set(PYOSG_OSG_PLUGIN_DIR "osgPlugins-3.6.5"
 	CACHE STRING "Private OSG plugin directory for the pinned OpenSceneGraph release"
 )
 
-# A small, curated subset of examples/ that implements the build_scene()/configure_viewer()
-# contract, promoted into the installed OpenSceneGraph.examples package so `pyosg <name>`
-# and `python -m OpenSceneGraph.examples.<name>` work from a pip-installed wheel. Most of
-# examples/ is a development sandbox and deliberately not part of this list; add an entry
-# here once an example implements the contract and is meant to ship. Each entry is
-# "<source file in examples/>=<installed module filename>".
-set(PYOSG_PACKAGED_EXAMPLES
-	"pyosg-blur.py=blur.py"
-	"pyosg-mrt.py=mrt.py"
-	"pyosg-info.py=info.py"
-	# Shared source/example bootstrap helpers belong to the base package, so
-	# optional example distributions can import them without owning package
-	# scaffolding files.
-	"pyosg_example.py=pyosg_example.py"
-	"pyosg_visitor.py=pyosg_visitor.py"
-)
+# PYOSG_CORE_EXAMPLES (base wheel) and PYOSG_OFFICIAL_EXAMPLES (openscenegraph-examples
+# overlay wheel) are defined once in examples/manifest.cmake and included from
+# there by both this file and examples/CMakeLists.txt.
+include("${CMAKE_CURRENT_SOURCE_DIR}/examples/manifest.cmake")
 
 # Keep the first expanded wheel plugin set deliberately small. PNG, JPEG, and
 # TIFF are included because they are essential interchange formats; their
@@ -395,16 +383,24 @@ if(NOT PYOSG_EMBEDDED)
 			)
 		endif()
 
-		# PYOSG_PACKAGED_EXAMPLES above, mirrored here as symlinks so `python -m
-		# OpenSceneGraph.examples.<name>` also works against a dev build, not just an
-		# installed wheel (see the matching install() rules for the wheel side of this).
+		# PYOSG_CORE_EXAMPLES and PYOSG_OFFICIAL_EXAMPLES above, mirrored here as symlinks
+		# so `python -m OpenSceneGraph.examples.<name>` also works against a dev build for
+		# both tiers, not just an installed wheel (see the matching install() rules for the
+		# wheel side of this in this file and examples/CMakeLists.txt). Official-tier
+		# examples are symlinked here for source development even though they are never
+		# installed into the base wheel below.
 		set(PYOSG_BUILD_EXAMPLES_DIR "${PYOSG_BUILD_PACKAGE_DIR}/examples")
 		file(MAKE_DIRECTORY "${PYOSG_BUILD_EXAMPLES_DIR}")
-		foreach(PYOSG_EXAMPLE_ENTRY IN LISTS PYOSG_PACKAGED_EXAMPLES)
+		foreach(PYOSG_EXAMPLE_ENTRY IN LISTS PYOSG_CORE_EXAMPLES PYOSG_OFFICIAL_EXAMPLES)
 			string(REPLACE "=" ";" PYOSG_EXAMPLE_ENTRY "${PYOSG_EXAMPLE_ENTRY}")
 			list(GET PYOSG_EXAMPLE_ENTRY 0 PYOSG_EXAMPLE_SRC)
 			list(GET PYOSG_EXAMPLE_ENTRY 1 PYOSG_EXAMPLE_DST)
 			set(PYOSG_EXAMPLE_DST_PATH "${PYOSG_BUILD_EXAMPLES_DIR}/${PYOSG_EXAMPLE_DST}")
+
+			# A dst containing "/" (e.g. "lighting/lambert.py") places it in a subpackage --
+			# the parent dir needs to exist before the symlink below can land in it.
+			get_filename_component(PYOSG_EXAMPLE_DST_DIR "${PYOSG_EXAMPLE_DST_PATH}" DIRECTORY)
+			file(MAKE_DIRECTORY "${PYOSG_EXAMPLE_DST_DIR}")
 
 			if(EXISTS "${PYOSG_EXAMPLE_DST_PATH}" OR IS_SYMLINK "${PYOSG_EXAMPLE_DST_PATH}")
 				file(REMOVE "${PYOSG_EXAMPLE_DST_PATH}")
@@ -491,20 +487,28 @@ if(NOT PYOSG_EMBEDDED)
 	install(FILES "python/osgx.py" DESTINATION ".")
 
 	# The `OpenSceneGraph.examples` package backing the `pyosg` console script; see
-	# PYOSG_PACKAGED_EXAMPLES above for the curated example list itself.
+	# PYOSG_CORE_EXAMPLES in examples/manifest.cmake for the curated example
+	# list itself. Official-tier examples ship only from examples/CMakeLists.txt's
+	# separate openscenegraph-examples overlay wheel, never from here.
 	install(FILES
 		"python/OpenSceneGraph/examples/__init__.py"
 		"python/OpenSceneGraph/examples/__main__.py"
 		DESTINATION "OpenSceneGraph/examples"
 	)
-	foreach(PYOSG_EXAMPLE_ENTRY IN LISTS PYOSG_PACKAGED_EXAMPLES)
+	foreach(PYOSG_EXAMPLE_ENTRY IN LISTS PYOSG_CORE_EXAMPLES)
 		string(REPLACE "=" ";" PYOSG_EXAMPLE_ENTRY "${PYOSG_EXAMPLE_ENTRY}")
 		list(GET PYOSG_EXAMPLE_ENTRY 0 PYOSG_EXAMPLE_SRC)
 		list(GET PYOSG_EXAMPLE_ENTRY 1 PYOSG_EXAMPLE_DST)
 
+		# A dst containing "/" (e.g. "lighting/lambert.py") places it in a subpackage --
+		# RENAME only accepts a bare filename, so the subdirectory (if any) goes on
+		# DESTINATION instead.
+		get_filename_component(PYOSG_EXAMPLE_DST_DIR "${PYOSG_EXAMPLE_DST}" DIRECTORY)
+		get_filename_component(PYOSG_EXAMPLE_DST_NAME "${PYOSG_EXAMPLE_DST}" NAME)
+
 		install(FILES "examples/${PYOSG_EXAMPLE_SRC}"
-			DESTINATION "OpenSceneGraph/examples"
-			RENAME "${PYOSG_EXAMPLE_DST}"
+			DESTINATION "OpenSceneGraph/examples/${PYOSG_EXAMPLE_DST_DIR}"
+			RENAME "${PYOSG_EXAMPLE_DST_NAME}"
 		)
 	endforeach()
 
