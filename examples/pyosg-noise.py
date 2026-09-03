@@ -8,7 +8,7 @@ interleaved-gradient-noise (IGN), each shown both raw and through a 6-octave fbm
 under its own license -- see the SPDX header inside the shader text itself. Original source
 pasted into examples/pyosg-fragcoordxyz.py's "noise" gallery entry; pulled out into its own file
 because, in context of osgx's whole "reproduce a fine world-space grain/pattern procedurally"
-thread (see pyosg-glsl-lab.py), this is a far more complete reference of exactly that kind of
+thread (see pyosg-material.py's "glitter"/"spots" scenes), this is a far more complete reference of exactly that kind of
 building block than anything hand-rolled during that investigation.
 
 ARCHITECTURE, SECOND REVISION: back to a SINGLE fullscreen quad + one fragment shader picking

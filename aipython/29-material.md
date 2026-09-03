@@ -81,7 +81,7 @@ mesh/primitive. `StateAttribute`s only apply at Drawable granularity. For
 visibly different materials across the faces of one shape, either give each
 face its own small Drawable/Geode, or keep one Drawable and drive the
 variation through a per-vertex attribute feeding a shader-side branch/array
-yourself — `pyosg-glsl-lab.py`'s `GLITTER_MATERIAL_COMBOS` is the working
+yourself — `pyosg-material.py`'s "glitter" scene's `GLITTER_MATERIAL_COMBOS` is the working
 example of the second approach, and deliberately hand-rolls its own
 `osgx_Material` struct from vertex data rather than using
 `osgx.Material`.
