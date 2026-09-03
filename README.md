@@ -207,7 +207,7 @@ loop.
 In preparation for release, we built a 12-part lighting series that walks
 from a bare Lambert diffuse term all the way up to a full deferred PBR + IBL
 pipeline with a Sketchfab-parity post-processing chain. Each step is a
-complete, runnable example in [`examples/pyosg-lighting`](examples/pyosg-lighting)
+complete, runnable example in [`examples/lighting`](examples/lighting)
 that builds directly on the one before it.
 
 > [!NOTE]
@@ -229,7 +229,7 @@ that builds directly on the one before it.
 </td>
 <td>
 
-**00 - Lambert Diffuse** &middot; [`00-lambert.py`](examples/pyosg-lighting/00-lambert.py)
+**00 - Lambert Diffuse** &middot; [`00-lambert.py`](examples/lighting/00-lambert.py)
 
 The simplest physically-motivated lighting model: brightness depends only on
 the angle between the surface normal and the light direction. There is
@@ -247,7 +247,7 @@ baseline every later step improves on.
 </td>
 <td>
 
-**01 - Blinn-Phong** &middot; [`01-blinnphong.py`](examples/pyosg-lighting/01-blinnphong.py)
+**01 - Blinn-Phong** &middot; [`01-blinnphong.py`](examples/lighting/01-blinnphong.py)
 
 Three additions on top of Lambert: a constant ambient lift so the dark side
 is never pitch-black, specular highlights via the halfway vector `H =
@@ -265,7 +265,7 @@ fragment shader so `V` can be computed per-fragment.
 </td>
 <td>
 
-**02 - Multiple Point Lights** &middot; [`02-multilights.py`](examples/pyosg-lighting/02-multilights.py)
+**02 - Multiple Point Lights** &middot; [`02-multilights.py`](examples/lighting/02-multilights.py)
 
 Directional lighting gives way to positional point lights with real
 inverse-square attenuation, arranged in a classic three-point cinematography
@@ -282,7 +282,7 @@ setup (key, fill, rim).
 </td>
 <td>
 
-**03 - Hemispherical Ambient** &middot; [`03-hemiambient.py`](examples/pyosg-lighting/03-hemiambient.py)
+**03 - Hemispherical Ambient** &middot; [`03-hemiambient.py`](examples/lighting/03-hemiambient.py)
 
 The flat ambient constant is replaced with a two-color hemispherical ambient
 term, lerped by `dot(N, worldUp)`. One extra dot product, no textures, and
@@ -300,7 +300,7 @@ void.
 </td>
 <td>
 
-**04 - Base Color Texture** &middot; [`04-basecolor.py`](examples/pyosg-lighting/04-basecolor.py)
+**04 - Base Color Texture** &middot; [`04-basecolor.py`](examples/lighting/04-basecolor.py)
 
 The flat `albedo` uniform is swapped for the model's actual glTF base color
 texture, sampled with UVs carried through from `osg_MultiTexCoord0`.
@@ -316,7 +316,7 @@ texture, sampled with UVs carried through from `osg_MultiTexCoord0`.
 </td>
 <td>
 
-**05 - Normal Mapping** &middot; [`05-normalmapping.py`](examples/pyosg-lighting/05-normalmapping.py)
+**05 - Normal Mapping** &middot; [`05-normalmapping.py`](examples/lighting/05-normalmapping.py)
 
 The smooth per-vertex geometric normal is replaced with a per-texel normal
 sampled from a tangent-space normal map, reconstructed in eye space via a
@@ -333,7 +333,7 @@ TBN matrix built from glTF's `VEC4` tangent attribute.
 </td>
 <td>
 
-**06 - Physically Based Rendering** &middot; [`06-pbr.py`](examples/pyosg-lighting/06-pbr.py)
+**06 - Physically Based Rendering** &middot; [`06-pbr.py`](examples/lighting/06-pbr.py)
 
 Blinn-Phong is replaced with the Cook-Torrance BRDF and a full
 metallic/roughness workflow driven by the ORM texture: GGX normal
@@ -351,7 +351,7 @@ metallic/dielectric split.
 </td>
 <td>
 
-**07 - Emissive** &middot; [`07-emissive.py`](examples/pyosg-lighting/07-emissive.py)
+**07 - Emissive** &middot; [`07-emissive.py`](examples/lighting/07-emissive.py)
 
 The simplest step in the series: one texture sample, added unconditionally
 *after* all lighting, unmultiplied by any light contribution; for surfaces
@@ -368,7 +368,7 @@ that generate their own light, like LEDs or hot metal.
 </td>
 <td>
 
-**08 - Shadow Mapping** &middot; [`08-shadows.py`](examples/pyosg-lighting/08-shadows.py)
+**08 - Shadow Mapping** &middot; [`08-shadows.py`](examples/lighting/08-shadows.py)
 
 A `PRE_RENDER` shadow camera renders the scene from the key light's point of
 view into a depth texture; the main pass transforms each fragment into
@@ -386,7 +386,7 @@ to step 07; only `shadowFactor()` is new.
 </td>
 <td>
 
-**09 - Image-Based Lighting** &middot; [`09-ibl.py`](examples/pyosg-lighting/09-ibl.py)
+**09 - Image-Based Lighting** &middot; [`09-ibl.py`](examples/lighting/09-ibl.py)
 
 Adds image-based lighting from a pre-baked GGX-prefiltered cubemap (loaded
 via the `osgdb_ktx2` plugin), a startup-baked BRDF LUT, and asynchronously
@@ -403,7 +403,7 @@ computed spherical-harmonics diffuse irradiance from an HDR environment.
 </td>
 <td>
 
-**10 - Dynamic IBL Probes** &middot; [`10-dynamicprobes.py`](examples/pyosg-lighting/10-dynamicprobes.py)
+**10 - Dynamic IBL Probes** &middot; [`10-dynamicprobes.py`](examples/lighting/10-dynamicprobes.py)
 
 Instead of loading a static `.ktx2` once, the specular environment cubemap
 is baked *live* on the GPU using `osgx`'s C++ prefilter pipeline exposed
@@ -421,7 +421,7 @@ reflection rebake in real time.
 </td>
 <td>
 
-**11 - Sketchfab-Parity Capstone** &middot; [`11-sketchfab.py`](examples/pyosg-lighting/11-sketchfab.py)
+**11 - Sketchfab-Parity Capstone** &middot; [`11-sketchfab.py`](examples/lighting/11-sketchfab.py)
 
 The capstone: a deferred G-buffer + composite architecture (PBR + IBL +
 shadows) inspired by Sketchfab's post-processing chain: SSAO, bloom,

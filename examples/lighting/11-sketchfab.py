@@ -41,29 +41,25 @@
 # overlay (always on top).
 
 import sys
-import os
 import math
 import argparse
-import asyncio
 import pathlib
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 1169 768",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6",
-})
+# examples/lighting/ sits one level below examples/ itself, where pyosg_example.py lives --
+# unlike every flat examples/pyosg-*.py file (whose own directory IS examples/, so Python's
+# automatic sys.path[0] already covers them), a standalone run of this file needs examples/
+# added explicitly. Same fix pyosg-cli's own EXAMPLES_DIR insertion applies for pyosg_visitor.py.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
+# example -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
 import osgx
-
-W, H = 1169, 768
-
-THIS_DIR = pathlib.Path(__file__).resolve().parent
-DATA_DIR = THIS_DIR / "data"
 
 # Initial light direction only -- interactively draggable from here via the "Light Direction"
 # ImGui section (LightOrbit below), unlike 08/09/10's fixed key light.
@@ -83,18 +79,12 @@ def resolve_model(value):
 		path.stem, ("glTF-Sample-Assets/Models/{}/glTF/{}.gltf",)
 	) or None
 
-# HDR/manifest assets for this step live locally in pyosg-lighting/data/ -- checked first, falling
-# back to osgx.findDataFile() for anything found via OSG_FILE_PATH instead.
+# HDR/manifest assets resolve via osgx.findDataFile() (OSG_FILE_PATH), same as resolve_model().
 def resolve_asset(value, suffix):
 	path = pathlib.Path(value).expanduser()
 
 	if path.is_file():
 		return str(path)
-
-	local = DATA_DIR / f"{value}.{suffix}"
-
-	if local.is_file():
-		return str(local)
 
 	return osgx.findDataFile(value, (), suffix) or None
 
@@ -497,7 +487,7 @@ def make_fullscreen_rtt_pass(textures, output_tex, frag_shader, w, h, name="Post
 
 # Bloom: threshold-extract -> horizontal blur -> vertical blur. Single-scale two-pass blur, not a
 # downsample/upsample mip pyramid -- the sanctioned simplification for a teaching example.
-def create_bloom_cameras(hdr_color_tex, w=W, h=H):
+def create_bloom_cameras(hdr_color_tex, w, h):
 	bright_tex = osg.Texture2D(
 		size=(w, h),
 		internalFormat=GL_RGB16F,
@@ -552,7 +542,7 @@ def create_bloom_cameras(hdr_color_tex, w=W, h=H):
 	return threshold_cam, blur_h_cam, blur_v_cam, blur_b_tex
 
 # Final LDR pass -- draws straight to the window (no renderTargetImplementation set).
-def create_final_camera(hdr_color_tex, bloom_tex, ssao_tex, w=W, h=H):
+def create_final_camera(hdr_color_tex, bloom_tex, ssao_tex, w, h):
 	cam = osg.Camera(
 		referenceFrame=osg.Transform.ABSOLUTE_RF,
 		renderOrder=osg.Camera.POST_RENDER,
@@ -591,7 +581,7 @@ def create_final_camera(hdr_color_tex, bloom_tex, ssao_tex, w=W, h=H):
 	return cam
 
 # Debug blit camera -- only visible when Visualize Mode != 0 (see select_visualize_mode()).
-def create_debug_camera(depth_scale, w=W, h=H):
+def create_debug_camera(depth_scale, w, h):
 	cam = osg.Camera(
 		name="DebugBlit",
 		referenceFrame=osg.Transform.ABSOLUTE_RF,
@@ -801,7 +791,18 @@ class LightOrbit:
 			direction, self.bound_center, self.bound_radius, self.shadow_options
 		)
 
-if __name__ == "__main__":
+# Set by build_scene(), read by configure_viewer() -- args and everything the ImGui panel /
+# per-frame update callback close over (lighting, ssao, shadow_map, ...) aren't retrievable from
+# the returned root, and build_scene() never receives the live viewer (see the placeholder_camera
+# comment below for why one call in the middle of scene construction needs special handling
+# because of that). Same "no other channel exists" reasoning as pyosg-khronos-viewer.py's own
+# _args/_pbr stash.
+_args = None
+_state = None
+
+def build_scene(w, h):
+	global _args, _state
+
 	ap = argparse.ArgumentParser()
 	ap.add_argument("path", nargs="?", default=None)
 
@@ -827,7 +828,9 @@ if __name__ == "__main__":
 		action="store_true",
 		default=False,
 		help="Run the viewer alongside an embedded IPython REPL (see pyosg_repl.py) so "
-			"uniforms/lights/SSAO params can be tweaked live while watching the render window."
+			"uniforms/lights/SSAO params can be tweaked live while watching the render window. "
+			"Only honored by this file's own standalone __main__ block -- the pyosg-cli/"
+			"OpenSceneGraph.examples runners always own the frame loop themselves."
 	)
 	ap.add_argument(
 		"--no-gui",
@@ -849,6 +852,8 @@ if __name__ == "__main__":
 	# unusual local origins.
 	args.floor = args.floor_z is not None or args.floor_size is not None
 
+	_args = args
+
 	# osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
 	path = resolve_model(args.path or "BoomBox")
@@ -858,10 +863,15 @@ if __name__ == "__main__":
 
 	model = osgDB.readNodeFile(path)
 
-	# Created early (before any of the deferred-pipeline cameras below) -- PBRIBLLightingScene.create()
-	# needs a real v.camera to rotate the G-buffer's view-space values into world space, same
-	# reasoning osgx-gbuffer.cpp creates its own viewer this early for.
-	v = osgViewer.Viewer()
+	# PBRIBLLightingScene.create() needs a real osg.Camera* to seed its initial view-matrix
+	# uniforms from -- but build_scene() never receives the live viewer (the runner constructs it
+	# AFTER calling this), unlike the standalone __main__ block's old shape, which built `v` this
+	# early specifically to have one. A throwaway placeholder is enough: PBRIBLLightingScene::create()
+	# (PBRIBL.cpp) only ever READS it, once, via its own update() at the end of construction --
+	# it stores no reference to it. configure_viewer()'s update_per_frame() callback (wired below,
+	# once the real viewer exists) supplies the real camera on every subsequent frame, which is the
+	# only copy that ever actually matters for rendering.
+	placeholder_camera = osg.Camera()
 
 	bound = model.bound
 	bound_center = bound.center
@@ -889,7 +899,7 @@ if __name__ == "__main__":
 		hdr_path = resolve_asset(args.hdr, "hdr")
 
 		if not hdr_path:
-			sys.exit(f"Cannot find HDR {args.hdr!r} -- check pyosg-lighting/data/ or OSG_FILE_PATH")
+			sys.exit(f"Cannot find HDR {args.hdr!r} -- check OSG_FILE_PATH")
 
 		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepare(hdr_path, lutSize=1024)
 
@@ -905,7 +915,7 @@ if __name__ == "__main__":
 		sys.exit("Failed to prepare/load the PBR/IBL environment")
 
 	# --- G-buffer geometry pass -------------------------------------------------- #
-	gbuffer = osgx.gltf.pbribl.PBRIBLGBuffer.create(model, W, H)
+	gbuffer = osgx.gltf.pbribl.PBRIBLGBuffer.create(model, w, h)
 
 	if not gbuffer.valid():
 		sys.exit("Failed to build the G-buffer geometry pass")
@@ -943,13 +953,14 @@ if __name__ == "__main__":
 	# directly -- both already exist once the geometry pass above is built.
 	#
 	# ssao_projection_u is a real osg.Uniform (not a bare matrix) so it can be kept and refreshed
-	# every frame below -- v.camera.projectionMatrix isn't meaningfully established until the
-	# window is actually realized/sized, well after this call, and can change every frame besides
-	# (see osgx.SSAO.create()'s own doc comment).
+	# every frame by configure_viewer()'s update_per_frame() below -- the real viewer.camera's
+	# projectionMatrix isn't meaningfully established until the window is actually realized/sized,
+	# well after this call (and before the real viewer even exists, at this point in build_scene()
+	# itself), and can change every frame besides (see osgx.SSAO.create()'s own doc comment).
 	ssao_projection_u = osg.Uniform("projectionMatrix", osg.Matrixf.identity())
 	ssao_radius = max(0.05, bound_radius * 0.15)
 	ssao = osgx.SSAO.create(
-		gbuffer.normalTexture, gbuffer.positionTexture, ssao_projection_u, W, H, ssao_radius
+		gbuffer.normalTexture, gbuffer.positionTexture, ssao_projection_u, w, h, ssao_radius
 	)
 
 	if not ssao.valid():
@@ -963,7 +974,7 @@ if __name__ == "__main__":
 	lighting_options.aoTexture = ssao.aoTexture
 
 	lighting = osgx.gltf.pbribl.PBRIBLLightingScene.create(
-		gbuffer, environment, v.camera, args.ibl_diffuse, args.ibl_specular, lighting_options
+		gbuffer, environment, placeholder_camera, args.ibl_diffuse, args.ibl_specular, lighting_options
 	)
 
 	if not lighting.valid():
@@ -976,7 +987,7 @@ if __name__ == "__main__":
 	lighting_cam = lighting.node
 
 	hdr_color_tex = osg.Texture2D(
-		size=(W, H),
+		size=(w, h),
 		internalFormat=GL_RGB16F,
 		filter=(osg.Texture.LINEAR, osg.Texture.LINEAR),
 		dataVariance=osg.Object.DYNAMIC,
@@ -984,7 +995,7 @@ if __name__ == "__main__":
 
 	lighting_cam.renderOrder = (osg.Camera.PRE_RENDER, 4)
 	lighting_cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
-	lighting_cam.viewport = osg.Viewport(0, 0, W, H)
+	lighting_cam.viewport = osg.Viewport(0, 0, w, h)
 	lighting_cam.clearMask = GL_COLOR_BUFFER_BIT
 	lighting_cam.attach(osg.Camera.COLOR_BUFFER0, hdr_color_tex)
 
@@ -1005,14 +1016,14 @@ if __name__ == "__main__":
 	) if args.lights else None
 
 	# --- Bloom ----------------------------------------------------------------------------- #
-	bloom_threshold_cam, bloom_blur_h_cam, bloom_blur_v_cam, bloom_blur_b_tex = create_bloom_cameras(hdr_color_tex, W, H)
+	bloom_threshold_cam, bloom_blur_h_cam, bloom_blur_v_cam, bloom_blur_b_tex = create_bloom_cameras(hdr_color_tex, w, h)
 
 	# --- Final LDR pass ---------------------------------------------------------------------- #
 	# ssao.aoTexture is ALREADY the aoTex the lighting pass reads (wired via lighting_options.aoTexture
 	# above, at real PBRIBLLightingScene.create() call time -- no hand-wiring workaround needed
 	# anymore) -- sampled a second time here purely for this pass's own grainAOBoost effect, unrelated
 	# to the lighting pass's own use of it.
-	final_cam = create_final_camera(hdr_color_tex, bloom_blur_b_tex, ssao.aoTexture, W, H)
+	final_cam = create_final_camera(hdr_color_tex, bloom_blur_b_tex, ssao.aoTexture, w, h)
 
 	fc_ss = final_cam.stateSet
 	fc_ss.uniforms["tonemapMode"] = 1 # ACES (Narkowicz) -- preferred over PBR Neutral by eye
@@ -1046,7 +1057,7 @@ if __name__ == "__main__":
 	post_enabled_u = fc_ss.uniforms["postEnabled"]
 
 	# --- Debug blit camera (Visualize Mode) --------------------------------------------------- #
-	debug_cam, debug_channel_mode_u = create_debug_camera(bound_radius * 4.0, W, H)
+	debug_cam, debug_channel_mode_u = create_debug_camera(bound_radius * 4.0, w, h)
 
 	DEBUG_MODES = (
 		# (label, texture-or-None, channelMode)
@@ -1059,10 +1070,12 @@ if __name__ == "__main__":
 		("6: SSAO", ssao.aoTexture, 2),
 	)
 
-	# A single-element list, not a bare variable -- select_visualize_mode()/draw_visualize_mode()
-	# are nested inside the `if __name__ == "__main__":` block, not a real enclosing function, so
-	# `nonlocal` has no scope to bind to here (matches 10-dynamicprobes.py's pending_rebake=[True]
-	# for the same reason).
+	# A single-element list, not a bare variable -- select_visualize_mode() lives in build_scene(),
+	# but draw_visualize_mode() (which reads visualize_mode[0] to render the radio group) lives in
+	# configure_viewer(), a separate top-level function -- `nonlocal` only reaches an ENCLOSING
+	# function's scope, not a sibling's, so a plain int stashed in _state couldn't be reassigned
+	# from configure_viewer() and have build_scene()'s own select_visualize_mode() closure see the
+	# change; a shared mutable container sidesteps that.
 	visualize_mode = [0]
 
 	def select_visualize_mode(mode):
@@ -1103,28 +1116,8 @@ if __name__ == "__main__":
 	if environment.root is not None:
 		root.children.append(environment.root)
 
-	# Combined per-frame update: the lighting pass's view-matrix uniforms (PBRIBLLightingScene.update())
-	# plus SSAO's own forward projection matrix (see ssao_projection_u's own comment -- neither is
-	# meaningfully established until well after the cameras that need them are built). Installed on
-	# whichever camera is the FIRST PRE_RENDER camera in this scene graph (add-order breaks the tie
-	# between shadow_map.camera and gbuffer.gbuffer.camera, both default order 0) -- see
-	# PBRIBLLightingScene.update()'s own comment for why it must NOT be v.camera's own preDrawCallback
-	# or application code after v.frame() returns, both of which hand the lighting pass a
-	# one-frame-stale matrix relative to what the geometry pass just rendered with.
-	def update_per_frame(ri):
-		lighting.update(v.camera)
-
-		ssao_projection_u.value = osg.Matrixf(v.camera.projectionMatrix)
-
 	if shadow_map is not None:
 		root.children.append(shadow_map.camera)
-
-		shadow_map.camera.preDrawCallback = update_per_frame
-
-	else:
-		# No shadow camera to pin to -- gbuffer.gbuffer.camera becomes the first PRE_RENDER
-		# camera instead (--no-lights).
-		gbuffer.gbuffer.camera.preDrawCallback = update_per_frame
 
 	root.children.append(gbuffer.gbuffer.camera)
 	root.children.append(ssao.rawCamera)
@@ -1141,16 +1134,111 @@ if __name__ == "__main__":
 
 	select_visualize_mode(0)
 
-	v.sceneData = root
-	v.cameraManipulator = osgGA.TrackballManipulator()
+	_state = {
+		"model": model,
+		"bound_center": bound_center,
+		"bound_radius": bound_radius,
+		"environment": environment,
+		"gbuffer": gbuffer,
+		"grid_panels": grid_panels,
+		"shadow_map": shadow_map,
+		"shadow_options": shadow_options,
+		"ssao": ssao,
+		"ssao_projection_u": ssao_projection_u,
+		"lighting": lighting,
+		"lights": lights,
+		"light_orbit": light_orbit,
+		"final_cam": final_cam,
+		"debug_cam": debug_cam,
+		"DEBUG_MODES": DEBUG_MODES,
+		"visualize_mode": visualize_mode,
+		"select_visualize_mode": select_visualize_mode,
+		"gizmos": gizmos,
+		"fc_ss": fc_ss,
+		"tonemap_mode_u": tonemap_mode_u,
+		"exposure_u": exposure_u,
+		"bloom_strength_u": bloom_strength_u,
+		"ca_strength_u": ca_strength_u,
+		"sharpen_strength_u": sharpen_strength_u,
+		"vignette_strength_u": vignette_strength_u,
+		"grain_strength_u": grain_strength_u,
+		"grain_size_u": grain_size_u,
+		"grain_animated_u": grain_animated_u,
+		"grain_ao_boost_u": grain_ao_boost_u,
+		"color_lift_u": color_lift_u,
+		"color_gamma_u": color_gamma_u,
+		"color_gain_u": color_gain_u,
+		"post_enabled_u": post_enabled_u,
+	}
+
+	return root
+
+# The live viewer.camera (for update_per_frame()'s per-frame matrix refresh, and the
+# cameraManipulator/ImGui setup below) doesn't exist until the runner constructs it AFTER
+# build_scene() returns -- everything here needs it directly, unlike build_scene()'s own
+# placeholder_camera workaround for PBRIBLLightingScene.create().
+def configure_viewer(viewer, root):
+	args = _args
+	state = _state
+
+	model = state["model"]
+	grid_panels = state["grid_panels"]
+	shadow_map = state["shadow_map"]
+	gbuffer = state["gbuffer"]
+	ssao = state["ssao"]
+	ssao_projection_u = state["ssao_projection_u"]
+	lighting = state["lighting"]
+	light_orbit = state["light_orbit"]
+	final_cam = state["final_cam"]
+	DEBUG_MODES = state["DEBUG_MODES"]
+	visualize_mode = state["visualize_mode"]
+	select_visualize_mode = state["select_visualize_mode"]
+	gizmos = state["gizmos"]
+	tonemap_mode_u = state["tonemap_mode_u"]
+	exposure_u = state["exposure_u"]
+	bloom_strength_u = state["bloom_strength_u"]
+	ca_strength_u = state["ca_strength_u"]
+	sharpen_strength_u = state["sharpen_strength_u"]
+	vignette_strength_u = state["vignette_strength_u"]
+	grain_strength_u = state["grain_strength_u"]
+	grain_size_u = state["grain_size_u"]
+	grain_animated_u = state["grain_animated_u"]
+	grain_ao_boost_u = state["grain_ao_boost_u"]
+	color_lift_u = state["color_lift_u"]
+	color_gamma_u = state["color_gamma_u"]
+	color_gain_u = state["color_gain_u"]
+	post_enabled_u = state["post_enabled_u"]
+
+	# Combined per-frame update: the lighting pass's view-matrix uniforms (PBRIBLLightingScene.update())
+	# plus SSAO's own forward projection matrix (see ssao_projection_u's own comment -- neither is
+	# meaningfully established until well after the cameras that need them are built). Installed on
+	# whichever camera is the FIRST PRE_RENDER camera in this scene graph (add-order breaks the tie
+	# between shadow_map.camera and gbuffer.gbuffer.camera, both default order 0) -- see
+	# PBRIBLLightingScene.update()'s own comment for why it must NOT be viewer.camera's own
+	# preDrawCallback or application code after viewer.frame() returns, both of which hand the
+	# lighting pass a one-frame-stale matrix relative to what the geometry pass just rendered with.
+	def update_per_frame(ri):
+		lighting.update(viewer.camera)
+
+		ssao_projection_u.value = osg.Matrixf(viewer.camera.projectionMatrix)
+
+	if shadow_map is not None:
+		shadow_map.camera.preDrawCallback = update_per_frame
+
+	else:
+		# No shadow camera to pin to -- gbuffer.gbuffer.camera becomes the first PRE_RENDER
+		# camera instead (--no-lights).
+		gbuffer.gbuffer.camera.preDrawCallback = update_per_frame
+
+	viewer.cameraManipulator = osgGA.TrackballManipulator()
 
 	# See osgx-gbuffer.cpp's own comment on View.setCameraManipulator() -- it unconditionally
 	# resets manip.node to getSceneData() before computing the initial home position, so retarget
 	# AFTER attaching the manipulator, not before, or the orbiting RTT/gizmo cameras inflate the
 	# computed home distance.
-	v.cameraManipulator.node = model
-	v.cameraManipulator.home(0.0)
-	v.camera.clearColor = osg.Vec4(48.0 / 255.0, 53.0 / 255.0, 66.0 / 255.0, 1.0)
+	viewer.cameraManipulator.node = model
+	viewer.cameraManipulator.home(0.0)
+	viewer.camera.clearColor = osg.Vec4(48.0 / 255.0, 53.0 / 255.0, 66.0 / 255.0, 1.0)
 
 	# --- ImGui panel: all interactive controls live here -- no keyboard shortcuts. ------------ #
 	if args.gui:
@@ -1159,13 +1247,13 @@ if __name__ == "__main__":
 		gui_opts.dock_width = 320.0
 
 		# gizmos.overlay pinned as the explicit draw camera -- left at the default, Widget draws
-		# via v.camera's own PostDrawCallback, which fires BEFORE any nested POST_RENDER camera
-		# (final_cam, debug_cam, the gizmo overlay -- none are View slaves) actually runs; their
-		# later draw painted straight over the panel. Same fix this session's
+		# via viewer.camera's own PostDrawCallback, which fires BEFORE any nested POST_RENDER
+		# camera (final_cam, debug_cam, the gizmo overlay -- none are View slaves) actually runs;
+		# their later draw painted straight over the panel. Same fix this session's
 		# osgx-shadow.cpp/osgx-gbuffer.cpp needed -- see osgx/ImGui.hpp's Widget constructor
 		# comment for the full rationale. Falls back to final_cam if there's no gizmo (--no-lights).
 		draw_camera = gizmos.overlay if gizmos is not None else final_cam
-		gui = osgx.imgui.Widget(v, draw_camera, gui_opts)
+		gui = osgx.imgui.Widget(viewer, draw_camera, gui_opts)
 		closed_section = osgx.imgui.SectionOptions(default_open=False)
 
 		def draw_visualize_mode(ri):
@@ -1346,20 +1434,30 @@ if __name__ == "__main__":
 
 		gui.addSection("Post FX", draw_post_fx_knobs, closed_section)
 
-		gui.addStatsSection(v)
-		gui.addProfilerSection(v, root, default_open=False)
+		gui.addStatsSection(viewer)
+		gui.addProfilerSection(viewer, root, default_open=False)
+
+if __name__ == "__main__":
+	W, H = window_size(default=(1169, 768))
+
+	viewer = osgViewer.Viewer()
+	root = build_scene(W, H)
+
+	viewer.sceneData = root
+
+	configure_viewer(viewer, root)
 
 	# --- --repl: hand the render loop to pyosg_repl.py's IPython/asyncio bridge -------------- #
-	if args.repl:
-		examples_dir = pathlib.Path(__file__).resolve().parent.parent
-
-		if str(examples_dir) not in sys.path:
-			sys.path.insert(0, str(examples_dir))
-
+	# Only reachable here, in the standalone entry point -- the pyosg-cli/OpenSceneGraph.examples
+	# runners always own the frame loop themselves (run_module()'s own `while not viewer.done:
+	# viewer.frame()`, after calling configure_viewer()), with no hook for handing it off to
+	# something else instead. build_scene()/configure_viewer() stay pure setup either way; only
+	# this dispatch differs.
+	if _args.repl:
 		from pyosg_repl import repl
 
-		repl(v, globals())
+		repl(viewer, globals())
 
 	else:
-		while not v.done:
-			v.frame()
+		while not viewer.done:
+			viewer.frame()

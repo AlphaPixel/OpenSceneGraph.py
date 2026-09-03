@@ -11,35 +11,46 @@
 # repaint, so there's zero ambiguity about what's changing frame-to-frame: the whole reflection
 # environment.
 #
+# Since specular here is ALWAYS procedural (the very first frame already fires a repaint -- see
+# ProbeRebaker below), baking a real GGX-prefiltered specular cubemap from --hdr at startup would
+# be pure waste: real work thrown away before a single frame ever samples it. So this step is the
+# one caller of osgx.gltf.pbribl.PBRIBLEnvironment.prepareDiffuseOnly() (added alongside this
+# file's conversion) -- diffuse irradiance and the BRDF LUT still bake for real, specular starts
+# as an unbaked placeholder and is immediately replaced by the first procedural repaint. --env
+# (a fully pre-baked manifest) has no such waste to avoid -- its specular is a cheap KTX2 load,
+# not a GPU bake -- but the first repaint replaces it too, for the same reason: this step is about
+# proving the environment CAN change live, not about which bytes it starts with.
+#
+# The procedural repaint's own template image (paint_random_faces()'s size/format source) is a
+# blank synthetic equirect (see make_probe_template_image()), not a loaded --hdr file -- every
+# pixel it produces gets fully overwritten by the checkerboard anyway, so there's nothing for a
+# real HDR to contribute there either. This is what lets --env work stand alone, with no local
+# .hdr file needed at all.
+#
 # This is sync/stalling (GGXPrefilterOptions.syncReadback, still the only mode implemented), not
 # an async capture-from-live-scene mode -- per the user, "it's enough to show that it CAN change
 # dynamically, even if it's not perfect or async."
 #
 # Diffuse (SH/Lambertian) irradiance and the BRDF LUT are intentionally left static, baked once at
-# startup by PBRIBLEnvironment.prepare() -- only the specular prefiltered cubemap rebakes live.
-#
-# Unlike Step 9, the live-rebake mechanism itself (osgx.GGXPrefilterScene.create /
-# GGXPrefilterScene.rebake() / GGXPrefilterReadback.finish()) is NOT something this pivot needed to touch -- it
-# was already real osgx, not hand-rolled math, before this rewrite. What pivots here is everything
-# this step has in common with Step 9: the static half of the environment bake and the whole
-# glTF PBR/IBL material shader, both now osgx.gltf.pbribl exactly as in 09-ibl.py. The
-# procedural checkerboard repaint (numpy) stays hand-rolled -- it's real array/image-synthesis
-# work, not a reimplementation of anything osgx already does.
+# startup by PBRIBLEnvironment.prepareDiffuseOnly()/load() -- only the specular prefiltered
+# cubemap rebakes live.
 
 import sys
-import os
 import random
 import colorsys
 import pathlib
 import argparse
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6",
-})
+# examples/lighting/ sits one level below examples/ itself, where pyosg_example.py lives --
+# unlike every flat examples/pyosg-*.py file (whose own directory IS examples/, so Python's
+# automatic sys.path[0] already covers them), a standalone run of this file needs examples/
+# added explicitly. Same fix pyosg-cli's own EXAMPLES_DIR insertion applies for pyosg_visitor.py.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
+# example -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 import numpy as np
 
@@ -47,9 +58,6 @@ from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
 import osgx
-
-THIS_DIR = pathlib.Path(__file__).resolve().parent
-DATA_DIR = THIS_DIR / "data"
 
 # Bare name (e.g. "Corset") -> glTF-Sample-Assets/Models/<name>/glTF/<name>.gltf via
 # osgx.findDataFile(), same convention every other step in this series uses.
@@ -63,18 +71,12 @@ def resolve_model(value):
 		path.stem, ("glTF-Sample-Assets/Models/{}/glTF/{}.gltf",)
 	) or None
 
-# HDR assets for this step live locally in pyosg-lighting/data/ (papermill.hdr, etc.) -- checked
-# first, falling back to osgx.findDataFile() for anything found via OSG_FILE_PATH instead.
+# HDR/manifest assets resolve via osgx.findDataFile() (OSG_FILE_PATH), same as resolve_model().
 def resolve_asset(value, suffix):
 	path = pathlib.Path(value).expanduser()
 
 	if path.is_file():
 		return str(path)
-
-	local = DATA_DIR / f"{value}.{suffix}"
-
-	if local.is_file():
-		return str(local)
 
 	return osgx.findDataFile(value, (), suffix) or None
 
@@ -98,6 +100,12 @@ FACE_NAMES = ("+X", "-X", "+Y", "-Y", "+Z", "-Z")
 # face desaturates to the same white under the PBR Neutral tonemapper's highlight rolloff.
 FACE_INTENSITY = 2.5
 FACE_GRID_SIZE = 6 # checkerboard cells per side, per face
+
+# Fixed size for make_probe_template_image() -- a plausible equirect resolution (2:1), matching
+# what a real HDR probe would typically use. Purely a size/format template (see that function's
+# own docstring), so this has no bearing on the baked specular cubemap's own resolution
+# (--prefilter-size).
+PROBE_TEMPLATE_SIZE = (1024, 512)
 
 def _equirect_face_uv(w, h):
 	"""
@@ -180,6 +188,22 @@ def _make_color_source(mode):
 
 	return lambda: _hex_to_rgb(random.choice(palette))
 
+def make_probe_template_image(size=PROBE_TEMPLATE_SIZE):
+	"""
+	A blank equirectangular osg.Image (GL_RGB/GL_FLOAT) used only as a size/format template for
+	paint_random_faces() -- every pixel it produces gets fully overwritten by the checkerboard
+	repaint (see paint_random_faces()'s own docstring), so there's no need to load or bake a real
+	HDR just to seed this. This is what decouples the procedural specular probe from --hdr/--env
+	entirely: an --env-only invocation (a fully pre-baked environment, no local .hdr file at all)
+	still gets a working 'r' repaint.
+	"""
+	w, h = size
+	img = osg.Image()
+
+	img.allocateImage(w, h, 1, GL_RGB, GL_FLOAT)
+
+	return img
+
 def paint_random_faces(base_image, color_source):
 	"""
 	Return a NEW osg.Image, same size/format as base_image, with each of the
@@ -211,82 +235,105 @@ def paint_random_faces(base_image, color_source):
 
 	return img
 
-class RebakeKeyHandler(osgGA.GUIEventHandler):
-	"""Press 'r' to repaint the cube faces and rebake the specular IBL cubemap live."""
+class ProbeRebaker(osgGA.GUIEventHandler):
+	"""
+	Owns the live dynamic-probe specular rebake. 'r' starts one (see start()); each subsequent
+	FRAME event -- dispatched to every registered eventHandler once per viewer.frame() call, the
+	same mechanism pyosg-taa.py's Controls and pyosg-match4.py's StepAdvancer use for their own
+	per-frame state machines -- advances it by exactly one real frame, until
+	GGXPrefilterReadback reports done.
 
-	def __init__(self, pending):
+	This used to be one blocking call (do_rebake()) that drove viewer.frame() itself in a tight
+	inner loop to force the bake to finish before returning -- safe only while this file's own
+	__main__ block owned the outer frame loop directly (do_rebake()'s own old docstring already
+	warned it was NOT safe to call from inside a callback, for exactly this re-entrancy reason).
+	Now that the runner (pyosg-cli/OpenSceneGraph.examples) owns that loop, this class never
+	calls viewer.frame() itself -- it just advances its own state by one step per real FRAME
+	event, and the bake visibly trickles in over a handful of frames instead of appearing to
+	complete instantly.
+	"""
+
+	def __init__(self, camera, root, model_ss, base_image, color_source, prefilter_size):
 		super().__init__()
-		self.pending = pending
 
-	def handle(self, ea, aa):
-		if ea.handled or ea.type != osgGA.GUIEventAdapter.KEYUP:
-			return False
+		self.camera = camera
+		self.root = root
+		self.model_ss = model_ss
+		self.base_image = base_image
+		self.color_source = color_source
+		self.prefilter_size = prefilter_size
 
-		if ea.key in (ord("r"), ord("R")):
-			self.pending[0] = True
+		self.scene = None
+		self.options = None
+		self.elapsed = None # None = idle; int = real frames elapsed since the current bake armed
 
-			return True
+	def start(self):
+		if self.elapsed is not None:
+			print("[dynamicprobes] bake already in progress, ignoring", flush=True)
 
-		return False
+			return
 
-def do_rebake(v, root, model_ss, base_image, color_source, prefilter_size, bake_state):
-	"""
-	Bake a new specular prefiltered cubemap from a freshly-repainted copy of `base_image` (see
-	paint_random_faces()) and swap it onto texture unit 5 of `model_ss` -- the StateSet
-	PBRIBLScene.create() bound envMap to. Blocks the caller for a handful of frames (sync/stalling
-	bake, see module docstring) -- safe to call from the main loop, not from inside an event
-	handler callback (would re-enter viewer.frame()).
-	"""
-	print("[dynamicprobes] baking...", flush=True)
+		print("[dynamicprobes] baking...", flush=True)
 
-	baked_image = paint_random_faces(base_image, color_source)
+		baked_image = paint_random_faces(self.base_image, self.color_source)
 
-	if bake_state["scene"] is None:
-		options = osgx.GGXPrefilterOptions()
-		options.prefilterSize = prefilter_size
-		options.maxFrames = 8
-		options.readbackFrame = 2
-		bake_state["options"] = options
+		if self.scene is None:
+			options = osgx.GGXPrefilterOptions()
+			options.prefilterSize = self.prefilter_size
+			options.maxFrames = 8
+			options.readbackFrame = 2
+			self.options = options
 
-		bake_scene = osgx.GGXPrefilterScene.create(baked_image, options)
-		bake_scene.root.nodeMask = 0
-		root.children.append(bake_scene.root)
-		bake_state["scene"] = bake_scene
-	else:
-		bake_scene = bake_state["scene"]
-		options = bake_state["options"]
+			self.scene = osgx.GGXPrefilterScene.create(baked_image, options)
+			self.scene.root.nodeMask = 0
+			self.root.children.append(self.scene.root)
 
-		if not bake_scene.rebake(baked_image):
+		elif not self.scene.rebake(baked_image):
 			print("[dynamicprobes] failed to reset bake scene, keeping previous environment", flush=True)
 
 			return
 
-	bake_scene.root.nodeMask = 0xffffffff
-	v.camera.postDrawCallback = bake_scene.readback
+		self.scene.root.nodeMask = 0xffffffff
+		self.camera.postDrawCallback = self.scene.readback
+		self.elapsed = 0
 
-	frame = 0
+	def _finish(self):
+		self.camera.postDrawCallback = None
+		self.scene.root.nodeMask = 0
 
-	while frame < options.maxFrames and not bake_scene.readback.done:
-		v.frame()
-		frame += 1
+		if not self.scene.readback.done:
+			print("[dynamicprobes] bake did not complete, keeping previous environment", flush=True)
 
-	v.camera.postDrawCallback = None
-	bake_scene.root.nodeMask = 0
+		else:
+			cubemap = self.scene.readback.finish()
 
-	if not bake_scene.readback.done:
-		print("[dynamicprobes] bake did not complete, keeping previous environment", flush=True)
+			# GPU-baked mips are already embedded per-face (see GGXPrefilter.hpp) -- don't let OSG
+			# regenerate them, same as the static-environment path in 09-ibl.py.
+			cubemap.useHardwareMipMapGeneration = False
 
-		return
+			self.model_ss.textureAttributes[5] = cubemap
 
-	cubemap = bake_scene.readback.finish()
+			print(f"[dynamicprobes] rebake done after {self.elapsed} frames", flush=True)
 
-	# GPU-baked mips are already embedded per-face (see GGXPrefilter.hpp) -- don't let OSG
-	# regenerate them, same as the static-environment path in 09-ibl.py.
-	cubemap.useHardwareMipMapGeneration = False
+		self.elapsed = None
 
-	model_ss.textureAttributes[5] = cubemap
+	def handle(self, ea, aa):
+		if ea.type == osgGA.GUIEventAdapter.KEYUP and ea.key in (ord("r"), ord("R")):
+			self.start()
 
-	print(f"[dynamicprobes] rebake done after {frame} frames", flush=True)
+			return True
+
+		if ea.type != osgGA.GUIEventAdapter.FRAME or self.elapsed is None:
+			return False
+
+		self.elapsed += 1
+
+		if not self.scene.readback.done and self.elapsed < self.options.maxFrames:
+			return False
+
+		self._finish()
+
+		return False
 
 FLOOR_VERTEX = """
 #version 460 core
@@ -344,14 +391,30 @@ void main() {
 }
 """
 
-if __name__ == "__main__":
+# Set by build_scene(), read by configure_viewer() -- ProbeRebaker needs the live viewer.camera
+# (for its postDrawCallback), which build_scene() never receives. Same "no other channel exists"
+# reasoning as pyosg-khronos-viewer.py's own _args/_pbr stash.
+_args = None
+_probe = None
+
+def build_scene(w, h):
+	global _args, _probe
+
 	ap = argparse.ArgumentParser()
 	ap.add_argument("path", nargs="?", default=None)
-	ap.add_argument(
+
+	env_group = ap.add_mutually_exclusive_group()
+	env_group.add_argument(
 		"--hdr",
-		default="papermill",
-		help="Equirectangular HDR -- baked once for diffuse/BRDF LUT, and as the initial specular "
-			"environment before the first 'r' repaint (default: papermill)"
+		default=None,
+		help="Equirectangular HDR -- baked once for diffuse/BRDF LUT only (default: papermill); "
+			"specular is always procedural (see --mode), never baked from this"
+	)
+	env_group.add_argument(
+		"--env",
+		default=None,
+		help="Pre-baked osgx_pbribl environment manifest -- its specular bake is immediately "
+			"replaced by the first procedural repaint, same as --hdr's"
 	)
 	ap.add_argument(
 		"--prefilter-size",
@@ -364,6 +427,7 @@ if __name__ == "__main__":
 	ap.add_argument("--no-lights", dest="lights", action="store_false", default=True)
 	ap.add_argument("--floor-z", type=float, default=None)
 	ap.add_argument("--floor-size", type=float, default=None)
+	ap.add_argument("--no-floor", dest="floor", action="store_false", default=True)
 	ap.add_argument(
 		"--mode",
 		choices=MODE_CHOICES,
@@ -374,10 +438,14 @@ if __name__ == "__main__":
 
 	args = ap.parse_args()
 
-	# No floor by default; passing either flag activates it.
-	args.floor = args.floor_z is not None or args.floor_size is not None
-	args.floor_z = -0.04 if args.floor_z is None else args.floor_z
-	args.floor_size = 0.15 if args.floor_size is None else args.floor_size
+	if not args.hdr and not args.env:
+		args.hdr = "papermill"
+
+	# On by default (tuned for BoomBox); --no-floor opts out, --floor-z/--floor-size override.
+	args.floor_z = -0.01 if args.floor_z is None else args.floor_z
+	args.floor_size = 0.05 if args.floor_size is None else args.floor_size
+
+	_args = args
 
 	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
@@ -386,25 +454,43 @@ if __name__ == "__main__":
 	if not path:
 		sys.exit("Cannot find model -- clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
 
-	hdr_path = resolve_asset(args.hdr, "hdr")
-
-	if not hdr_path:
-		sys.exit(f"Cannot find HDR {args.hdr!r} -- check pyosg-lighting/data/ or OSG_FILE_PATH")
-
 	model = osgDB.readNodeFile(path)
 
-	# --- IBL environment: diffuse/BRDF LUT static, specular gets replaced by the live rebake ---- #
-	environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepare(hdr_path, lutSize=1024)
+	# --- IBL environment: diffuse/BRDF LUT are the only real bake either path performs -- specular
+	# is ALWAYS procedural (ProbeRebaker above), so --hdr uses prepareDiffuseOnly() rather than
+	# prepare(), which would GGX-prefilter a real specular cubemap only to discard it before a
+	# single frame ever samples it. --env still loads a real specular bake off disk (a cheap KTX2
+	# read, not a GPU bake), which the first procedural repaint replaces regardless. ------------ #
+	if args.hdr:
+		hdr_path = resolve_asset(args.hdr, "hdr")
+
+		if not hdr_path:
+			sys.exit(f"Cannot find HDR {args.hdr!r} -- check OSG_FILE_PATH")
+
+		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepareDiffuseOnly(hdr_path, lutSize=1024)
+
+	else:
+		env_path = resolve_asset(args.env, "gltf")
+
+		if not env_path:
+			sys.exit(f"Cannot find environment manifest {args.env!r}")
+
+		environment = osgx.gltf.pbribl.PBRIBLEnvironment.load(env_path)
 
 	if not environment.valid():
-		sys.exit("Failed to prepare the PBR/IBL environment")
+		sys.exit("Failed to prepare/load the PBR/IBL environment")
 
-	# --- Lights (shared ancestor StateSet, same shape as Steps 8/9) ----------- #
+	# --- Lights ----------------------------------------------------------------- #
 	main_group = osg.Group()
 	mg_ss = main_group.stateSet
 
+	# LightSet must live on the SAME StateSet as the Program that actually calls
+	# osgx_DirectLighting() (model's own StateSet, wired by PBRIBLScene.create() below -- not
+	# main_group, an ancestor). See [[project_osgx_lightset_maxlights_fix]] for the full root
+	# cause; the floor's Program gets the same shared `lights` object attached to ITS OWN
+	# StateSet below.
 	lights = osgx.LightSet()
-	mg_ss.attributes.append(lights)
+	model.stateSet.attributes.append(lights)
 
 	if args.lights:
 		lights.setCount(3)
@@ -458,6 +544,7 @@ if __name__ == "__main__":
 			hook_shader
 		))
 		floor_geode.stateSet.attributes.append(floor_p)
+		floor_geode.stateSet.attributes.append(lights)
 
 	# --- Scene graph ------------------------------------------------------------ #
 	# Shadow uniforms/texture live on main_group's StateSet so the hand-rolled floor shader sees
@@ -485,25 +572,47 @@ if __name__ == "__main__":
 
 	root.children.append(main_group)
 
-	v = osgViewer.Viewer()
-	v.sceneData = root
-	v.cameraManipulator = osgGA.TrackballManipulator()
+	_probe = {
+		"root": root,
+		"model_ss": model_ss,
+		"color_source": _make_color_source(args.mode),
+		"prefilter_size": args.prefilter_size,
+	}
 
-	# --- Dynamic IBL probe ------------------------------------------------------ #
-	base_equirect = osgDB.readImageFile(hdr_path)
-	color_source = _make_color_source(args.mode)
+	return root
 
-	pending_rebake = [True] # trigger the very first bake once the GL context exists
-	bake_state = {"scene": None, "options": None}
+# ProbeRebaker needs the live viewer.camera, which build_scene() never receives.
+def configure_viewer(viewer, root):
+	probe = _probe
 
-	v.eventHandlers.append(RebakeKeyHandler(pending_rebake))
+	rebaker = ProbeRebaker(
+		viewer.camera,
+		probe["root"],
+		probe["model_ss"],
+		make_probe_template_image(),
+		probe["color_source"],
+		probe["prefilter_size"]
+	)
 
-	print(f"[dynamicprobes] mode={args.mode!r} -- press 'r' to repaint the 6 cube faces", flush=True)
+	viewer.eventHandlers.append(rebaker)
 
-	while not v.done:
-		v.frame()
+	print(f"[dynamicprobes] mode={_args.mode!r} -- press 'r' to repaint the 6 cube faces", flush=True)
 
-		if pending_rebake[0]:
-			pending_rebake[0] = None
+	# Trigger the very first bake immediately -- no GL context is needed yet, just like every
+	# other node/texture build_scene() already constructs without one; the actual GPU work only
+	# happens once ProbeRebaker's FRAME polling drives real render traversals.
+	rebaker.start()
 
-			do_rebake(v, root, model_ss, base_equirect, color_source, args.prefilter_size, bake_state)
+if __name__ == "__main__":
+	W, H = window_size()
+
+	viewer = osgViewer.Viewer()
+	root = build_scene(W, H)
+
+	viewer.sceneData = root
+	viewer.cameraManipulator = osgGA.TrackballManipulator()
+
+	configure_viewer(viewer, root)
+
+	while not viewer.done:
+		viewer.frame()

@@ -2,7 +2,7 @@ __pycache__
 test/__pycache__
 etc/__pycache__
 examples/__pycache__
-examples/pyosg-lighting/__pycache__
+examples/lighting/__pycache__
 python/OpenSceneGraph/__pycache__
 BUILD-*
 dist

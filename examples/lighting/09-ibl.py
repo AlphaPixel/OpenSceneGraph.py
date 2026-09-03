@@ -25,25 +25,24 @@
 # convenience path and a flat quad has no glTF material to feed it.
 
 import sys
-import os
 import pathlib
 import argparse
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6",
-})
+# examples/lighting/ sits one level below examples/ itself, where pyosg_example.py lives --
+# unlike every flat examples/pyosg-*.py file (whose own directory IS examples/, so Python's
+# automatic sys.path[0] already covers them), a standalone run of this file needs examples/
+# added explicitly. Same fix pyosg-cli's own EXAMPLES_DIR insertion applies for pyosg_visitor.py.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
+# example -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
 import osgx
-
-THIS_DIR = pathlib.Path(__file__).resolve().parent
-DATA_DIR = THIS_DIR / "data"
 
 # Bare name (e.g. "Corset") -> glTF-Sample-Assets/Models/<name>/glTF/<name>.gltf via
 # osgx.findDataFile(), same convention every other step in this series uses.
@@ -57,18 +56,12 @@ def resolve_model(value):
 		path.stem, ("glTF-Sample-Assets/Models/{}/glTF/{}.gltf",)
 	) or None
 
-# HDR/manifest assets for this step live locally in pyosg-lighting/data/ (papermill.hdr, etc.) --
-# checked first, falling back to osgx.findDataFile() for anything found via OSG_FILE_PATH instead.
+# HDR/manifest assets resolve via osgx.findDataFile() (OSG_FILE_PATH), same as resolve_model().
 def resolve_asset(value, suffix):
 	path = pathlib.Path(value).expanduser()
 
 	if path.is_file():
 		return str(path)
-
-	local = DATA_DIR / f"{value}.{suffix}"
-
-	if local.is_file():
-		return str(local)
 
 	return osgx.findDataFile(value, (), suffix) or None
 
@@ -159,7 +152,15 @@ class Diagnostics(osgGA.GUIEventHandler):
 
 		return True
 
-if __name__ == "__main__":
+# Set by build_scene(), read by configure_viewer() -- the Diagnostics eventHandler needs the live
+# viewer to register on, which build_scene() never receives. Same "no other channel exists"
+# reasoning as pyosg-khronos-viewer.py's own _args/_pbr stash.
+_args = None
+_pbr = None
+
+def build_scene(w, h):
+	global _args, _pbr
+
 	ap = argparse.ArgumentParser()
 	ap.add_argument("path", nargs="?", default=None)
 
@@ -186,16 +187,18 @@ if __name__ == "__main__":
 	)
 	ap.add_argument("--floor-z", type=float, default=None)
 	ap.add_argument("--floor-size", type=float, default=None)
+	ap.add_argument("--no-floor", dest="floor", action="store_false", default=True)
 
 	args = ap.parse_args()
 
 	if not args.hdr and not args.env:
 		args.hdr = "papermill"
 
-	# No floor by default; passing either flag activates it.
-	args.floor = args.floor_z is not None or args.floor_size is not None
-	args.floor_z = -0.04 if args.floor_z is None else args.floor_z
-	args.floor_size = 0.15 if args.floor_size is None else args.floor_size
+	# On by default (tuned for BoomBox); --no-floor opts out, --floor-z/--floor-size override.
+	args.floor_z = -0.01 if args.floor_z is None else args.floor_z
+	args.floor_size = 0.05 if args.floor_size is None else args.floor_size
+
+	_args = args
 
 	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
@@ -211,7 +214,7 @@ if __name__ == "__main__":
 		hdr_path = resolve_asset(args.hdr, "hdr")
 
 		if not hdr_path:
-			sys.exit(f"Cannot find HDR {args.hdr!r} -- check pyosg-lighting/data/ or OSG_FILE_PATH")
+			sys.exit(f"Cannot find HDR {args.hdr!r} -- check OSG_FILE_PATH")
 
 		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepare(hdr_path, lutSize=1024)
 
@@ -226,12 +229,19 @@ if __name__ == "__main__":
 	if not environment.valid():
 		sys.exit("Failed to prepare/load the PBR/IBL environment")
 
-	# --- Lights (shared ancestor StateSet, same shape as Step 8) -------------- #
+	# --- Lights ----------------------------------------------------------------- #
 	main_group = osg.Group()
 	mg_ss = main_group.stateSet
 
+	# LightSet must live on the SAME StateSet as the Program that actually calls
+	# osgx_DirectLighting() (model's own StateSet, wired by PBRIBLScene.create() below -- not
+	# main_group, an ancestor) -- osgx::LightSet::apply() pushes osgx_lightCount to whatever
+	# Program is CURRENTLY bound at the moment it runs, so attaching it on an ancestor pushes to
+	# whatever (stale/unrelated) program was bound before this subtree even started descending.
+	# Confirmed root cause + osgx-level fix 2026-09-03 (see 08-shadows.py's own history); the
+	# floor's Program gets the same shared `lights` object attached to ITS OWN StateSet below.
 	lights = osgx.LightSet()
-	mg_ss.attributes.append(lights)
+	model.stateSet.attributes.append(lights)
 
 	if args.lights:
 		lights.setCount(3)
@@ -286,6 +296,7 @@ if __name__ == "__main__":
 			hook_shader
 		))
 		floor_geode.stateSet.attributes.append(floor_p)
+		floor_geode.stateSet.attributes.append(lights)
 
 	# --- Scene graph ------------------------------------------------------------ #
 	# Shadow uniforms/texture live on main_group's StateSet so the hand-rolled floor shader sees
@@ -313,14 +324,27 @@ if __name__ == "__main__":
 
 	root.children.append(main_group)
 
-	v = osgViewer.Viewer()
-	v.sceneData = root
-	v.cameraManipulator = osgGA.TrackballManipulator()
+	_pbr = pbr
 
-	if args.diagnostics:
-		v.eventHandlers.append(Diagnostics(pbr))
+	return root
+
+# Diagnostics needs the live viewer, which build_scene() never receives.
+def configure_viewer(viewer, root):
+	if _args.diagnostics:
+		viewer.eventHandlers.append(Diagnostics(_pbr))
 
 		osg.notice("Diagnostics: 1=combined 2=diffuse 3=specular")
 
-	while not v.done:
-		v.frame()
+if __name__ == "__main__":
+	W, H = window_size()
+
+	viewer = osgViewer.Viewer()
+	root = build_scene(W, H)
+
+	viewer.sceneData = root
+	viewer.cameraManipulator = osgGA.TrackballManipulator()
+
+	configure_viewer(viewer, root)
+
+	while not viewer.done:
+		viewer.frame()

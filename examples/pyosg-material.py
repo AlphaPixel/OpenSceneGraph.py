@@ -94,11 +94,6 @@ import osgx
 # surface's fast-changing reflection has nothing smoothing it and looks visibly noisy/jagged.
 osg.DisplaySettings.instance.numMultiSamples = 8
 
-# Same layout pyosg-khronos-viewer.py's own DATA_DIR uses -- one shared sample-asset location
-# across the pyosg-lighting-adjacent examples, not something this file invents on its own.
-THIS_DIR = pathlib.Path(__file__).resolve().parent
-DATA_DIR = THIS_DIR / "pyosg-lighting" / "data"
-
 # The one directional light every scene below shares -- factored out now that having all three
 # scenes in one file makes the duplication obvious (each used to carry its own identical copy).
 def build_light_set():
@@ -135,9 +130,9 @@ SWEEP_SHAPES = {
 SWEEP_SHAPE_RADIUS = 0.55
 
 # Verbatim from pyosg-khronos-viewer.py -- same HDR/manifest resolution contract (a literal path,
-# then osgx.findDataFile(), then a DATA_DIR fallback), duplicated rather than imported since these
-# example scripts are each independently runnable, same reasoning osgx's own conftest.py gives for
-# not sharing test helpers cross-repo.
+# then osgx.findDataFile()), duplicated rather than imported since these example scripts are each
+# independently runnable, same reasoning osgx's own conftest.py gives for not sharing test helpers
+# cross-repo.
 def resolve_asset(value, suffix, candidates=()):
 	path = pathlib.Path(value).expanduser()
 
@@ -149,12 +144,7 @@ def resolve_asset(value, suffix, candidates=()):
 	if resolved:
 		return pathlib.Path(resolved)
 
-	path = DATA_DIR / f"{value}.{suffix}"
-
-	if path.is_file():
-		return path
-
-	raise FileNotFoundError(f"Cannot find {value!r} or {path}")
+	raise FileNotFoundError(f"Cannot find {value!r}")
 
 # OSG_FILE_PATH doesn't cover osgx's own build-tree env/ manifests -- see
 # pyosg-metal-sphere.py's identical helper for why OSGX_ENV_DIR is needed as a fallback.

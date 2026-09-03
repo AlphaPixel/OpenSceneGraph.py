@@ -34,7 +34,6 @@ import osgx
 
 THIS_DIR = pathlib.Path(__file__).resolve().parent
 PACKAGE_ASSET_DIR = THIS_DIR / "assets"
-SOURCE_DATA_DIR = THIS_DIR / "pyosg-lighting" / "data"
 CLEAR_COLOR = (48.0 / 255.0, 53.0 / 255.0, 66.0 / 255.0, 1.0)
 DEBUG_MODES = {
 	"combined": 0,
@@ -65,11 +64,10 @@ def resolve_asset(value, suffix, candidates=()):
 	if resolved:
 		return pathlib.Path(resolved)
 
-	for data_dir in (PACKAGE_ASSET_DIR, SOURCE_DATA_DIR):
-		path = data_dir / f"{value}.{suffix}"
+	path = PACKAGE_ASSET_DIR / f"{value}.{suffix}"
 
-		if path.is_file():
-			return path
+	if path.is_file():
+		return path
 
 	raise FileNotFoundError(f"Cannot find {value!r} in configured data paths")
 
@@ -84,11 +82,10 @@ def resolve_model(value):
 	if resolved:
 		return pathlib.Path(resolved)
 
-	for data_dir in (PACKAGE_ASSET_DIR, SOURCE_DATA_DIR):
-		path = data_dir / "models" / path.stem / f"{path.stem}.gltf"
+	path = PACKAGE_ASSET_DIR / "models" / path.stem / f"{path.stem}.gltf"
 
-		if path.is_file():
-			return path
+	if path.is_file():
+		return path
 
 	resolved = osgx.findDataFile(
 		path.stem,
@@ -117,11 +114,10 @@ def resolve_environment_manifest(value):
 	if resolved:
 		return pathlib.Path(resolved)
 
-	for data_dir in (PACKAGE_ASSET_DIR, SOURCE_DATA_DIR):
-		path = data_dir / "env" / f"{name}.gltf"
+	path = PACKAGE_ASSET_DIR / "env" / f"{name}.gltf"
 
-		if path.is_file():
-			return path
+	if path.is_file():
+		return path
 
 	raise FileNotFoundError(f"Cannot find environment manifest {value!r} in configured data paths")
 

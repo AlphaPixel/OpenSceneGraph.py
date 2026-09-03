@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 
 import sys
-import os
 import pathlib
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6"
-})
+# examples/lighting/ sits one level below examples/ itself, where pyosg_example.py lives --
+# unlike every flat examples/pyosg-*.py file (whose own directory IS examples/, so Python's
+# automatic sys.path[0] already covers them), a standalone run of this file needs examples/
+# added explicitly. Same fix pyosg-cli's own EXAMPLES_DIR insertion applies for pyosg_visitor.py.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
+# example -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 
@@ -88,9 +90,7 @@ void main() {
 }
 """
 
-if __name__ == "__main__":
-	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
-
+def build_scene(w, h):
 	path = resolve_model(sys.argv[1] if len(sys.argv) > 1 else "BoomBox")
 
 	if not path:
@@ -114,8 +114,14 @@ if __name__ == "__main__":
 	ss.uniforms["lightColor"] = osg.Vec3(1.0, 1.0, 1.0)
 	ss.uniforms["albedo"] = osg.Vec3(0.8, 0.7, 0.6)
 
+	return root
+
+if __name__ == "__main__":
+	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
+
 	v = osgViewer.Viewer()
-	v.sceneData = root
+
+	v.sceneData = build_scene(*window_size())
 	v.cameraManipulator = osgGA.TrackballManipulator()
 
 	while not v.done:

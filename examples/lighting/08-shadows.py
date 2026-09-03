@@ -32,17 +32,20 @@
 # the key light is static here, that's the only computation needed -- no per-frame
 # preDrawCallback recomputing the shadow matrix off the orbiting viewer camera.
 
+import argparse
 import sys
-import os
 import pathlib
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6"
-})
+# examples/lighting/ sits one level below examples/ itself, where pyosg_example.py lives --
+# unlike every flat examples/pyosg-*.py file (whose own directory IS examples/, so Python's
+# automatic sys.path[0] already covers them), a standalone run of this file needs examples/
+# added explicitly. Same fix pyosg-cli's own EXAMPLES_DIR insertion applies for pyosg_visitor.py.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
+# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
+# example -- these need to land before OSG's DisplaySettings reads them.
+from pyosg_example import window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -253,29 +256,27 @@ void main() {
 }
 """
 
-if __name__ == "__main__":
-	import argparse
-
+def build_scene(w, h):
 	ap = argparse.ArgumentParser()
 	ap.add_argument("path", nargs="?", default=None)
 	ap.add_argument(
 		"--floor-z",
 		type=float,
 		default=None,
-		help="Floor Z in Z-up world space (default: -0.04); passing this or --floor-size activates the floor"
+		help="Floor Z in Z-up world space (default: -0.01)"
 	)
 	ap.add_argument(
 		"--floor-size",
 		type=float,
 		default=None,
-		help="Floor quad side length in metres (default: 0.15); passing this or --floor-z activates the floor"
+		help="Floor quad side length in metres (default: 0.05)"
 	)
+	ap.add_argument("--no-floor", dest="floor", action="store_false", default=True)
 	args = ap.parse_args()
 
-	# No floor by default; passing either flag activates it.
-	args.floor = args.floor_z is not None or args.floor_size is not None
-	args.floor_z = -0.04 if args.floor_z is None else args.floor_z
-	args.floor_size = 0.15 if args.floor_size is None else args.floor_size
+	# On by default (tuned for BoomBox); --no-floor opts out, --floor-z/--floor-size override.
+	args.floor_z = -0.01 if args.floor_z is None else args.floor_z
+	args.floor_size = 0.05 if args.floor_size is None else args.floor_size
 
 	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
@@ -343,8 +344,16 @@ if __name__ == "__main__":
 	# falloff (no artificial radius-based cutoff, unlike the old hand-rolled atten() formula) --
 	# these intensities aren't a straight port of the old lightColor/lightRadius values, tune to
 	# taste.
+	#
+	# LightSet attached to model's/floor's own StateSet (not main_group's, an ancestor) --
+	# matches every working osgx example (osgx-lights.cpp, osgx-shadow.cpp, 11-sketchfab.py's
+	# lighting_cam), which all keep LightSet and the Program that reads it on the exact same
+	# StateSet. Shared across both model and floor, same as hook_shader already is.
 	lights = osgx.LightSet()
-	mg_ss.attributes.append(lights)
+	ss.attributes.append(lights)
+
+	if args.floor:
+		floor_geode.stateSet.attributes.append(lights)
 
 	lights.setCount(3)
 	lights.setPoint(0, KEY_LIGHT_POS, osg.Vec3(1.0, 0.9, 0.7), 1.6)
@@ -373,8 +382,12 @@ if __name__ == "__main__":
 
 	root.children.extend((shadow_map.camera, main_group))
 
+	return root
+
+if __name__ == "__main__":
 	v = osgViewer.Viewer()
-	v.sceneData = root
+
+	v.sceneData = build_scene(*window_size())
 	v.cameraManipulator = osgGA.TrackballManipulator()
 
 	while not v.done:
