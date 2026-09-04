@@ -8,9 +8,11 @@
 #   2. Accumulate those samples into a persistent history texture.
 #   3. Reset history when the user moves the camera.
 #
-# A still view therefore converges over 16 frames to a visibly smoother image.
-# During camera interaction it starts over; it does NOT drag stale pixels across
-# the screen and call that TAA.
+# A still view therefore converges over 16 frames to a smoother image -- though at the
+# default 1px jitter that smoothing is genuinely sub-pixel and easy to miss by eye at
+# normal viewing distance; see modes 3/4 below to make it obvious. During camera
+# interaction it starts over; it does NOT drag stale pixels across the screen and call
+# that TAA.
 #
 # Two possible later layers are intentionally out of scope here:
 #
@@ -27,19 +29,29 @@
 # The plumbing follows pyosg-mrt.py: a PRE_RENDER geometry camera writes an MRT
 # G-buffer, a fullscreen PRE_RENDER pass shades it, another fullscreen pass performs
 # the temporal resolve, and a POST_RENDER camera displays the newest history texture.
-# Two resolve cameras and two display cameras alternate via nodeMask, avoiding an
-# illegal read/write feedback loop on one texture.
+# Two resolve cameras, two display cameras, and two diff cameras alternate via nodeMask,
+# avoiding an illegal read/write feedback loop on one texture.
 #
 # Keys:
 #   0 = accumulated TAA (default)
 #   1 = current jittered frame (no accumulation)
-#   2 = exaggerate jitter 12x, to make the sampling pattern obvious
+#   2 = current jittered frame, 12x jitter -- shows the raw per-frame sampling pattern
+#   3 = accumulated TAA, 12x jitter -- exaggerates the blend itself, since the real 1px
+#       jitter's smoothing is too subtle at normal viewing distance to eyeball directly
+#   4 = |current - history| x20, at the REAL 1px jitter -- proves the unexaggerated
+#       algorithm is doing something and shows exactly which pixels (edges) it touches
 #   R = reset history
+#
+# An optional model path (argv[1]) replaces the default primitives -- see create_scene(). The
+# G-buffer shader only reads osg_Color though (same limitation as pyosg-mrt.py), so a textured
+# model (most glTF assets) will render flat/untextured; fine for judging edges, not looks.
+
+import sys
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
 # example -- these need to land before OSG's DisplaySettings reads them.
-from pyosg_example import window_size
+from pyosg_example import label, window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -128,6 +140,22 @@ out vec4 fragColor;
 void main() { fragColor = texture(displayTex, uv); }
 """
 
+# Diagnostic only: |current - history|, scaled way up. Unlike mode 2's 12x jitter, this
+# uses the REAL default 1px jitter -- it exaggerates the OUTPUT instead of the input, to
+# prove the unexaggerated algorithm is doing something and show exactly which pixels
+# (edges) it's touching.
+DIFF_FRAGMENT = """
+#version 330 core
+uniform sampler2D currentTex;
+uniform sampler2D historyTex;
+in vec2 uv;
+out vec4 fragColor;
+void main() {
+	vec3 delta = abs(texture(currentTex, uv).rgb - texture(historyTex, uv).rgb);
+	fragColor = vec4(delta * 20.0, 1.0);
+}
+"""
+
 
 def make_texture(w, h, linear=True):
 	tex = osg.Texture2D(
@@ -156,17 +184,23 @@ def program(name, vertex, fragment):
 
 
 def create_scene():
-	# Thin boxes make sub-pixel edges easy to inspect (orbit slightly to make them
-	# diagonal); the sphere supplies a smooth curved edge. All geometry is static
-	# because motion is Layer 2/3 work.
 	root = osg.Group()
-	geode = osg.Geode()
-	geode.drawables.extend((
-		osg.ShapeDrawable(osg.Sphere(osg.Vec3(0, 4, 0), 2.0)),
-		osg.ShapeDrawable(osg.Box(osg.Vec3(-2.7, 4, 0), 0.12, 7.0, 0.12)),
-		osg.ShapeDrawable(osg.Box(osg.Vec3( 2.7, 4, 0), 0.12, 7.0, 0.12)),
-	))
-	root.children.append(geode)
+
+	if len(sys.argv) >= 2:
+		root.children.append(osgDB.readNodeFile(sys.argv[1]))
+
+	else:
+		# Thin boxes make sub-pixel edges easy to inspect (orbit slightly to make them
+		# diagonal); the sphere supplies a smooth curved edge. All geometry is static
+		# because motion is Layer 2/3 work.
+		geode = osg.Geode()
+		geode.drawables.extend((
+			osg.ShapeDrawable(osg.Sphere(osg.Vec3(0, 4, 0), 2.0)),
+			osg.ShapeDrawable(osg.Box(osg.Vec3(-2.7, 4, 0), 0.12, 7.0, 0.12)),
+			osg.ShapeDrawable(osg.Box(osg.Vec3( 2.7, 4, 0), 0.12, 7.0, 0.12)),
+		))
+		root.children.append(geode)
+
 	root.stateSet.attributes.append(program("taa_scene", SCENE_VERTEX, GBUFFER_FRAGMENT))
 	return root
 
@@ -242,6 +276,27 @@ def display_camera(name, texture):
 	return cam
 
 
+def diff_camera(name, current_texture, history_texture):
+	cam = osg.Camera(
+		name=name,
+		referenceFrame=osg.Transform.ABSOLUTE_RF,
+		renderOrder=osg.Camera.POST_RENDER,
+		clearMask=0,
+		projectionMatrix=osg.Matrix.identity(),
+		viewMatrix=osg.Matrix.identity(),
+		allowEventFocus=False,
+	)
+	cam.stateSet.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF | osg.StateAttribute.OVERRIDE
+	cam.stateSet.textureAttributes[0] = current_texture
+	cam.stateSet.textureAttributes[1] = history_texture
+	cam.stateSet.uniforms["currentTex"] = 0
+	cam.stateSet.uniforms["historyTex"] = 1
+	quad = make_quad()
+	quad.stateSet.attributes.append(program(name, FULLSCREEN_VERTEX, DIFF_FRAGMENT))
+	cam.children.append(quad)
+	return cam
+
+
 def halton(index, base):
 	result = 0.0
 	fraction = 1.0
@@ -260,16 +315,20 @@ class Controls(osgGA.GUIEventHandler):
 	requiring pyosg_repl.repl() to drive the loop itself and call back in
 	(the original shape this file had, before build_scene()/configure_viewer())."""
 
-	def __init__(self, gbuffer, resolve_ab, resolve_ba, display_current, display_a, display_b,
-			history_weight_a, history_weight_b):
+	def __init__(self, manipulator, main_camera, gbuffer, resolve_ab, resolve_ba, display_current,
+			display_a, display_b, diff_a, diff_b, history_weight_a, history_weight_b):
 		super().__init__()
 
+		self.manipulator = manipulator
+		self.main_camera = main_camera
 		self.gbuffer = gbuffer
 		self.resolve_ab = resolve_ab
 		self.resolve_ba = resolve_ba
 		self.display_current = display_current
 		self.display_a = display_a
 		self.display_b = display_b
+		self.diff_a = diff_a
+		self.diff_b = diff_b
 		self.history_weight_a = history_weight_a
 		self.history_weight_b = history_weight_b
 
@@ -293,9 +352,20 @@ class Controls(osgGA.GUIEventHandler):
 		# one -- see the FRAME branch in handle() below.
 		self._primed = False
 
+		# Safety net for TrackballManipulator's inertial "throw": once released with velocity,
+		# StandardManipulator::handleFrame() keeps calling performMovement() every FRAME purely
+		# internally (_thrown), with NO further PUSH/DRAG/RELEASE/SCROLL events -- so the discrete
+		# event listeners in handle() below literally cannot see that motion. Diffing the live
+		# manipulator matrix each frame catches it (and anything else event-based detection misses).
+		self._last_matrix = manipulator.matrix
+
 		self.prepare_frame()
 
-		print("0=TAA  1=current frame  2=exaggerated jitter  R=reset", flush=True)
+		print(
+			"0=TAA  1=current frame  2=exaggerated jitter (current)  "
+			"3=exaggerated jitter (TAA)  4=diff vs history (real jitter)  R=reset",
+			flush=True,
+		)
 
 	def prepare_frame(self):
 		state = self.state
@@ -308,16 +378,27 @@ class Controls(osgGA.GUIEventHandler):
 		sequence_index = state["sample"] % HISTORY_LENGTH + 1
 		jx = halton(sequence_index, 2) - 0.5
 		jy = halton(sequence_index, 3) - 0.5
-		jitter_scale = 12.0 if state["mode"] == 2 else 1.0
+		jitter_scale = 12.0 if state["mode"] in (2, 3) else 1.0
 		state["sequence_index"] = sequence_index
 		state["jitter"] = (jx, jy)
-		# This camera is RELATIVE_RF: its tiny projection translation is composed
-		# with the viewer camera's real projection during cull traversal.
-		self.gbuffer.projectionMatrix = osg.Matrix.translate(
-			2.0 * jx * jitter_scale / self.w,
-			2.0 * jy * jitter_scale / self.h,
-			0.0,
-		)
+		target_shift_x = 2.0 * jx * jitter_scale / self.w
+		target_shift_y = 2.0 * jy * jitter_scale / self.h
+		# This camera is RELATIVE_RF: its projection matrix is composed (child first) with the
+		# viewer camera's real projection during cull traversal, i.e. v_clip = v_eye * J * P_real.
+		# A plain translate() here (the original, WRONG version of this) puts the offset in the
+		# translation row, shifting v_eye in EYE SPACE -- after the perspective divide that turns
+		# into an NDC shift of translate/(-z_eye), i.e. DEPTH-DEPENDENT: it grows the closer a
+		# vertex is to the camera, which is exactly why zooming in close made mode 0 visibly swim.
+		# Placing the offset in row 2 (the row that scales z_eye) instead exploits clip.w = -z_eye
+		# to cancel that dependency: the z_eye factor introduced here and the -z_eye in the divide
+		# cancel, leaving a constant NDC shift for every vertex regardless of depth. This is the
+		# standard jittered-projection technique real TAA implementations use.
+		p00 = self.main_camera.projectionMatrix[0, 0]
+		p11 = self.main_camera.projectionMatrix[1, 1]
+		jitter_matrix = osg.Matrix.identity()
+		jitter_matrix[2, 0] = -target_shift_x / p00
+		jitter_matrix[2, 1] = -target_shift_y / p11
+		self.gbuffer.projectionMatrix = jitter_matrix
 
 		weight = min(state["sample"], HISTORY_LENGTH - 1) / float(
 			min(state["sample"], HISTORY_LENGTH - 1) + 1
@@ -329,18 +410,24 @@ class Controls(osgGA.GUIEventHandler):
 			self.history_weight_a.value, self.history_weight_b.value,
 		)
 
-		show_current = state["mode"] != 0
+		show_current = state["mode"] in (1, 2)
+		show_diff = state["mode"] == 4
+		show_history = not show_current and not show_diff
 		self.display_current.nodeMask = 0xFFFFFFFF if show_current else 0
 		if state["write_b"]:
 			self.resolve_ab.nodeMask = 0xFFFFFFFF
 			self.resolve_ba.nodeMask = 0
-			self.display_b.nodeMask = 0 if show_current else 0xFFFFFFFF
+			self.display_b.nodeMask = 0xFFFFFFFF if show_history else 0
 			self.display_a.nodeMask = 0
+			self.diff_b.nodeMask = 0xFFFFFFFF if show_diff else 0
+			self.diff_a.nodeMask = 0
 		else:
 			self.resolve_ab.nodeMask = 0
 			self.resolve_ba.nodeMask = 0xFFFFFFFF
-			self.display_a.nodeMask = 0 if show_current else 0xFFFFFFFF
+			self.display_a.nodeMask = 0xFFFFFFFF if show_history else 0
 			self.display_b.nodeMask = 0
+			self.diff_a.nodeMask = 0xFFFFFFFF if show_diff else 0
+			self.diff_b.nodeMask = 0
 
 	def advance(self):
 		state = self.state
@@ -361,6 +448,12 @@ class Controls(osgGA.GUIEventHandler):
 
 	def handle(self, ea, aa):
 		if ea.type == osgGA.GUIEventAdapter.FRAME:
+			current_matrix = self.manipulator.matrix
+			if current_matrix != self._last_matrix:
+				self.state["reset"] = True
+				self.state["reset_reason"] = "camera motion (untracked)"
+			self._last_matrix = current_matrix
+
 			# __init__ already prepared frame 0 -- only ADVANCE (bump sample, swap
 			# history buffers) for every frame after that.
 			if self._primed:
@@ -400,6 +493,12 @@ class Controls(osgGA.GUIEventHandler):
 		elif ea.key == ord("2"):
 			self.state["mode"] = 2
 			self.state["reset_reason"] = "display mode changed"
+		elif ea.key == ord("3"):
+			self.state["mode"] = 3
+			self.state["reset_reason"] = "display mode changed"
+		elif ea.key == ord("4"):
+			self.state["mode"] = 4
+			self.state["reset_reason"] = "display mode changed"
 		elif ea.key in (ord("r"), ord("R")):
 			self.state["reset"] = True
 			self.state["reset_reason"] = "manual reset"
@@ -410,10 +509,10 @@ class Controls(osgGA.GUIEventHandler):
 
 
 # The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
-# The seven RTT/display cameras are appended to root.children in a fixed order (gbuffer, shade,
-# resolve_ab, resolve_ba, display_current, display_a, display_b); configure_viewer() unpacks them
-# back out in that same order, the same "recover state from the graph instead of a module-level
-# stash" idea as pyosg-mrt.py's Uniform recovery.
+# The nine RTT/display cameras are appended to root.children in a fixed order (gbuffer, shade,
+# resolve_ab, resolve_ba, display_current, display_a, display_b, diff_a, diff_b); configure_viewer()
+# unpacks them back out in that same order, the same "recover state from the graph instead of a
+# module-level stash" idea as pyosg-mrt.py's Uniform recovery.
 def build_scene(w, h):
 	current = make_texture(w, h)
 	history_a = make_texture(w, h)
@@ -440,24 +539,31 @@ def build_scene(w, h):
 	display_current = display_camera("Display current", current)
 	display_a = display_camera("Display history A", history_a)
 	display_b = display_camera("Display history B", history_b)
+	diff_a = diff_camera("Diff current vs history A", current, history_a)
+	diff_b = diff_camera("Diff current vs history B", current, history_b)
 
 	root = osg.Group()
 	root.children.extend((
 		gbuffer, shade, resolve_ab, resolve_ba,
-		display_current, display_a, display_b,
+		display_current, display_a, display_b, diff_a, diff_b,
 	))
+	root.children.append(label("Press 3/4 to exaggerate TAA; move camera to reset", w, h))
 
 	return root
 
 # Controls needs the live viewer to register as an event handler, which build_scene() never
 # receives.
 def configure_viewer(viewer, root):
-	gbuffer, shade, resolve_ab, resolve_ba, display_current, display_a, display_b = root.children
+	(
+		gbuffer, shade, resolve_ab, resolve_ba,
+		display_current, display_a, display_b, diff_a, diff_b,
+	) = root.children[:9]
 	history_weight_a = resolve_ab.stateSet.uniforms["historyWeight"]
 	history_weight_b = resolve_ba.stateSet.uniforms["historyWeight"]
 
 	viewer.eventHandlers.append(Controls(
-		gbuffer, resolve_ab, resolve_ba, display_current, display_a, display_b,
+		viewer.cameraManipulator, viewer.camera,
+		gbuffer, resolve_ab, resolve_ba, display_current, display_a, display_b, diff_a, diff_b,
 		history_weight_a, history_weight_b,
 	))
 

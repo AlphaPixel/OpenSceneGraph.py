@@ -33,6 +33,8 @@ os.environ.update({
 	"OSG_GL_CONTEXT_VERSION": "4.6"
 })
 
+from pyosg_example import label
+
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
@@ -440,7 +442,7 @@ def build_scene(w, h):
 	hud_cam.preDrawCallback = update_uniforms
 
 	root = osg.Group()
-	root.children.extend((gbuffer_cam, hud_cam))
+	root.children.extend((gbuffer_cam, hud_cam, label("1 color | 2 depth | 3 normal | 0 default", w, h)))
 
 	return root
 
@@ -452,7 +454,7 @@ def build_scene(w, h):
 # runner-driven runs behave identically instead of the runner silently dropping this example's
 # interactivity (confirmed missing 2026-08-19, before this hook existed).
 def configure_viewer(viewer, root):
-	gbuffer_cam, hud_cam = root.children
+	gbuffer_cam, hud_cam = root.children[:2]
 
 	# build_scene() doesn't return the visualizeMode Uniform directly (its contract is just
 	# "return a Node") -- pull it back out of the HUD camera's StateSet, the same place

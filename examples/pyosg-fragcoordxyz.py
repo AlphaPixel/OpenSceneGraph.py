@@ -6,7 +6,7 @@ import random
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
 # example -- these need to land before OSG's DisplaySettings reads them.
-from pyosg_example import window_size
+from pyosg_example import label, window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -481,13 +481,20 @@ def build_scene(w, h):
 
 	r.updateCallback = TimeUpdateCallback(ss)
 
-	return r
+	root = osg.Group()
+
+	root.children.append(r)
+	root.children.append(label("N for next", w, h))
+
+	return root
 
 # ProgramHandler needs the live viewer to register as an event handler, which build_scene()
-# never receives -- the Program itself is recovered straight back out of the returned root's
-# StateSet, same as pyosg_visitor.py's own GatherVisitor introspection.
+# never receives -- the Program is recovered from the geode (root's first child -- see
+# build_scene()'s own wrapping) straight back out of its StateSet, same as pyosg_visitor.py's
+# own GatherVisitor introspection.
 def configure_viewer(viewer, root):
-	p = root.stateSet.attributes[osg.StateAttribute.PROGRAM]
+	geode = root.children[0]
+	p = geode.stateSet.attributes[osg.StateAttribute.PROGRAM]
 
 	viewer.eventHandlers.append(ProgramHandler(p))
 

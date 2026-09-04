@@ -346,6 +346,16 @@ def build_scene(w, h):
 	root = osg.Group()
 	root.children.append(hud)
 
+	# No interactive keys -- every option here is a startup CLI flag, so this reports them once
+	# instead of silently leaving them undiscoverable (unlike every keyboard-driven example in
+	# this repo, which prints/shows its live controls).
+	print(
+		"--density N (cell count, default 90, --vband mode only) | "
+		"--vband N (windowed sweep, N px wide) | --fill (solid cell interiors) | "
+		"--repl (drop into the REPL)",
+		flush=True
+	)
+
 	return root
 
 # The HUD camera clears white and covers the whole viewport every frame -- viewer-level, so it

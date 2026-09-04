@@ -84,6 +84,8 @@ os.environ.setdefault(
 	))
 )
 
+from pyosg_example import label
+
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
@@ -692,25 +694,95 @@ def parse_args():
 
 	return parser.parse_args(argv)
 
+# Recovered by configure_viewer() below (module-level stash -- same convention as
+# pyosg-khronos-viewer.py's _args/_pbr -- build_scene()'s own contract is "return a Node", no
+# second channel to hand back a plain Python closure it also needs later).
+_switch_scene = None
+
 # The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
 # Matches ../pyosg-cli's convention (and etc/pyside6-glsl.py's Qt-embedded sibling) so both can
-# run this too.
+# run this too. All three scenes are pure functions of (args) with no shared/global state, so
+# switch_scene() below can freely rebuild any of them again later, live.
 def build_scene(w, h):
+	global _switch_scene
+
 	args = parse_args()
 
-	if args.scene == "glitter":
-		return build_glitter_scene()
+	def make_scene(name):
+		if name == "glitter":
+			return build_glitter_scene()
 
-	if args.scene == "spots":
-		return build_spots_scene()
+		if name == "spots":
+			return build_spots_scene()
 
-	return build_sweep_scene(args)
+		return build_sweep_scene(args)
+
+	root = osg.Group(name="root")
+	hint = label("1 default | 2 glitter | 3 spots", w, h)
+	current = {"scene": make_scene(args.scene)}
+
+	root.children.append(current["scene"])
+	root.children.append(hint)
+
+	# Swaps root's scene child for a freshly-built one -- re-appending hint afterward instead of
+	# inserting the new scene at a fixed index, since root.children has no positional insert;
+	# append+remove is the only mutation every other example in this repo already relies on.
+	def switch_scene(name):
+		new_scene = make_scene(name)
+
+		root.children.remove(current["scene"])
+		root.children.remove(hint)
+		root.children.append(new_scene)
+		root.children.append(hint)
+
+		current["scene"] = new_scene
+
+	_switch_scene = switch_scene
+
+	return root
+
+# 1/2/3 rebuild and swap in the sweep/glitter/spots scene live -- --scene/--shape/--hdr/--env
+# still select the INITIAL scene (and sweep's own look) at startup; this only adds live
+# switching between the three on top, matching every other keyboard-driven example in this repo.
+class SceneSwitchHandler(osgGA.GUIEventHandler):
+	def __init__(self, switch_scene):
+		super().__init__()
+
+		self.switch_scene = switch_scene
+
+	def handle(self, ea, aa):
+		if ea.handled or ea.type != osgGA.GUIEventAdapter.KEYUP:
+			return False
+
+		if ea.key == ord("1"):
+			self.switch_scene("sweep")
+
+			return True
+
+		if ea.key == ord("2"):
+			self.switch_scene("glitter")
+
+			return True
+
+		if ea.key == ord("3"):
+			self.switch_scene("spots")
+
+			return True
+
+		return False
+
+def configure_viewer(viewer, root):
+	viewer.eventHandlers.append(SceneSwitchHandler(_switch_scene))
 
 if __name__ == "__main__":
 	viewer = osgViewer.Viewer()
+	root = build_scene(1000, 400)
+
+	viewer.sceneData = root
 	viewer.cameraManipulator = osgGA.TrackballManipulator()
-	viewer.sceneData = build_scene(1000, 400)
 	viewer.cameraManipulator.home(0)
+
+	configure_viewer(viewer, root)
 
 	while not viewer.done:
 		viewer.frame()

@@ -36,7 +36,7 @@ import random
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
 # example -- these need to land before OSG's DisplaySettings reads them.
-from pyosg_example import window_size
+from pyosg_example import label, window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -225,6 +225,7 @@ def build_scene(w, h):
 	))
 
 	root.stateSet.attributes.append(prog)
+	root.children.append(label("A to add | R to remove", w, h))
 
 	return root
 

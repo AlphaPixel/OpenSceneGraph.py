@@ -44,7 +44,7 @@ os.environ.setdefault(
 # Deliberately after the OSG_WINDOW/OSG_LIBRARY_PATH overrides above (setdefault() means order
 # between these doesn't actually matter, but matching pyosg-khronos-viewer.py's style) and before
 # `from OpenSceneGraph import *` -- these need to land before OSG's DisplaySettings reads them.
-from pyosg_example import window_size
+from pyosg_example import label, window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -449,6 +449,7 @@ def build_scene(w, h):
 	hud_camera.stateSet.modes[GL_DEPTH_TEST] = osg.StateAttribute.OFF
 
 	scene.children.append(hud_camera)
+	scene.children.append(label("R to reroll", w, h))
 
 	_rollable_dice = rollable_dice
 	_active_face_uniforms = active_face_uniforms

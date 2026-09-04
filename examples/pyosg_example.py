@@ -56,22 +56,35 @@ def label(text, w, h, corner="bottom-left", scale=2.0, margin=12.0, ink=(1.0, 1.
 
 		root.children.append(pyosg_example.label("Press R to reroll", w, h))
 
-	`scale` is a multiple of osgx.PixelText's native glyph size (GLYPH_ROWS); the default of 2.0
-	draws at 2x native resolution, per the user's own request. `corner` is one of "bottom-left"
-	(default), "bottom-right", "top-left", "top-right". `margin` is a literal pixel gap from the
-	chosen corner's two edges.
+	`scale` is a multiple of osgx.PixelText's native glyph size (GLYPH_ROWS tall, GLYPH_COLS
+	wide); the default of 2.0 draws at 2x native resolution, per the user's own request.
+	`corner` is one of "bottom-left" (default), "bottom-right", "top-left", "top-right".
+	`margin` is a literal pixel gap from the chosen corner's two edges.
 	"""
 
 	cell_size = osgx.PixelText.GLYPH_ROWS * scale
 	pixel_text = osgx.PixelText(text, cell_size)
 
+	# PixelText's own cellSize (and its default advance) is a SQUARE per-character cell sized
+	# off GLYPH_ROWS (see osgx::PixelText::createAtlas()'s own comment: "a glyph block is only
+	# GLYPH_COLS * pixelScale wide but GLYPH_ROWS * pixelScale tall" -- the glyph itself sits
+	# centered in that square with margin on the narrower axis). Leaving advance at its default
+	# spaces characters a full cellSize apart -- visibly wider than the glyph's own native
+	# GLYPH_COLS-wide footprint. Tightening it to the glyph's real width gives ordinary,
+	# non-monospace-square-cell text spacing instead.
+	advance = osgx.PixelText.GLYPH_COLS * scale
+
+	pixel_text.advance = advance
 	pixel_text.ink = osg.Vec4(*ink)
 
 	geode = osg.Geode(name="hud-label")
 
 	geode.drawables.append(pixel_text)
 
-	text_width = cell_size * len(text)
+	# Matches PixelText's own internal width formula (see PixelText.cpp's computeBoundingBox()):
+	# every glyph but the last only takes `advance` of horizontal room; the last one still needs
+	# its own full cellSize, since nothing after it truncates its trailing margin.
+	text_width = max(len(text) - 1, 0) * advance + cell_size
 	corners = {
 		"bottom-left": (margin, margin),
 		"bottom-right": (w - margin - text_width, margin),
@@ -97,6 +110,7 @@ def label(text, w, h, corner="bottom-left", scale=2.0, margin=12.0, ink=(1.0, 1.
 	camera.renderOrder = osg.Camera.POST_RENDER
 	camera.clearMask = 0
 	camera.referenceFrame = osg.Transform.ABSOLUTE_RF
+	camera.viewport = osg.Viewport(0, 0, w, h)
 	camera.viewMatrix = osg.Matrix.identity()
 	camera.projectionMatrix = osg.Matrix.identity()
 	camera.allowEventFocus = False
