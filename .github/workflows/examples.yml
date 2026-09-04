@@ -76,3 +76,26 @@ jobs:
           name: OpenSceneGraph-examples
           path: ${{ runner.temp }}/pyosg/wheelhouse/openscenegraph_examples-*.whl
           if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    # Unlike wheels.yml, this workflow has no automatic tag-push trigger --
+    # every run is already a deliberate, manual workflow_dispatch, so that
+    # opt-in is the publish gate. There is no separate "real release" ref to
+    # distinguish it from.
+    if: inputs.build
+    needs: [examples-package]
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/openscenegraph-examples/
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: OpenSceneGraph-examples
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
