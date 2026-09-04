@@ -10,9 +10,9 @@
 # background thread contending for the GIL with a render loop that -- under OSG_THREADING=
 # SingleThreaded -- almost never voluntarily releases it).
 #
-# This module is intentionally NOT part of the OpenSceneGraph package yet -- it's a migration
-# candidate for python/OpenSceneGraph/, alongside pyosg_repl.py and pyosg_visitor.py, once that
-# move happens deliberately for all three together.
+# Part of the base openscenegraph wheel via examples/manifest.cmake's PYOSG_CORE_EXAMPLES, same as
+# pyosg_repl.py/pyosg_visitor.py/pyosg_example.py -- stays here in examples/ rather than moving
+# into python/OpenSceneGraph/, matching how those three already resolved the same question.
 
 import asyncio
 

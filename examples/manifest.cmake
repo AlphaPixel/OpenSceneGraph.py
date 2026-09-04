@@ -24,6 +24,7 @@ set(PYOSG_CORE_EXAMPLES
 	"pyosg_example.py=pyosg_example.py"
 	"pyosg_visitor.py=pyosg_visitor.py"
 	"pyosg_repl.py=pyosg_repl.py"
+	"pyosg_async.py=pyosg_async.py"
 )
 
 # Examples that ship only in the separate openscenegraph-examples overlay wheel,
