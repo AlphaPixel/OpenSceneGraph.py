@@ -17,10 +17,17 @@ add_subdirectory("etc/pybind11")
 # make the source and revision used by this path explicit and reproducible.
 option(PYOSG_FETCH_OSG "Fetch and build the project-pinned OpenSceneGraph dependency" OFF)
 
-# Keep local MSVC work strict by default, while allowing wheel CI bring-up to
-# report analyzer findings without throwing away an hour-long build before its
-# packaging/runtime checks run.
+# Keep local MSVC work strict by default; CI turns this off (see wheels.yml) so an
+# analyzer/warning finding never fails a wheel build outright.
 option(PYOSG_MSVC_WARNINGS_AS_ERRORS "Treat MSVC warnings as errors" ON)
+
+# MSVC's /analyze (PREfast static analyzer) is dramatically slower than a normal build --
+# confirmed live 2026-09-03: roughly 5 minutes for a single heavy pybind11 binding
+# translation unit under Wine locally, and each Windows wheel target in CI (3 per run:
+# cp312/cp313/cp314) taking ~1.3 hours as a direct result. Off by default everywhere
+# (local MSVC dev builds and CI both) so routine builds stay fast; turn it on
+# deliberately when actually auditing analyzer findings, not as a standing default.
+option(PYOSG_MSVC_ANALYZE "Enable MSVC's /analyze static analyzer (slow)" OFF)
 
 # Defaults to the project-pinned OSG path, but accepts any osgx source checkout
 # so contributors can keep developing the two projects side by side.
@@ -221,13 +228,6 @@ if(WIN32)
 	set(PYOSG_COMPILE_OPTIONS
 		"/W4"
 		"/wd4100"
-		# MSVC's static analyzer reports false-positive null dereferences in
-		# pybind11's overload dispatcher, even when pybind11 is an external include.
-		# Its function-record / current-overload invariants are established by the
-		# Python callback capsule and preserved across the two-pass dispatcher.
-		"/wd28182"
-		"/wd6011"
-		"/analyze"
 		# "/wd4225"
 		# "/wd4244"
 		# "/wd4668"
@@ -237,6 +237,17 @@ if(WIN32)
 		# "/wd4334"
 		# "/wd4311"
 	)
+	if(PYOSG_MSVC_ANALYZE)
+		list(APPEND PYOSG_COMPILE_OPTIONS
+			"/analyze"
+			# MSVC's static analyzer reports false-positive null dereferences in
+			# pybind11's overload dispatcher, even when pybind11 is an external include.
+			# Its function-record / current-overload invariants are established by the
+			# Python callback capsule and preserved across the two-pass dispatcher.
+			"/wd28182"
+			"/wd6011"
+		)
+	endif()
 	if(PYOSG_MSVC_WARNINGS_AS_ERRORS)
 		list(APPEND PYOSG_COMPILE_OPTIONS "/WX")
 	endif()
