@@ -31,6 +31,35 @@ def test_construction():
 	assert refcmp(g1.children[0], 2, 2)
 	assert g1.children[1].name == "bar"
 
+def test_children_getitem_slice():
+	g = Group(name="g")
+	n0 = Node(name="n0")
+	n1 = Node(name="n1")
+	n2 = Node(name="n2")
+	n3 = Node(name="n3")
+
+	g.children.extend((n0, n1, n2, n3))
+
+	assert g.children[:] == [n0, n1, n2, n3]
+	assert g.children[1:3] == [n1, n2]
+	assert g.children[:2] == [n0, n1]
+	assert g.children[2:] == [n2, n3]
+	assert g.children[::2] == [n0, n2]
+	assert g.children[::-1] == [n3, n2, n1, n0]
+	assert g.children[-2:] == [n2, n3]
+	assert g.children[1:1] == []
+	assert g.children[100:] == []
+
+	# Same wrapper objects get()/iteration would return, not copies -- identity, not equality.
+	sliced = g.children[1:3]
+
+	assert sliced[0] is n1
+	assert sliced[1] is n2
+
+	# Plain int indexing (the pre-existing __getitem__ overload) must still work unchanged.
+	assert g.children[0] is n0
+	assert g.children[-1] is n3
+
 def test_children_insert():
 	g = Group(name="g")
 	n0 = Node(name="n0")

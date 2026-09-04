@@ -558,6 +558,28 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 		return base_type::get(i, ptr);
 	}
 
+	// list[start:stop:step] -- a second __getitem__ overload (see bind() below), disjoint from
+	// the ssize_t one above: a Python `slice` never satisfies an ssize_t parameter and vice
+	// versa, so both coexist with no ambiguity, same as the two pop() overloads already do.
+	// py::slice::compute() is pybind11's own standard clamping/negative-index/step-direction
+	// handling for a Python slice against a known length - reimplementing that by hand here
+	// would just be re-deriving what it already does correctly.
+	py::list get_slice(const py::slice& slice) {
+		size_t start, stop, step, slice_length;
+
+		if(!slice.compute(size(), &start, &stop, &step, &slice_length)) {
+			throw py::error_already_set();
+		}
+
+		py::list result;
+
+		for(size_t i = 0; i < slice_length; i++) {
+			result.append(get(static_cast<py::ssize_t>(start + i * step)));
+		}
+
+		return result;
+	}
+
 	void set(py::ssize_t index, py::object py_obj) {
 		if constexpr(!SequenceSettable<T, Tag>) throw py::type_error(
 			"Sequence does not support assignment"
@@ -817,6 +839,7 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 		sp
 			.def("__len__", &SequenceProxy<T, Tag>::size)
 			.def("__getitem__", &SequenceProxy<T, Tag>::get)
+			.def("__getitem__", &SequenceProxy<T, Tag>::get_slice)
 			.def("__setitem__", &SequenceProxy<T, Tag>::set)
 			.def("__delitem__", &SequenceProxy<T, Tag>::del)
 			.def("__iter__", &SequenceProxy<T, Tag>::iter, py::keep_alive<0, 1>())
