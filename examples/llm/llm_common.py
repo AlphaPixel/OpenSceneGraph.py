@@ -1,4 +1,4 @@
-"""Shared Qwen and CUDA/GL plumbing for the sequential LLM examples.
+"""Shared Hugging Face model and CUDA/GL plumbing for the sequential LLM examples.
 
 The numbered examples deliberately keep their CUDA kernels and rendering code local. This module
 contains only the setup which is unrelated to the visualization being taught.
@@ -52,19 +52,19 @@ def configure_glowing_points(geode, name, vertex_shader):
 
 
 class ResponseText:
-	"""A deliberately in-scene, non-billboarded view of Qwen's recent token text."""
+	"""A deliberately in-scene, non-billboarded view of the model's recent token text."""
 	LINE_WIDTH = 34
 	TOKEN_COUNT = 10
 
 	def __init__(self, step_mode):
 		self.tokens = deque(maxlen=self.TOKEN_COUNT)
 		self.labels = []
-		self.node = osg.Group(name="Qwen response text")
+		self.node = osg.Group(name="Model response text")
 		rotation = osg.Matrix.rotate(0.5 * pi, osg.Vec3(1.0, 0.0, 0.0))
 
 		for line in range(3):
 			label = osgx.PixelText("", 0.16)
-			geode = osg.Geode(name=f"Qwen response line {line}")
+			geode = osg.Geode(name=f"Model response line {line}")
 			transform = osg.MatrixTransform(
 				rotation * osg.Matrix.translate(-4.8, -3.4, 3.2 - 0.28 * line)
 			)
@@ -103,7 +103,7 @@ class ResponseText:
 
 
 class TokenStepController(osgGA.GUIEventHandler):
-	"""Queue exactly one Qwen inference step for each N key release."""
+	"""Queue exactly one inference step for each N key release."""
 	def __init__(self, step_mode, delay):
 		super().__init__()
 		self.step_mode = step_mode
@@ -125,7 +125,7 @@ class TokenStepController(osgGA.GUIEventHandler):
 	def install(self, viewer):
 		if self.step_mode:
 			viewer.eventHandlers.append(self)
-			print("Qwen: press N for the next token")
+			print("Model: press N for the next token")
 
 	def ready(self, now):
 		return self.pending if self.step_mode else now - self.last_step >= self.delay
@@ -147,9 +147,9 @@ def cu(result):
 		return rest[0] if len(rest) == 1 else rest
 
 
-def qwen_arguments(description):
+def causal_lm_arguments(description):
 	parser = argparse.ArgumentParser(description=description)
-	parser.add_argument("--model", required=True, help="local Hugging Face model checkout")
+	parser.add_argument("--model", required=True, help="local Hugging Face model checkout (Qwen, Llama, Hermes, ...)")
 	parser.add_argument(
 		"--max-new-tokens",
 		type=int,
@@ -167,12 +167,12 @@ def qwen_arguments(description):
 		action="store_true",
 		help="generate only when N is released"
 	)
-	parser.add_argument("prompt", nargs="+", help="prompt passed to Qwen")
+	parser.add_argument("prompt", nargs="+", help="prompt passed to the model")
 
 	return parser.parse_args()
 
 
-class QwenStepper:
+class CausalLMStepper:
 	"""Generate one token at a time and retain all activation-derived data in VRAM."""
 	def __init__(self, model_path, prompt, max_new_tokens=256):
 		if max_new_tokens < 1:
@@ -209,7 +209,7 @@ class QwenStepper:
 
 		self.finished = False
 
-		print(f"Qwen: {self.layers} state rows x {self.channels} channels")
+		print(f"Model: {self.layers} state rows x {self.channels} channels")
 
 	def step(self):
 		if self.finished:
@@ -248,11 +248,11 @@ class QwenStepper:
 
 		if next_token_id in self.eos_token_ids:
 			self.finished = True
-			print("\n[Qwen: end of response]", flush=True)
+			print("\n[Model: end of response]", flush=True)
 
 		elif self.generated_tokens >= self.max_new_tokens:
 			self.finished = True
-			print("\n[Qwen: reached --max-new-tokens]", flush=True)
+			print("\n[Model: reached --max-new-tokens]", flush=True)
 
 		return activation, delta, relative_layer_change
 

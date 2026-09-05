@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""03 - A scrolling history of Qwen's relative per-layer hidden-state change."""
+"""03 - A scrolling history of the model's relative per-layer hidden-state change."""
 
 import ctypes
 import os
@@ -18,8 +18,8 @@ from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
 from llm_common import (
-	CUDAInteropVBO, QwenStepper, ResponseText, TokenStepController,
-	configure_glowing_points, qwen_arguments
+	CUDAInteropVBO, CausalLMStepper, ResponseText, TokenStepController,
+	configure_glowing_points, causal_lm_arguments
 )
 
 
@@ -70,7 +70,7 @@ void main(void) {
 }
 """
 
-_qwen = None
+_model = None
 _cuda = None
 _latest_slot = None
 _response = None
@@ -78,13 +78,13 @@ _stepper = None
 
 
 def build_scene(w, h):
-	global _qwen, _cuda, _latest_slot, _response, _stepper
+	global _model, _cuda, _latest_slot, _response, _stepper
 
-	args = qwen_arguments("03 - render scrolling Qwen layer-change history through CUDA/GL interop")
-	_qwen = QwenStepper(args.model, " ".join(args.prompt), args.max_new_tokens)
+	args = causal_lm_arguments("03 - render scrolling layer-change history through CUDA/GL interop")
+	_model = CausalLMStepper(args.model, " ".join(args.prompt), args.max_new_tokens)
 	_response = ResponseText(args.step)
 	_stepper = TokenStepController(args.step, args.delay)
-	point_count = HISTORY * _qwen.layers
+	point_count = HISTORY * _model.layers
 	positions = osg.Vec3Array(point_count)
 	geometry = osg.Geometry()
 
@@ -96,7 +96,7 @@ def build_scene(w, h):
 	geode = osg.Geode()
 
 	geode.drawables.append(geometry)
-	configure_glowing_points(geode, "Qwen Layer Change History", VERTEX_SHADER)
+	configure_glowing_points(geode, "Layer Change History", VERTEX_SHADER)
 	_latest_slot = osg.Uniform("latestSlot", 0.0)
 	geode.stateSet.uniforms.extend((_latest_slot, osg.Uniform("history", float(HISTORY))))
 	_cuda = CUDAInteropVBO(positions, KERNEL_SOURCE, "writeLayerHistory")
@@ -122,14 +122,14 @@ def configure_viewer(viewer, root):
 		if not _stepper.ready(now):
 			return
 
-		if _qwen.finished:
+		if _model.finished:
 			return
 
-		_, _, changes = _qwen.step()
+		_, _, changes = _model.step()
 		_cuda.launch_1d(
-			HISTORY * _qwen.layers if not initialized[0] else _qwen.layers,
+			HISTORY * _model.layers if not initialized[0] else _model.layers,
 			ctypes.c_void_p(changes.data_ptr()),
-			ctypes.c_int(_qwen.layers),
+			ctypes.c_int(_model.layers),
 			ctypes.c_int(slot[0]),
 			ctypes.c_int(HISTORY),
 			ctypes.c_int(not initialized[0])
@@ -137,15 +137,15 @@ def configure_viewer(viewer, root):
 		initialized[0] = True
 		_latest_slot.value = float(slot[0])
 		slot[0] = (slot[0] + 1) % HISTORY
-		_response.push(_qwen.last_token_text)
+		_response.push(_model.last_token_text)
 
-		if _qwen.finished:
+		if _model.finished:
 			_response.finish()
 
 		_stepper.consume(now)
 
 	viewer.camera.preDrawCallback = predraw
-	print("Qwen says: ", end="", flush=True)
+	print("Model says: ", end="", flush=True)
 
 
 if __name__ == "__main__":

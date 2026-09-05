@@ -91,11 +91,13 @@ set(PYOSG_OFFICIAL_EXAMPLES
 	# llm_common.py is this subpackage's own shared helper module (distinct from the base
 	# package's pyosg_example.py/pyosg_visitor.py/pyosg_repl.py). Needs a local model
 	# checkpoint + GPU at runtime; not part of any prepared asset catalog (see README.md).
+	# Any local Hugging Face causal-LM checkout works here, not just Qwen -- names deliberately
+	# avoid a model-brand tag.
 	"llm/__init__.py=llm/__init__.py"
 	"llm/README.md=llm/README.md"
 	"llm/llm_common.py=llm/llm_common.py"
-	"llm/00-qwen-activation-carpet.py=llm/qwen_activation_carpet.py"
-	"llm/01-qwen-activation-delta.py=llm/qwen_activation_delta.py"
-	"llm/02-qwen-layer-change.py=llm/qwen_layer_change.py"
-	"llm/03-qwen-layer-change-history.py=llm/qwen_layer_change_history.py"
+	"llm/00-activation-carpet.py=llm/activation_carpet.py"
+	"llm/01-activation-delta.py=llm/activation_delta.py"
+	"llm/02-layer-change.py=llm/layer_change.py"
+	"llm/03-layer-change-history.py=llm/layer_change_history.py"
 )

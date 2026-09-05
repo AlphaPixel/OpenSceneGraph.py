@@ -18,8 +18,8 @@ from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
 from llm_common import (
-	CUDAInteropVBO, QwenStepper, ResponseText, TokenStepController,
-	configure_glowing_points, qwen_arguments
+	CUDAInteropVBO, CausalLMStepper, ResponseText, TokenStepController,
+	configure_glowing_points, causal_lm_arguments
 )
 
 
@@ -56,20 +56,20 @@ void main(void) {
 }
 """
 
-_qwen = None
+_model = None
 _cuda = None
 _response = None
 _stepper = None
 
 
 def build_scene(w, h):
-	global _qwen, _cuda, _response, _stepper
+	global _model, _cuda, _response, _stepper
 
-	args = qwen_arguments("01 - render Qwen hidden-state deltas through CUDA/GL interop")
-	_qwen = QwenStepper(args.model, " ".join(args.prompt), args.max_new_tokens)
+	args = causal_lm_arguments("01 - render hidden-state deltas through CUDA/GL interop")
+	_model = CausalLMStepper(args.model, " ".join(args.prompt), args.max_new_tokens)
 	_response = ResponseText(args.step)
 	_stepper = TokenStepController(args.step, args.delay)
-	point_count = _qwen.layers * _qwen.channels
+	point_count = _model.layers * _model.channels
 	positions = osg.Vec3Array(point_count)
 	geometry = osg.Geometry()
 
@@ -81,7 +81,7 @@ def build_scene(w, h):
 	geode = osg.Geode()
 
 	geode.drawables.append(geometry)
-	configure_glowing_points(geode, "Qwen Activation Delta", VERTEX_SHADER)
+	configure_glowing_points(geode, "Activation Delta", VERTEX_SHADER)
 	_cuda = CUDAInteropVBO(positions, KERNEL_SOURCE, "writeActivationDelta")
 	root = osg.Group()
 
@@ -103,25 +103,25 @@ def configure_viewer(viewer, root):
 		if not _stepper.ready(now):
 			return
 
-		if _qwen.finished:
+		if _model.finished:
 			return
 
-		_, delta, _ = _qwen.step()
+		_, delta, _ = _model.step()
 		_cuda.launch_1d(
-			_qwen.layers * _qwen.channels,
+			_model.layers * _model.channels,
 			ctypes.c_void_p(delta.data_ptr()),
-			ctypes.c_int(_qwen.channels),
-			ctypes.c_int(_qwen.layers)
+			ctypes.c_int(_model.channels),
+			ctypes.c_int(_model.layers)
 		)
-		_response.push(_qwen.last_token_text)
+		_response.push(_model.last_token_text)
 
-		if _qwen.finished:
+		if _model.finished:
 			_response.finish()
 
 		_stepper.consume(now)
 
 	viewer.camera.preDrawCallback = predraw
-	print("Qwen says: ", end="", flush=True)
+	print("Model says: ", end="", flush=True)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""02 - One relative RMS hidden-state change value per Qwen layer."""
+"""02 - One relative RMS hidden-state change value per model layer."""
 
 import ctypes
 import os
@@ -18,8 +18,8 @@ from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
 from llm_common import (
-	CUDAInteropVBO, QwenStepper, ResponseText, TokenStepController,
-	configure_glowing_points, qwen_arguments
+	CUDAInteropVBO, CausalLMStepper, ResponseText, TokenStepController,
+	configure_glowing_points, causal_lm_arguments
 )
 
 
@@ -49,31 +49,31 @@ void main(void) {
 }
 """
 
-_qwen = None
+_model = None
 _cuda = None
 _response = None
 _stepper = None
 
 
 def build_scene(w, h):
-	global _qwen, _cuda, _response, _stepper
+	global _model, _cuda, _response, _stepper
 
-	args = qwen_arguments("02 - render Qwen's relative per-layer change through CUDA/GL interop")
-	_qwen = QwenStepper(args.model, " ".join(args.prompt), args.max_new_tokens)
+	args = causal_lm_arguments("02 - render relative per-layer change through CUDA/GL interop")
+	_model = CausalLMStepper(args.model, " ".join(args.prompt), args.max_new_tokens)
 	_response = ResponseText(args.step)
 	_stepper = TokenStepController(args.step, args.delay)
-	positions = osg.Vec3Array(_qwen.layers)
+	positions = osg.Vec3Array(_model.layers)
 	geometry = osg.Geometry()
 
 	geometry.vertexArray = positions
-	geometry.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.POINTS, 0, _qwen.layers))
+	geometry.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.POINTS, 0, _model.layers))
 	geometry.useVertexBufferObjects = True
 	geometry.initialBound = osg.BoundingBox(-6, -1, -1, 6, 1, 4)
 
 	geode = osg.Geode()
 
 	geode.drawables.append(geometry)
-	configure_glowing_points(geode, "Qwen Layer Change", VERTEX_SHADER)
+	configure_glowing_points(geode, "Layer Change", VERTEX_SHADER)
 	_cuda = CUDAInteropVBO(positions, KERNEL_SOURCE, "writeLayerChange")
 	root = osg.Group()
 
@@ -95,24 +95,24 @@ def configure_viewer(viewer, root):
 		if not _stepper.ready(now):
 			return
 
-		if _qwen.finished:
+		if _model.finished:
 			return
 
-		_, _, changes = _qwen.step()
+		_, _, changes = _model.step()
 		_cuda.launch_1d(
-			_qwen.layers,
+			_model.layers,
 			ctypes.c_void_p(changes.data_ptr()),
-			ctypes.c_int(_qwen.layers)
+			ctypes.c_int(_model.layers)
 		)
-		_response.push(_qwen.last_token_text)
+		_response.push(_model.last_token_text)
 
-		if _qwen.finished:
+		if _model.finished:
 			_response.finish()
 
 		_stepper.consume(now)
 
 	viewer.camera.preDrawCallback = predraw
-	print("Qwen says: ", end="", flush=True)
+	print("Model says: ", end="", flush=True)
 
 
 if __name__ == "__main__":
