@@ -45,24 +45,12 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
 # example -- these need to land before OSG's DisplaySettings reads them.
-from pyosg_example import window_size
+from pyosg_example import window_size, resolve_model
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
 import osgx
-
-# Bare name (e.g. "Corset") -> glTF-Sample-Assets/Models/<name>/glTF/<name>.gltf via
-# osgx.findDataFile(), same convention pyosg-khronos-viewer.py's own resolve_model() uses.
-def resolve_model(value):
-	path = pathlib.Path(value).expanduser()
-
-	if path.is_file():
-		return str(path)
-
-	return osgx.findDataFile(value) or osgx.findDataFile(
-		path.stem, ("glTF-Sample-Assets/Models/{}/glTF/{}.gltf",)
-	) or None
 
 # Same light positions as step 7 (pyosg-lighting-7-emissive.py) -- no animation.
 KEY_LIGHT_POS = osg.Vec3( 0.1, 0.1, 1.0) # front-center key (shadow caster)

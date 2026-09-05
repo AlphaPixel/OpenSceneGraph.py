@@ -54,7 +54,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
 # example -- these need to land before OSG's DisplaySettings reads them.
-from pyosg_example import window_size
+from pyosg_example import window_size, resolve_model, resolve_asset
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -66,27 +66,6 @@ import osgx
 KEY_LIGHT_DIR = osg.Vec3(0.6, 0.4, -0.6).normalized()
 KEY_LIGHT_COLOR = osg.Vec3(1.0, 0.95, 0.85)
 KEY_LIGHT_INTENSITY = 3.0
-
-# Bare name (e.g. "Corset") -> glTF-Sample-Assets/Models/<name>/glTF/<name>.gltf via
-# osgx.findDataFile(), same convention every other step in this series uses.
-def resolve_model(value):
-	path = pathlib.Path(value).expanduser()
-
-	if path.is_file():
-		return str(path)
-
-	return osgx.findDataFile(value) or osgx.findDataFile(
-		path.stem, ("glTF-Sample-Assets/Models/{}/glTF/{}.gltf",)
-	) or None
-
-# HDR/manifest assets resolve via osgx.findDataFile() (OSG_FILE_PATH), same as resolve_model().
-def resolve_asset(value, suffix):
-	path = pathlib.Path(value).expanduser()
-
-	if path.is_file():
-		return str(path)
-
-	return osgx.findDataFile(value, (), suffix) or None
 
 # --------------------------------------------------------------------------- #
 # Shaders
@@ -810,12 +789,12 @@ def build_scene(w, h):
 	env_group.add_argument(
 		"--hdr",
 		default=None,
-		help="Equirectangular HDR; bakes diffuse/specular/BRDF-LUT live (default: papermill)"
+		help="Equirectangular HDR; bakes diffuse/specular/BRDF-LUT live"
 	)
 	env_group.add_argument(
 		"--env",
 		default=None,
-		help="Pre-baked osgx_pbribl environment manifest"
+		help="Pre-baked osgx_pbribl environment manifest (default: papermill)"
 	)
 
 	ap.add_argument("--ibl-diffuse", type=float, default=1.0, dest="ibl_diffuse")
@@ -844,8 +823,12 @@ def build_scene(w, h):
 
 	args = ap.parse_args()
 
+	# --env, not --hdr: only pre-baked manifests are ever bundled in the openscenegraph-
+	# examples wheel (see resolve_asset()'s own comment in pyosg_example.py) -- a bare
+	# invocation with neither flag must work out of the box against a plain `pip install`,
+	# not require OSG_FILE_PATH pointed at a real glTF-Sample-Environments checkout.
 	if not args.hdr and not args.env:
-		args.hdr = "papermill"
+		args.env = "papermill"
 
 	# Preserve the existing opt-in floor flags as a room whose omitted dimension(s) scale with the
 	# actual asset -- a bounding sphere gives a conservative floor height even for models with

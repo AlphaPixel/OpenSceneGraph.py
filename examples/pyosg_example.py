@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import pathlib
 
 # setdefault(), not update() -- same reason as pyosg_visitor.py: an example that already set its
 # own OSG_WINDOW/OSG_THREADING/etc. (window size, a non-default GL version, ...) before importing
@@ -40,6 +41,66 @@ def window_size(default=(800, 600)):
 from OpenSceneGraph import osg
 from OpenSceneGraph.GL import GL_DEPTH_TEST
 import osgx
+
+# This module installs at the top level of the wheel (OpenSceneGraph/examples/pyosg_example.py),
+# a sibling of both `assets/` and the `lighting/` subpackage -- so this is the one place a plain
+# `.parent` (not `.parent.parent`) correctly reaches the bundled asset tree regardless of which
+# depth the CALLING file installs at. Deliberately kept here rather than scoped to the Lighting
+# Series specifically (see [[project_lighting_series_package_asset_backport]]) -- the user wants
+# this available as general infrastructure any future example (core or official tier) can rely on
+# to "find its assets" without reinventing this lookup. Real consequence: pyosg_example.py's
+# public surface is now something the examples wheel can depend on, same as any other cross-package
+# API -- a change here that examples/lighting/*.py relies on means bumping/republishing BOTH
+# wheels together, not just openscenegraph-examples alone.
+#
+# Formerly copy-pasted into every examples/lighting/*.py file (00-11) -- that duplication was in
+# keeping with the series' deliberate "self-contained, diffable" teaching design for its shader/
+# lighting-math code, but this is plain asset-resolution plumbing with no pedagogical value, and
+# the duplication cost a real bug: a package-asset fallback fixed once in pyosg-khronos-viewer.py
+# (see ai/context-todo-examplespackage.md) never got copied into any of the 12 lighting files,
+# surfacing 2026-09-04 as "Cannot find environment manifest" against the newly-published
+# openscenegraph-examples wheel. Centralized here instead of re-duplicating the fix 12 times.
+PACKAGE_ASSET_DIR = pathlib.Path(__file__).resolve().parent / "assets"
+
+# Bare name (e.g. "Corset") -> glTF-Sample-Assets/Models/<name>/glTF/<name>.gltf via
+# osgx.findDataFile() (OSG_FILE_PATH) first, then this wheel's own bundled
+# `assets/models/<name>/<name>.gltf`, same convention pyosg-khronos-viewer.py's own
+# resolve_model() proved out.
+def resolve_model(value):
+	path = pathlib.Path(value).expanduser()
+
+	if path.is_file():
+		return str(path)
+
+	found = osgx.findDataFile(value) or osgx.findDataFile(
+		path.stem, ("glTF-Sample-Assets/Models/{}/glTF/{}.gltf",)
+	)
+
+	if found:
+		return found
+
+	path = PACKAGE_ASSET_DIR / "models" / path.stem / f"{path.stem}.gltf"
+
+	return str(path) if path.is_file() else None
+
+# HDR/manifest assets: osgx.findDataFile() (OSG_FILE_PATH) first, then this wheel's own bundled
+# `assets/env/`. Only pre-baked manifests (.gltf) are ever bundled there, so a raw --hdr lookup
+# (suffix="hdr") still falls through to the caller's own "clone glTF-Sample-Environments" error --
+# correct, this wheel never ships the raw floating-point HDR sources, only baked env/ manifests.
+def resolve_asset(value, suffix):
+	path = pathlib.Path(value).expanduser()
+
+	if path.is_file():
+		return str(path)
+
+	found = osgx.findDataFile(value, (), suffix)
+
+	if found:
+		return found
+
+	path = PACKAGE_ASSET_DIR / "env" / f"{path.stem}.{suffix}"
+
+	return str(path) if path.is_file() else None
 
 # Same technique as pyosg_async.py's ProgressBar._build_label()/_position_label() -- a plain
 # child of an identity-view/projection POST_RENDER Camera, hand-composed translate*scale*translate

@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.18)
 # The single version of record. pyproject.toml's [project] version is dynamic and reads this
 # VERSION back out via scikit-build-core's regex provider (see [[tool.dynamic-metadata]]), so
 # PROJECT_VERSION here, PYOSG_VERSION at runtime, and the wheel's metadata version all agree.
-project(OpenSceneGraph-python VERSION 0.1.2 LANGUAGES C CXX)
+project(OpenSceneGraph-python VERSION 0.1.3 LANGUAGES C CXX)
 
 # An extension module needs Python headers but must not link to libpython on
 # Unix. manylinux deliberately omits that embedding library, so request the
@@ -499,8 +499,12 @@ if(NOT PYOSG_EMBEDDED)
 
 	# The `OpenSceneGraph.examples` package backing the `pyosg` console script; see
 	# PYOSG_CORE_EXAMPLES in examples/manifest.cmake for the curated example
-	# list itself. Official-tier examples ship only from examples/CMakeLists.txt's
-	# separate openscenegraph-examples overlay wheel, never from here.
+	# list itself -- deliberately just `info.py` (2026-09-04), a self-contained
+	# diagnostic with no shared-helper or asset dependency, so this base wheel never
+	# needs to move in lockstep with the examples wheel. Official-tier examples (and
+	# the shared pyosg_example.py/pyosg_visitor.py/pyosg_repl.py/pyosg_async.py
+	# helpers they use) ship only from examples/CMakeLists.txt's separate
+	# openscenegraph-examples overlay wheel, never from here.
 	install(FILES
 		"python/OpenSceneGraph/examples/__init__.py"
 		"python/OpenSceneGraph/examples/__main__.py"

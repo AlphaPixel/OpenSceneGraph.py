@@ -8,23 +8,19 @@
 #
 # Each entry is "<source file in examples/>=<installed module filename>".
 
-# A small, curated, asset-free subset of examples/ that implements the
-# build_scene()/configure_viewer() contract, promoted into the base package's
-# OpenSceneGraph.examples package so `pyosg <name>` works out of the box. Most of
-# examples/ is a development sandbox and deliberately not part of this list; add an
-# entry here once an example implements the contract and is meant to ship in the base
-# wheel.
+# The base package's ONLY example content: a self-contained, zero-shared-helper,
+# zero-asset diagnostic dump (build_info()/DisplaySettings/GraphicsContext/GLExtensions) --
+# just enough to verify the native extension and a real GL context both actually work.
+# Deliberately does not grow: any example needing pyosg_example.py or any other shared
+# helper belongs in PYOSG_OFFICIAL_EXAMPLES below instead (2026-09-04 -- previously this
+# list also carried blur/mrt plus the shared pyosg_example.py/pyosg_visitor.py/
+# pyosg_repl.py/pyosg_async.py helpers, which created a real cross-wheel dependency edge:
+# a change to pyosg_example.py that the Lighting Series relied on required bumping and
+# republishing BOTH wheels together, not just openscenegraph-examples alone. All of that
+# moved to PYOSG_OFFICIAL_EXAMPLES, where every other consumer of those helpers already
+# lives, so pyosg_example.py now has exactly one owning wheel).
 set(PYOSG_CORE_EXAMPLES
-	"pyosg-blur.py=blur.py"
-	"pyosg-mrt.py=mrt.py"
 	"pyosg-info.py=info.py"
-	# Shared source/example bootstrap helpers belong to the base package, so
-	# optional example distributions can import them without owning package
-	# scaffolding files.
-	"pyosg_example.py=pyosg_example.py"
-	"pyosg_visitor.py=pyosg_visitor.py"
-	"pyosg_repl.py=pyosg_repl.py"
-	"pyosg_async.py=pyosg_async.py"
 )
 
 # Examples that ship only in the separate openscenegraph-examples overlay wheel,
@@ -32,6 +28,15 @@ set(PYOSG_CORE_EXAMPLES
 # by the base package; still mirrored into the BUILD-*/ dev tree so they can be run
 # and iterated on without building the overlay wheel.
 set(PYOSG_OFFICIAL_EXAMPLES
+	# Shared example bootstrap helpers -- every consumer of these (mrt.py below, the
+	# Lighting Series, llm/ has its own llm_common.py instead) lives in this same wheel,
+	# so this is the one place any future example can rely on them existing.
+	"pyosg_example.py=pyosg_example.py"
+	"pyosg_visitor.py=pyosg_visitor.py"
+	"pyosg_repl.py=pyosg_repl.py"
+	"pyosg_async.py=pyosg_async.py"
+	"pyosg-blur.py=blur.py"
+	"pyosg-mrt.py=mrt.py"
 	"pyosg-khronos-viewer.py=khronos_viewer.py"
 	# pyosg-async-gltf.py
 	# pyosg-async.py
