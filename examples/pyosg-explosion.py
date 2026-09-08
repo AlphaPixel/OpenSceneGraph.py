@@ -1047,11 +1047,10 @@ class ExplosionKeyHandler(osgGA.GUIEventHandler):
 	handler.
 	"""
 
-	def __init__(self, bindings, viewer):
+	def __init__(self, bindings):
 		super().__init__()
 
 		self.bindings = bindings
-		self.viewer = viewer
 
 	def handle(self, ea, aa):
 		if ea.type != osgGA.GUIEventAdapter.KEYDOWN:
@@ -1066,7 +1065,7 @@ class ExplosionKeyHandler(osgGA.GUIEventHandler):
 			target()
 
 		else:
-			trigger(target, self.viewer)
+			trigger(target, aa.viewer)
 
 		osg.notice(f"[pyosg-explosion] triggered (key {chr(ea.key)})")
 
@@ -1146,7 +1145,7 @@ def configure_viewer(viewer, root):
 		ord("6"): with_kick(multiburst),
 	}
 
-	v.eventHandlers.append(ExplosionKeyHandler(bindings, v))
+	v.eventHandlers.append(ExplosionKeyHandler(bindings))
 
 	# --- Docked ImGui panel: enabled by default; --no-gui removes it. The -- #
 	# --- panel exposes every build_fire()/build_shockwave()/build_smoke()/ -- #

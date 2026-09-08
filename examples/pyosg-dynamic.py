@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+#vimrun! ../examples/pyosg-dynamic.py
 
 # Standalone, minimal proof of the "stable, controllable object lifetime" pattern this project
 # treats as non-negotiable (see aipython/20-object-lifetime.md) -- deliberately with NO async/
@@ -125,10 +126,9 @@ class DynamicHandler(osgGA.GUIEventHandler):
 	destruction happens right here, not whenever Python's GC eventually gets to it.
 	"""
 
-	def __init__(self, viewer, root, objects):
+	def __init__(self, root, objects):
 		super().__init__()
 
-		self.viewer = viewer
 		self.root = root
 		self.objects = objects
 		# 'x' moves a live object here instead of `del`-ing it -- a real, uncleared Python
@@ -150,7 +150,7 @@ class DynamicHandler(osgGA.GUIEventHandler):
 
 			osg.info(f"[pyosg-dynamic] added '{obj.name}' -- {len(self.objects)} live, {obj.referenceCount}")
 
-			self.viewer.cameraManipulator.home(0.0)
+			aa.viewer.cameraManipulator.home(0.0)
 
 			return True
 
@@ -182,7 +182,7 @@ class DynamicHandler(osgGA.GUIEventHandler):
 
 			osg.info(f"[pyosg-dynamic] removed -- {len(self.objects)} live")
 
-			self.viewer.cameraManipulator.home(0.0)
+			aa.viewer.cameraManipulator.home(0.0)
 
 			return True
 
@@ -210,7 +210,7 @@ class DynamicHandler(osgGA.GUIEventHandler):
 
 			osg.info(f"[pyosg-dynamic] orphaned -- {len(self.objects)} live, {len(self.orphans)} orphaned")
 
-			self.viewer.cameraManipulator.home(0.0)
+			aa.viewer.cameraManipulator.home(0.0)
 
 			return True
 
@@ -259,7 +259,7 @@ def configure_viewer(viewer, root):
 
 	objects = []
 
-	viewer.eventHandlers.append(DynamicHandler(viewer, root, objects))
+	viewer.eventHandlers.append(DynamicHandler(root, objects))
 
 if __name__ == "__main__":
 	W, H = window_size()

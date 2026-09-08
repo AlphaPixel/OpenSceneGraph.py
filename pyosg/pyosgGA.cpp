@@ -1,5 +1,12 @@
 #include "pyosgGA.hpp"
 
+OSGX_DISABLE_WARNINGS
+
+#include <osgViewer/View>
+#include <osgViewer/Viewer>
+
+OSGX_ENABLE_WARNINGS
+
 namespace pyosgGA {
 
 void bind(py::module_& m) {
@@ -19,6 +26,23 @@ void bind(py::module_& m) {
 		)
 		.def("requestWarpPointer", &osgGA::GUIActionAdapter::requestWarpPointer,
 			"Request that the window system move the pointer."
+		)
+		.def_property_readonly(
+			"view",
+			[](osgGA::GUIActionAdapter& self) {
+				return osg::ref_ptr<osgViewer::View>(dynamic_cast<osgViewer::View*>(&self));
+			},
+			"The osgViewer.View dispatching this event, or None when this adapter is not a view."
+		)
+		.def_property_readonly(
+			"viewer",
+			[](osgGA::GUIActionAdapter& self) {
+				auto view = dynamic_cast<osgViewer::View*>(&self);
+
+				return osg::ref_ptr<osgViewer::ViewerBase>(view ? view->getViewerBase() : nullptr);
+			},
+			"The osgViewer.ViewerBase (typically a Viewer) dispatching this event, or None when "
+			"this adapter is not a view."
 		)
 	;
 

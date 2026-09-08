@@ -265,7 +265,22 @@ void bind(py::module_& m) {
 		"on top of osg.View's camera/scene pairing. .eventHandlers is a sequence proxy "
 		"(append/insert instead of addEventHandler()) that also accepts a plain Python "
 		"callable in place of a GUIEventHandler subclass instance."
-	);
+	)
+		.def_property_readonly(
+			"view",
+			[](osgViewer::View& self) {
+				return osg::ref_ptr<osgViewer::View>(&self);
+			},
+			"This view."
+		)
+		.def_property_readonly(
+			"viewer",
+			[](osgViewer::View& self) {
+				return osg::ref_ptr<osgViewer::ViewerBase>(self.getViewerBase());
+			},
+			"The osgViewer.ViewerBase (typically a Viewer) owning this view."
+		)
+	;
 
 	pyx::bind_proxy_property<detail::EventHandlersProxy, osgViewer::View, detail::ViewStorage>(
 		view,
