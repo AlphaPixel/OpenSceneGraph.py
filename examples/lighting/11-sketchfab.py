@@ -600,6 +600,17 @@ def create_debug_camera(depth_scale, w, h):
 
 	return cam, channel_mode_u
 
+# Dedicated last-draw camera for ImGui. It has no scene content of its own - Widget installs the
+# draw callback - but it must remain enabled independently of the final/debug presentation cameras.
+def create_imgui_overlay_camera():
+	return osg.Camera(
+		name="ImGuiOverlay",
+		referenceFrame=osg.Transform.ABSOLUTE_RF,
+		renderOrder=(osg.Camera.POST_RENDER, 3),
+		clearMask=0,
+		allowEventFocus=False,
+	)
+
 def create_grid_room(bound_center, bound_radius, floor_z, room_size):
 	"""Create the optional Z-up model guide room.
 
@@ -1094,6 +1105,10 @@ def build_scene(w, h):
 		# regardless of view mode. Same fix this session's osgx-gbuffer.cpp needed.
 		gizmos.overlay.renderOrder = (osg.Camera.POST_RENDER, 2)
 
+	# ImGui cannot live on final_cam: select_visualize_mode() deliberately masks that camera in
+	# every raw-channel view. Keep its callback on a distinct, always-enabled last-draw camera.
+	imgui_overlay = create_imgui_overlay_camera()
+
 	root = osg.Group()
 
 	if environment.root is not None:
@@ -1115,6 +1130,8 @@ def build_scene(w, h):
 	if gizmos is not None:
 		root.children.append(gizmos)
 
+	root.children.append(imgui_overlay)
+
 	select_visualize_mode(0)
 
 	_state = {
@@ -1133,6 +1150,7 @@ def build_scene(w, h):
 		"light_orbit": light_orbit,
 		"final_cam": final_cam,
 		"debug_cam": debug_cam,
+		"imgui_overlay": imgui_overlay,
 		"DEBUG_MODES": DEBUG_MODES,
 		"visualize_mode": visualize_mode,
 		"select_visualize_mode": select_visualize_mode,
@@ -1173,6 +1191,7 @@ def configure_viewer(viewer, root):
 	lighting = state["lighting"]
 	light_orbit = state["light_orbit"]
 	final_cam = state["final_cam"]
+	imgui_overlay = state["imgui_overlay"]
 	DEBUG_MODES = state["DEBUG_MODES"]
 	visualize_mode = state["visualize_mode"]
 	select_visualize_mode = state["select_visualize_mode"]
@@ -1229,14 +1248,9 @@ def configure_viewer(viewer, root):
 		gui_opts.dock = osgx.imgui.Dock.LEFT
 		gui_opts.dock_width = 320.0
 
-		# gizmos.overlay pinned as the explicit draw camera -- left at the default, Widget draws
-		# via viewer.camera's own PostDrawCallback, which fires BEFORE any nested POST_RENDER
-		# camera (final_cam, debug_cam, the gizmo overlay -- none are View slaves) actually runs;
-		# their later draw painted straight over the panel. Same fix this session's
-		# osgx-shadow.cpp/osgx-gbuffer.cpp needed -- see osgx/ImGui.hpp's Widget constructor
-		# comment for the full rationale. Falls back to final_cam if there's no gizmo (--no-lights).
-		draw_camera = gizmos.overlay if gizmos is not None else final_cam
-		gui = osgx.imgui.Widget(viewer, draw_camera, gui_opts)
+		# Pin ImGui after both final_cam/debug_cam and the optional gizmo overlay. In particular,
+		# raw-channel visualization masks final_cam, so it cannot serve as the --no-lights fallback.
+		gui = osgx.imgui.Widget(viewer, imgui_overlay, gui_opts)
 		closed_section = osgx.imgui.SectionOptions(default_open=False)
 
 		def draw_visualize_mode(ri):
