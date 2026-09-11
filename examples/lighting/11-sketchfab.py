@@ -1000,10 +1000,10 @@ def build_scene(w, h):
 	lighting_cam.stateSet.attributes.append(lights)
 
 	if args.lights:
-		lights.setCount(1)
+		lights.count = 1
 
 	else:
-		lights.setCount(0)
+		lights.count = 0
 
 	light_orbit = LightOrbit(
 		lights, shadow_map, shadow_options, bound_center, bound_radius, KEY_LIGHT_COLOR, KEY_LIGHT_INTENSITY

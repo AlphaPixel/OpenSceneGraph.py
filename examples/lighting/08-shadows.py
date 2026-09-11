@@ -343,7 +343,7 @@ def build_scene(w, h):
 	if args.floor:
 		floor_geode.stateSet.attributes.append(lights)
 
-	lights.setCount(3)
+	lights.count = 3
 	lights.setPoint(0, KEY_LIGHT_POS, osg.Vec3(1.0, 0.9, 0.7), 1.6)
 	lights.setPoint(1, FILL_LIGHT_POS_0, osg.Vec3(0.3, 0.5, 1.0), 1.2)
 	lights.setPoint(2, FILL_LIGHT_POS_1, osg.Vec3(1.0, 0.5, 0.2), 1.0)

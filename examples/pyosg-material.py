@@ -101,7 +101,7 @@ osg.DisplaySettings.instance.numMultiSamples = 8
 def build_light_set():
 	lights = osgx.LightSet()
 
-	lights.setCount(1)
+	lights.count = 1
 	lights.setDirectional(0, osg.Vec3(0.3, 0.5, -1.0), osg.Vec3(1.0, 0.97, 0.9), 3.0)
 
 	return lights
