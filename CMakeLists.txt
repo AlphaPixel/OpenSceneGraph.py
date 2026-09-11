@@ -175,27 +175,9 @@ else()
 	set(PYOSG_OSG_LIBRARIES ${OPENSCENEGRAPH_LIBRARIES})
 endif()
 
-if(PYOSG_FETCH_OSG OR PYOSG_BUILD_OSGX)
-	if(NOT EXISTS "${PYOSG_OSGX_SOURCE_DIR}/CMakeLists.txt")
-		message(FATAL_ERROR
-			"PYOSG_BUILD_OSGX is ON, but PYOSG_OSGX_SOURCE_DIR "
-			"Initialize etc/osgx or pass -DPYOSG_OSGX_SOURCE_DIR=/path/to/osgx."
-		)
-	endif()
-
-	# The wheel owns this complete dependency graph. Build osgx's Python
-	# module and its deliberately supported osgDB plugins, but no examples or
-	# standalone installation rules.
-	set(OSGX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-	set(OSGX_BUILD_UTILS ${PYOSG_BUILD_OSGX_UTILS} CACHE BOOL "" FORCE)
-	set(OSGX_BUILD_PYTHON ON CACHE BOOL "" FORCE)
-	set(OSGX_BUILD_KTX2 ON CACHE BOOL "" FORCE)
-	set(OSGX_BUILD_GLTF ON CACHE BOOL "" FORCE)
-	set(OSGX_OPENSCENEGRAPH_PY_DIR "${CMAKE_CURRENT_SOURCE_DIR}" CACHE PATH "" FORCE)
-	set(OSGX_INSTALL OFF CACHE BOOL "" FORCE)
-
-	add_subdirectory("${PYOSG_OSGX_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/_deps/osgx-build" EXCLUDE_FROM_ALL)
-endif()
+# osgx is add_subdirectory()'d further down, right after OpenSceneGraph_python is fully defined
+# (see there for why) -- osgx_python_bindings needs that target to already exist by the time its
+# own CMakeLists.txt runs, to statically link osgx.RTT's kwargs support against it.
 
 # # Step A -> generate C++ from Cython
 # set(CYTHON_SRC ${CMAKE_CURRENT_SOURCE_DIR}/cython_part.pyx)
@@ -327,16 +309,33 @@ target_link_libraries(OpenSceneGraph_python PRIVATE
 )
 
 if(PYOSG_FETCH_OSG OR PYOSG_BUILD_OSGX)
-	# osgx is EXCLUDE_FROM_ALL, so make all wheel runtime products dependencies
-	# of the extension target.
-	add_dependencies(OpenSceneGraph_python osgx osgx_python osgdb_gltf osgdb_ktx2)
-
-	# These targets belong to the project-fetched OSG source tree. A developer
-	# may instead add osgx alongside a pre-installed system OSG, whose plugin
-	# targets are not part of this CMake build.
-	if(PYOSG_FETCH_OSG)
-		add_dependencies(OpenSceneGraph_python ${PYOSG_OSG_PLUGIN_TARGETS})
+	if(NOT EXISTS "${PYOSG_OSGX_SOURCE_DIR}/CMakeLists.txt")
+		message(FATAL_ERROR
+			"PYOSG_BUILD_OSGX is ON, but PYOSG_OSGX_SOURCE_DIR "
+			"Initialize etc/osgx or pass -DPYOSG_OSGX_SOURCE_DIR=/path/to/osgx."
+		)
 	endif()
+
+	# The wheel owns this complete dependency graph. Build osgx's Python
+	# module and its deliberately supported osgDB plugins, but no examples or
+	# standalone installation rules.
+	set(OSGX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+	set(OSGX_BUILD_UTILS ${PYOSG_BUILD_OSGX_UTILS} CACHE BOOL "" FORCE)
+	set(OSGX_BUILD_PYTHON ON CACHE BOOL "" FORCE)
+	set(OSGX_BUILD_KTX2 ON CACHE BOOL "" FORCE)
+	set(OSGX_BUILD_GLTF ON CACHE BOOL "" FORCE)
+	set(OSGX_OPENSCENEGRAPH_PY_DIR "${CMAKE_CURRENT_SOURCE_DIR}" CACHE PATH "" FORCE)
+	set(OSGX_INSTALL OFF CACHE BOOL "" FORCE)
+
+	# Moved here (used to run much earlier, before OpenSceneGraph_python even existed):
+	# osgx_python_bindings statically links OpenSceneGraph_python's compiled static lib for
+	# cross-module pybind11x::kwargs_init_own<T> support (osgx.RTT's kwargs-forwarding
+	# constructor -- see osgx's own CMakeLists.txt and this repo's TODO.md, "Cross-module
+	# kwargs_init_own<T>" section). osgx's CMakeLists.txt detects this via
+	# `if(TARGET OpenSceneGraph_python)`, which only works if that target already exists at
+	# this point -- hence add_subdirectory() must come after the add_library()/
+	# target_link_libraries() above, not before.
+	add_subdirectory("${PYOSG_OSGX_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/_deps/osgx-build" EXCLUDE_FROM_ALL)
 endif()
 target_compile_options(OpenSceneGraph_python PRIVATE ${PYOSG_COMPILE_OPTIONS})
 	target_compile_features(OpenSceneGraph_python PUBLIC cxx_std_20)
@@ -372,6 +371,22 @@ if(NOT PYOSG_EMBEDDED)
 	# The wheel is a normal Python package. Keep its native implementation
 	# private while retaining the OpenSceneGraph initializer for embedded users.
 	pybind11_add_module(_OpenSceneGraph "pyosg/OpenSceneGraph-python.cpp")
+
+	if(PYOSG_FETCH_OSG OR PYOSG_BUILD_OSGX)
+		# osgx is EXCLUDE_FROM_ALL, so make all wheel runtime products dependencies
+		# of the extension module -- anchored HERE rather than off OpenSceneGraph_python
+		# (as it used to be) so this ordering doesn't fight the real osgx_python ->
+		# OpenSceneGraph_python build-order edge added above: _OpenSceneGraph already
+		# links OpenSceneGraph_python, so it's guaranteed to build after it either way.
+		add_dependencies(_OpenSceneGraph osgx osgx_python osgdb_gltf osgdb_ktx2)
+
+		# These targets belong to the project-fetched OSG source tree. A developer
+		# may instead add osgx alongside a pre-installed system OSG, whose plugin
+		# targets are not part of this CMake build.
+		if(PYOSG_FETCH_OSG)
+			add_dependencies(_OpenSceneGraph ${PYOSG_OSG_PLUGIN_TARGETS})
+		endif()
+	endif()
 
 	if(PYOSG_BUILD_PACKAGE_OVERLAY)
 		# Developers run examples from BUILD-*/. Mirror the installed package
