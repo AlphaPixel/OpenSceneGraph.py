@@ -66,6 +66,7 @@ extern "C" PyObject* PyInit_OpenSceneGraph();
 		static void __cdecl func(void)
 
 	#define PYOSG_INTERNAL
+	#define PYOSG_EXPORT
 
 #else
 	// GCC/Clang
@@ -73,6 +74,19 @@ extern "C" PyObject* PyInit_OpenSceneGraph();
 
 	#define PYOSG_INTERNAL __attribute__((visibility("hidden")))
 	// #define PYOSG_INTERNAL [[gnu::visibility("hidden")]]
+
+	// pybind11_add_module() sets CXX_VISIBILITY_PRESET hidden on every binding target (on top of
+	// PYOSG_INTERNAL's own explicit hiding above) -- fine for the overwhelming majority of this
+	// codebase's symbols, which only ever need to be called from within their OWN .so. The
+	// kwargs_init_own<T> explicit specializations below are the one exception: kwargs_init<T>
+	// (pybind11x.hpp) is an ordinary header-defined template, so a DIFFERENT .so instantiating
+	// kwargs_init<SomeOtherModuleType> whose kwargs_base<T> chain walks UP INTO an osg:: type gets
+	// its own private, locally-compiled copy of that walk -- right up until it hits one of these
+	// kwargs_init_own<T> leaves, which have no body outside this module and must resolve as a real
+	// cross-.so symbol. First hit by osgx.so's osgx::RTT (osg::Camera subclass) wanting its own
+	// Python constructor to chain into osg.Camera's kwargs -- undefined symbol at import time
+	// without this, since hidden-visibility symbols aren't in the dynamic symbol table at all.
+	#define PYOSG_EXPORT __attribute__((visibility("default")))
 #endif
 
 // Bare forward declarations -- just enough to name these types below, without dragging in their
@@ -108,7 +122,7 @@ namespace osg {
 // to the no-op default in whichever TU forgot to declare it, so keep this list in sync with reality.
 namespace pybind11x {
 	template<typename T> struct kwargs_base;
-	template<typename T> void kwargs_init_own(T& self, const py::kwargs& kwargs);
+	template<typename T> PYOSG_EXPORT void kwargs_init_own(T& self, const py::kwargs& kwargs);
 
 	template<> struct kwargs_base<osg::Node> { using type = osg::Object; };
 	template<> struct kwargs_base<osg::Group> { using type = osg::Node; };
@@ -127,20 +141,20 @@ namespace pybind11x {
 	template<> struct kwargs_base<osg::Texture2D> { using type = osg::Texture; };
 	template<> struct kwargs_base<osg::Geometry> { using type = osg::Drawable; };
 
-	template<> void kwargs_init_own(osg::Object& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Node& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Group& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Geode& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Drawable& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Program& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Transform& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::MatrixTransform& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::PositionAttitudeTransform& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::AutoTransform& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Camera& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Texture& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Texture2D& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Geometry& self, const py::kwargs& kwargs);
+	template<> PYOSG_EXPORT void kwargs_init_own(osg::Object& self, const py::kwargs& kwargs);
+	template<> PYOSG_EXPORT void kwargs_init_own(osg::Node& self, const py::kwargs& kwargs);
+	template<> PYOSG_EXPORT void kwargs_init_own(osg::Group& self, const py::kwargs& kwargs);
+	template<> PYOSG_EXPORT void kwargs_init_own(osg::Geode& self, const py::kwargs& kwargs);
+	template<> PYOSG_EXPORT void kwargs_init_own(osg::Drawable& self, const py::kwargs& kwargs);
+	template<> PYOSG_EXPORT void kwargs_init_own(osg::Program& self, const py::kwargs& kwargs);
+	template<> PYOSG_EXPORT void kwargs_init_own(osg::Transform& self, const py::kwargs& kwargs);
+	template<> PYOSG_EXPORT void kwargs_init_own(osg::MatrixTransform& self, const py::kwargs& kwargs);
+	template<> PYOSG_EXPORT void kwargs_init_own(osg::PositionAttitudeTransform& self, const py::kwargs& kwargs);
+	template<> PYOSG_EXPORT void kwargs_init_own(osg::AutoTransform& self, const py::kwargs& kwargs);
+	template<> PYOSG_EXPORT void kwargs_init_own(osg::Camera& self, const py::kwargs& kwargs);
+	template<> PYOSG_EXPORT void kwargs_init_own(osg::Texture& self, const py::kwargs& kwargs);
+	template<> PYOSG_EXPORT void kwargs_init_own(osg::Texture2D& self, const py::kwargs& kwargs);
+	template<> PYOSG_EXPORT void kwargs_init_own(osg::Geometry& self, const py::kwargs& kwargs);
 }
 
 namespace pyosg {
