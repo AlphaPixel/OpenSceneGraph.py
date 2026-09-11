@@ -62,7 +62,7 @@ set(PYOSG_OFFICIAL_EXAMPLES
 	"pyosg-noise.py=noise.py"
 	"pyosg-picking.py=picking.py"
 	"pyosg-points.py=points.py"
-	"pyosg-polyhaven.py=polyhaven.py"
+	"pyosg_polyhaven.py=polyhaven.py"
 	"pyosg-rtt.py=rtt.py"
 	"pyosg-taa.py=taa.py"
 	"pyosg-voronoi-reveal.py=voronoi_reveal.py"

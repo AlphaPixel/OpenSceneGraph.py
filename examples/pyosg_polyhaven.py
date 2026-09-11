@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 #
-# pyosg-polyhaven.py worn_brick_wall --texture
-# pyosg-polyhaven.py https://polyhaven.com/a/worn_brick_wall --texture
-# pyosg-polyhaven.py /path/to/local.gltf --texture
-# pyosg-polyhaven.py worn_brick_wall --texture --res 4k
+# pyosg_polyhaven.py worn_brick_wall --texture
+# pyosg_polyhaven.py https://polyhaven.com/a/worn_brick_wall --texture
+# pyosg_polyhaven.py /path/to/local.gltf --texture
+# pyosg_polyhaven.py worn_brick_wall --texture --res 4k
 #
-# pyosg-polyhaven.py qwantani_dusk_2 --hdr
-# pyosg-polyhaven.py https://polyhaven.com/a/qwantani_dusk_2 --hdr
-# pyosg-polyhaven.py /path/to/local.hdr --hdr
-# pyosg-polyhaven.py qwantani_dusk_2 --hdr --res 4k
+# pyosg_polyhaven.py qwantani_dusk_2 --hdr
+# pyosg_polyhaven.py https://polyhaven.com/a/qwantani_dusk_2 --hdr
+# pyosg_polyhaven.py /path/to/local.hdr --hdr
+# pyosg_polyhaven.py qwantani_dusk_2 --hdr --res 4k
+#
+# Installs as OpenSceneGraph/examples/polyhaven.py (manifest.cmake strips the pyosg_ prefix on
+# install, same as every other runnable demo here -- only the pure-library helpers like
+# pyosg_example.py keep it) -- import its download/cache functions via
+# `from OpenSceneGraph.examples import polyhaven`.
 
 import sys
 import os
@@ -306,6 +311,35 @@ def download_polyhaven_texture(slug, res="2k"):
 	osg.notice(f"[polyhaven] done -> {gltf_path}")
 
 	return gltf_path
+
+# Pure JSON/path resolution, no OSG dependency - a caller building its own material (not just
+# reusing build_texture_root()'s sphere-preview scene below) still needs to know which downloaded
+# file is which. Resolved via the glTF's own material -> texture -> image indirection rather than
+# assumed by filename convention, since Polyhaven's own naming isn't perfectly consistent across
+# every asset. `orm` is Polyhaven's packed AO(R)/Roughness(G)/Metallic(B) texture, read via
+# metallicRoughnessTexture and falling back to occlusionTexture for assets that only declare that
+# slot. Raises KeyError if the glTF has no materials or is missing an expected texture.
+def resolve_pbr_textures(gltf_path):
+	with open(gltf_path) as f:
+		doc = json.load(f)
+
+	base_dir = os.path.dirname(gltf_path)
+	material = doc["materials"][0]
+	pbr = material["pbrMetallicRoughness"]
+
+	def image_path(texture_ref):
+		texture = doc["textures"][texture_ref["index"]]
+		image = doc["images"][texture["source"]]
+
+		return os.path.join(base_dir, image["uri"])
+
+	orm_ref = pbr.get("metallicRoughnessTexture") or material["occlusionTexture"]
+
+	return {
+		"baseColor": image_path(pbr["baseColorTexture"]),
+		"normal": image_path(material["normalTexture"]),
+		"orm": image_path(orm_ref),
+	}
 
 def download_polyhaven_hdr(slug, res="2k"):
 	dest_dir = os.path.join(CACHE_DIR, slug, res)
