@@ -27,6 +27,23 @@ def test_construction_kwargs():
 	assert g.drawables[0].name == "foo"
 	assert g.drawables[1].name == "bar"
 
+def test_drawables_extend_call_shapes():
+	# Same 3 .extend() shapes as Group.children -- iterable (tested elsewhere), bare separate
+	# arguments, and a single bare (non-iterable) item.
+	g = Geode(name="g")
+	d0 = Drawable(name="d0")
+	d1 = Drawable(name="d1")
+
+	g.drawables.extend(d0, d1)
+
+	assert list(g.drawables) == [d0, d1]
+
+	d2 = Drawable(name="d2")
+
+	g.drawables.extend(d2)
+
+	assert list(g.drawables) == [d0, d1, d2]
+
 def test_drawables_insert():
 	# Geode has no native insert-at-position primitive (only addDrawable/removeDrawables), so
 	# this exercises SequenceProxy's del()+append() emulation fallback, not a native traits

@@ -94,6 +94,23 @@ def test_primitive_sets_setitem_and_delitem():
 	assert len(g.primitiveSets) == 1
 	assert g.primitiveSets[0].mode == PrimitiveSet.LINES
 
+def test_primitive_sets_extend_call_shapes():
+	# Same 3 .extend() shapes covered for Group.children/Geode.drawables/Program.shaders --
+	# iterable (tested elsewhere), bare separate arguments, and a single bare (non-iterable) item.
+	g = Geometry()
+	ps0 = DrawArrays(PrimitiveSet.TRIANGLES, 0, 3)
+	ps1 = DrawArrays(PrimitiveSet.LINES, 0, 2)
+
+	g.primitiveSets.extend(ps0, ps1)
+
+	assert list(g.primitiveSets) == [ps0, ps1]
+
+	ps2 = DrawArrays(PrimitiveSet.POINTS, 0, 1)
+
+	g.primitiveSets.extend(ps2)
+
+	assert list(g.primitiveSets) == [ps0, ps1, ps2]
+
 def test_primitive_sets_insert():
 	g = Geometry()
 

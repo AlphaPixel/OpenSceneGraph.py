@@ -31,6 +31,25 @@ def test_construction():
 	assert refcmp(g1.children[0], 2, 2)
 	assert g1.children[1].name == "bar"
 
+def test_children_extend_call_shapes():
+	# .extend() accepts an iterable (tested elsewhere), the items given directly as separate
+	# positional arguments, or a single bare (non-iterable) item -- all 3 shapes must work.
+	g = Group(name="g")
+	n0 = Node(name="n0")
+	n1 = Node(name="n1")
+	n2 = Node(name="n2")
+
+	g.children.extend(n0, n1, n2)
+
+	assert list(g.children) == [n0, n1, n2]
+
+	n3 = Node(name="n3")
+
+	g.children.extend(n3)
+
+	assert list(g.children) == [n0, n1, n2, n3]
+	assert g.children[-1] is n3
+
 def test_children_getitem_slice():
 	g = Group(name="g")
 	n0 = Node(name="n0")

@@ -289,7 +289,7 @@ struct pyx::MappingTraits<osg::StateSet, pyosg::detail::AttributesTag> {
 
 		if(py::isinstance<osg::StateAttribute>(obj)) attr = obj.cast<osg::StateAttribute*>();
 
-		else if(auto vals = pyx::try_unpack_sequence<
+		else if(auto vals = pyx::unpack_sequence<
 			osg::StateAttribute*, osg::StateAttribute::GLModeValue
 		>(obj)) std::tie(attr, mode) = *vals;
 

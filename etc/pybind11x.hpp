@@ -2,7 +2,9 @@
 
 // One-line summaries of what you'll find in this file:
 //
-// try_unpack_sequence -> "Try to unpack a py::object as an exact-length tuple of specific types."
+// unpack_sequence -> "Try to unpack a py::object as an exact-length tuple of specific types."
+// unpack_one_or_many -> "Accept a dict/list of T's, or a single bare T, as one Python value."
+// unpack_list_or_args -> "Same, but for a whole py::args argument list instead of one value."
 // kwargs_init -> "Chain a type's constructor-kwargs handling through its actual C++ bases."
 // SlotCache -> "Don't recreate Python objects unless the underlying pointer changed."
 // ProxyStorage -> "Attach all Python views to a C++ object's lifetime."
@@ -84,13 +86,12 @@ auto n_insert_index(size_t size, py::ssize_t index) {
 }
 
 // Chains a type's constructor-kwargs handling through its actual C++ base classes, automatically.
-// Each participating type specializes two things (see the manifest in pyosg.hpp, which is what
-// makes these specializations visible everywhere the chain below might need them):
 //
-//   - `kwargs_base<T>::type` - T's REAL immediate base (left as `void` for the root of a chain,
-//     or for any type that doesn't participate at all)
-//   - `kwargs_init_own<T>`   - whatever kwargs T itself understands; no delegation code needed,
-//     `kwargs_init<T>` walks `kwargs_base` up the chain for you
+// - `kwargs_base<T>::type` - T's REAL immediate base (left as `void` for the root of a chain,
+// or for any type that doesn't participate at all)
+//
+// - `kwargs_init_own<T>` - whatever kwargs T itself understands; no delegation code needed,
+// `kwargs_init<T>` walks `kwargs_base` up the chain for you
 //
 // A type's binding file therefore never has to know or re-derive what its "next" base is; if that
 // base later gains its own kwargs handling, every subclass picks it up for free.
@@ -115,7 +116,7 @@ namespace detail {
 	// to its own compile-time constant, unlike a runtime counter (e.g. `seq[i++]`), which would
 	// have unspecified evaluation order across pack elements.
 	template<typename... Ts, size_t... Is>
-	std::optional<std::tuple<Ts...>> try_unpack_sequence_impl(
+	std::optional<std::tuple<Ts...>> unpack_sequence_impl(
 		const py::sequence& seq,
 		std::index_sequence<Is...>
 	) {
@@ -127,6 +128,12 @@ namespace detail {
 			return std::nullopt;
 		}
 	}
+
+	template<typename T>
+	struct is_pair: std::false_type {};
+
+	template<typename A, typename B>
+	struct is_pair<std::pair<A, B>>: std::true_type {};
 }
 
 // Attempts to unpack `obj` as an exact-length sequence of `sizeof...(Ts)` elements, casting
@@ -141,7 +148,7 @@ namespace detail {
 // For a setter that accepts a variable number of elements (e.g. 1-3), call this once per exact
 // arity, largest first - there is deliberately no separate variadic/min-max variant.
 template<typename... Ts>
-std::optional<std::tuple<Ts...>> try_unpack_sequence(const py::object& obj) {
+std::optional<std::tuple<Ts...>> unpack_sequence(const py::object& obj) {
 	if(py::isinstance<py::str>(obj) || py::isinstance<py::bytes>(obj)) return std::nullopt;
 	if(!py::isinstance<py::sequence>(obj)) return std::nullopt;
 
@@ -149,7 +156,63 @@ std::optional<std::tuple<Ts...>> try_unpack_sequence(const py::object& obj) {
 
 	if(seq.size() != sizeof...(Ts)) return std::nullopt;
 
-	return detail::try_unpack_sequence_impl<Ts...>(seq, std::index_sequence_for<Ts...>{});
+	return detail::unpack_sequence_impl<Ts...>(seq, std::index_sequence_for<Ts...>{});
+}
+
+// Accepts any of the shapes a single Python VALUE naturally comes in when it logically means "a
+// bunch of T's":
+template<typename T>
+std::vector<T> unpack_one_or_many(const py::object& obj) {
+	if constexpr(detail::is_pair<T>::value) {
+		if(py::isinstance<py::dict>(obj)) {
+			std::vector<T> result;
+			auto d = obj.template cast<py::dict>();
+
+			result.reserve(d.size());
+
+			for(auto item: d) result.emplace_back(
+				item.first.template cast<typename T::first_type>(),
+				item.second.template cast<typename T::second_type>()
+			);
+
+			return result;
+		}
+	}
+
+	// Only ever try the "many" cast against an unambiguous Python COLLECTION shape - list/tuple/
+	// set/frozenset, or a generator. A bare object that merely duck-types as a sequence (e.g.
+	// osg.Uniform, indexable/iterable for array uniform types) must never be silently unpacked
+	// into its own elements just because casting to std::vector<T> happens to succeed against it.
+	if(
+		py::isinstance<py::list>(obj) ||
+		py::isinstance<py::tuple>(obj) ||
+		py::isinstance<py::set>(obj) ||
+		py::isinstance<py::frozenset>(obj) ||
+		PyGen_Check(obj.ptr())
+	) {
+		try {
+			return obj.template cast<std::vector<T>>();
+		}
+
+		catch(const py::cast_error&) {}
+	}
+
+	return { obj.template cast<T>() };
+}
+
+// Accepts any of the shapes a Python caller naturally reaches for when a bound method's ENTIRE
+// argument list takes "a bunch of these":
+template<typename T>
+std::vector<T> unpack_list_or_args(const py::args& args) {
+	if(args.size() == 1) return unpack_one_or_many<T>(py::reinterpret_borrow<py::object>(args[0]));
+
+	std::vector<T> result;
+
+	result.reserve(args.size());
+
+	for(auto arg: args) result.push_back(py::reinterpret_borrow<py::object>(arg).template cast<T>());
+
+	return result;
 }
 
 // Releases a Python reference held by a C++ object which may be destroyed from a thread that does
@@ -270,7 +333,7 @@ public:
 	// registered-instance registry (py::cast() returns the existing wrapper for a known pointer)
 	// to avoid allocating a duplicate Python object. That's a hashmap-lookup-plus-refcount cost
 	// per set() call that get()'s short-circuit avoids; skip it here unless a real profile shows
-	// it matters (see osgSlug's ShapeDrawable.layers proxy for the case that prompted this note).
+	// it matters.
 	template<typename T>
 	void set(key_type k, py::object obj, T* ptr) {
 		auto& s = Storage::slot(k);
@@ -593,12 +656,7 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 
 			auto* ptr = traits_type::get(obj, i);
 
-			// Cache the canonical pointer's own wrapper, not the raw input py_obj - see the
-			// "Caching Rules" section of ai/context-pybind11x.md. Only mattered silently before
-			// because every prior SequenceTraits had value_type == element_type*, where py_obj
-			// already wrapped the same pointer get() would independently return; a value_type
-			// distinct from element_type* (e.g. assigning a plain struct that gets copied into
-			// C++ state addressed by a separate handle type) exposes the difference.
+			// Cache the canonical pointer's own wrapper, not the raw input py_obj.
 			base_type::set(i, py::cast(ptr), ptr);
 		}
 	}
@@ -644,14 +702,6 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 		}
 	}
 
-	// list.insert(i, x). Prefers a native SequenceTraits::insert() when the specialization
-	// provides one (O(1)/native for Group.children, Geometry.primitiveSets, View.eventHandlers
-	// - see the owner traits files for how each reaches its underlying container). Falls back,
-	// for owners with only append()/del() (Geode, Program), to rotating the tail out and back
-	// in around the new value: capture it via get(), remove it back-to-front (front-to-back
-	// would shift indices out from under later del() calls), append the new value, then
-	// re-append the tail. Each captured py::object is the SAME wrapper get() already cached, so
-	// re-appending it (rather than a fresh lookup) preserves identity through the round trip.
 	void insert(py::ssize_t index, py::object py_obj) {
 		if constexpr(!SequenceInsertable<T, Tag>) throw py::type_error(
 			"Sequence does not support insert"
@@ -765,8 +815,10 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 		}
 	}
 
-	void extend(py::object iterable) {
-		for(py::handle item : iterable) append(py::reinterpret_borrow<py::object>(item));
+	// list.extend(x). Accepts a single iterable of items, the items given directly as separate
+	// arguments, or a single non-iterable item - unpack_list_or_args<T>() covers all 3 uniformly.
+	void extend(py::args args) {
+		for(auto& py_obj: unpack_list_or_args<py::object>(args)) append(py_obj);
 	}
 
 	// Shared by contains()/index()/remove() - first index whose element pointer equals
@@ -1567,17 +1619,16 @@ inline void build_info(py::module_ m, py::dict info) {
 // interrupt anything already in flight (e.g. a single blocking third-party library call).
 //
 // The py::class_ binding for this type must be registered in exactly ONE module's PYBIND11_MODULE
-// block (currently OpenSceneGraph-python.cpp) - pybind11 doesn't allow the same C++ type to be
-// registered as a Python class twice across different extension modules loaded into one interpreter.
-// Other modules (e.g. osgGLTF's) can still accept `StopEvent*`/`StopEvent&` as a parameter type in
-// their own bound functions; pybind11 resolves it via that single existing registration at runtime.
+// block - pybind11 doesn't allow the same C++ type to be registered as a Python class twice across
+// different extension modules loaded into one interpreter. Other modules can still accept
+// `StopEvent*`/`StopEvent&` as a parameter type in their own bound functions; pybind11 resolves it
+// via that single existing registration at runtime.
 struct StopEvent {
 	std::atomic<bool> stop{false};
 };
 
 // A lock-free progress channel: a background thread (typically one already running off the GIL via
-// asyncio.to_thread - see examples/pyosg_async.py's run_with_progress() for the Python-side
-// pattern) calls set() as often as it likes from inside a blocking native call, WITHOUT ever
+// asyncio.to_thread calls set() as often as it likes from inside a blocking native call, WITHOUT ever
 // touching Python; a single poller (normally the event-loop thread, which already owns the GIL as
 // a matter of course) calls poll() whenever it likes, since a poll is a handful of relaxed atomic
 // loads, not a GIL acquisition. This is the alternative to routing progress through put_nowait()
@@ -1585,19 +1636,7 @@ struct StopEvent {
 // irregular, Python-level event); PollableProgress is for a hot native loop reporting a simple
 // (stage, current, total, section) tick that a poller can just as easily pull instead of have
 // pushed at it. Prefer this one whenever the update shape is this simple - it removes the exact
-// cross-thread GIL contention put_nowait() creates (see aipython/25-async-osgpy.md for a real
-// case where that contention measured a 2x async/sync slowdown before this existed).
-//
-// IMPORTANT, learned the hard way: "poll() is cheap, call it as often as convenient" is true of
-// the CALL ITSELF, but is NOT permission to build a loop whose only job is polling with a
-// zero-delay yield (Python: `while not done: poll(); await asyncio.sleep(0)`). asyncio.sleep(0)
-// doesn't wait, it just reschedules immediately - a loop like that becomes a genuine unthrottled
-// busy-loop for the whole operation, burning ~100% of a CPU core on pure polling overhead. That's
-// real OS-level CPU contention with the background thread actually doing the work, and measured
-// worse than the GIL contention this type exists to remove (see run_with_progress()'s docstring
-// for the concrete regression this caused). "Poll every iteration" is only free when piggybacking
-// on a loop that already ticks for another reason (a render loop's own frame cadence); a loop that
-// exists purely to poll needs a real, positive sleep between checks, same as anything else would.
+// cross-thread GIL contention put_nowait() creates.
 //
 // Fields are independent atomics, not one struct behind a lock: a poll() that races a set() can
 // observe a torn combination (this tick's `current` alongside last tick's `section`) for exactly

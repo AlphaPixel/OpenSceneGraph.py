@@ -365,7 +365,7 @@ void bind(py::module_& m) {
 				return py::make_tuple(eye, center, up);
 			}),
 			py::cpp_function([](osgGA::CameraManipulator& self, py::object obj) {
-				auto vals = pyx::try_unpack_sequence<osg::Vec3d, osg::Vec3d, osg::Vec3d>(obj);
+				auto vals = pyx::unpack_sequence<osg::Vec3d, osg::Vec3d, osg::Vec3d>(obj);
 
 				if(!vals) throw py::type_error(
 					"Expected Vec3d sequence of length 3 (eye, center, up)"

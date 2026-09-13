@@ -2,7 +2,9 @@
 
 import pytest
 
-from OpenSceneGraph.osg import StateSet, StateAttribute, Program, Texture2D, Uniform, Vec3f, Matrixf
+from OpenSceneGraph.osg import (
+	StateSet, StateAttribute, Program, Texture2D, BlendFunc, Uniform, Vec3f, Matrixf
+)
 from OpenSceneGraph.GL import GL_DEPTH_TEST, GL_BLEND, GL_CULL_FACE
 
 def test_uniforms_append(uniform_init):
@@ -26,6 +28,48 @@ def test_uniforms_extend(uniform_init):
 	assert ss.uniforms["BOOL"].value == False
 	assert ss.uniforms["INT"].value == 0
 	assert ss.uniforms["FLOAT_VEC3"].value == Vec3f()
+
+def test_uniforms_extend_bare_args():
+	# uniforms.extend() takes an iterable (test_uniforms_extend above, via a generator) OR the
+	# Uniforms given as separate positional arguments, or a single bare Uniform -- both of the
+	# latter 2 shapes are new, exercised here.
+	ss = StateSet()
+	u0 = Uniform(Uniform.FLOAT, "a")
+	u1 = Uniform(Uniform.FLOAT, "b")
+
+	ss.uniforms.extend(u0, u1)
+
+	assert len(ss.uniforms) == 2
+	assert ss.uniforms["a"] is u0
+	assert ss.uniforms["b"] is u1
+
+	u2 = Uniform(Uniform.FLOAT, "c")
+
+	ss.uniforms.extend(u2)
+
+	assert len(ss.uniforms) == 3
+	assert ss.uniforms["c"] is u2
+
+def test_attributes_extend_bare_args():
+	# Same new call shapes as test_uniforms_extend_bare_args, for the attributes MappingProxy
+	# (keyed by StateAttribute.type instead of Uniform.name). Texture2D is deliberately NOT used
+	# here -- real OSG's setAttributeAndModes() detects a Texture and silently redirects it to
+	# setTextureAttributeAndModes(unit=0, ...) instead, so it would never land in .attributes.
+	ss = StateSet()
+	p = Program(name="p")
+	bf = BlendFunc()
+
+	ss.attributes.extend(p, bf)
+
+	assert len(ss.attributes) == 2
+	assert ss.attributes[StateAttribute.PROGRAM] is p
+	assert ss.attributes[StateAttribute.BLENDFUNC] is bf
+
+	p2 = Program(name="p2")
+
+	ss.attributes.extend(p2)
+
+	assert ss.attributes[StateAttribute.PROGRAM] is p2
 
 def test_uniform_mutation():
 	ss = StateSet()

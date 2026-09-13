@@ -387,13 +387,17 @@ void bind_State(py::module_& m) {
 				u
 			);
 		}, "Add a Uniform, keyed by its own .name - equivalent to stateSet.uniforms[u.name] = u.")
-		.def("extend", [](detail::UniformsProxy& self, py::iterable uniforms) {
-			for(auto u : uniforms) pyx::MappingTraits<osg::StateSet, detail::UniformsTag>::apply(
-				self.obj,
-				std::nullopt,
-				u
-			);
-		}, "Add each Uniform in an iterable, keyed by its own .name.")
+		.def("extend", [](detail::UniformsProxy& self, py::args args) {
+			for(auto& u : pyx::unpack_list_or_args<py::object>(args)) {
+				pyx::MappingTraits<osg::StateSet, detail::UniformsTag>::apply(
+					self.obj,
+					std::nullopt,
+					u
+				);
+			}
+		}, "Add each Uniform, given as a single iterable or as separate arguments, keyed by its "
+			"own .name."
+		)
 	;
 
 	// Same shape as `uniforms` above - the attribute's own `getType()` supplies the key, so
@@ -410,13 +414,17 @@ void bind_State(py::module_& m) {
 		}, "Add a StateAttribute, keyed by its own .type - equivalent to "
 			"stateSet.attributes[attr.type] = attr."
 		)
-		.def("extend", [](detail::AttributesProxy& self, py::iterable attrs) {
-			for(auto attr : attrs) pyx::MappingTraits<osg::StateSet, detail::AttributesTag>::apply(
-				self.obj,
-				std::nullopt,
-				attr
-			);
-		}, "Add each StateAttribute in an iterable, keyed by its own .type.")
+		.def("extend", [](detail::AttributesProxy& self, py::args args) {
+			for(auto& attr : pyx::unpack_list_or_args<py::object>(args)) {
+				pyx::MappingTraits<osg::StateSet, detail::AttributesTag>::apply(
+					self.obj,
+					std::nullopt,
+					attr
+				);
+			}
+		}, "Add each StateAttribute, given as a single iterable or as separate arguments, keyed "
+			"by its own .type."
+		)
 	;
 
 	ss

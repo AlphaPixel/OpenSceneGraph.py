@@ -112,7 +112,7 @@ namespace detail {
 				self.setViewport(obj.cast<osg::Viewport*>());
 			}
 
-			else if(auto vals = pyx::try_unpack_sequence<int, int, int, int>(obj)) {
+			else if(auto vals = pyx::unpack_sequence<int, int, int, int>(obj)) {
 				auto& [x, y, w, h] = *vals;
 
 				self.setViewport(x, y, w, h);
@@ -154,7 +154,7 @@ namespace detail {
 				self.setRenderOrder(obj.cast<osg::Camera::RenderOrder>());
 			}
 
-			else if(auto vals = pyx::try_unpack_sequence<osg::Camera::RenderOrder, int>(obj)) {
+			else if(auto vals = pyx::unpack_sequence<osg::Camera::RenderOrder, int>(obj)) {
 				auto& [order, num] = *vals;
 
 				self.setRenderOrder(order, num);
@@ -172,7 +172,7 @@ namespace detail {
 				);
 			}
 
-			else if(auto vals = pyx::try_unpack_sequence<
+			else if(auto vals = pyx::unpack_sequence<
 				osg::Camera::RenderTargetImplementation, osg::Camera::RenderTargetImplementation
 			>(obj)) {
 				auto& [impl, fallback] = *vals;

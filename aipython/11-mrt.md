@@ -5,10 +5,34 @@
 Read this before treating a G-buffer depth texture as a simple linear distance
 field.
 
+## The G-buffer camera is an `osgx.RTT`, not a hand-rolled `osg.Camera`
+
+See [`10-rtt.md`](10-rtt.md)'s precedent note: any camera that renders into a
+texture -- a single RTT pass or, as here, a G-buffer with several simultaneous
+attachments -- goes through `osgx.RTT` so it stays `grep`-able as one family.
+`pyosg-mrt.py`'s `create_gbuffer_camera()` builds it with `RELATIVE_RF`
+(inherits the live viewer camera's view/projection, same choice
+`pyosg-rtt.py` makes) and attaches all three targets in one declarative list:
+
+```python
+cam = osgx.RTT(w, h, osg.Transform.RELATIVE_RF, clearColor=osg.Vec4(0.0, 0.0, 0.0, 0.0))
+cam.attach([
+	(osg.Camera.COLOR_BUFFER0, color_tex),
+	(osg.Camera.COLOR_BUFFER1, normal_tex),
+	(osg.Camera.DEPTH_BUFFER, depth_tex)
+])
+```
+
+The composite/HUD camera that samples these textures back is a plain
+`osg.Camera` -- it consumes an RTT camera's output rather than rendering into
+one of its own, same distinction `10-rtt.md` draws for `pyosg-rtt.py`'s HUD
+camera.
+
 ## Raw depth is correct, but it is not linear distance
 
 Attach depth normally and let the geometry pass write it through the ordinary
-depth test:
+depth test -- `osgx.RTT.attach()` takes the declarative list shown above;
+this is the underlying per-attachment shape it wraps:
 
 ```python
 cam.attach(osg.Camera.COLOR_BUFFER0, paint_tex)

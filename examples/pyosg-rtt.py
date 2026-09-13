@@ -18,6 +18,8 @@ os.environ.update({
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
+import osgx
+
 SCENE_VERTEX_SHADER = """
 #version 330 core
 
@@ -192,17 +194,30 @@ def create_rtt_camera(w=512, h=512):
 	db.sourceType = GL_FLOAT
 	db.filter = (osg.Texture.NEAREST, osg.Texture.NEAREST)
 
-	cam = osg.Camera()
+	# osgx.RTT replaces the four lines every hand-rolled RTT camera used to repeat -- PRE_RENDER,
+	# FRAME_BUFFER_OBJECT, a viewport matching (w, h), and a reference frame -- with one
+	# constructor call, plus clearColor/name via the same kwargs support osg.Camera itself has.
+	# clearMask is deliberately NOT passed: GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT is already
+	# osg.Camera's own default (osg/Camera.cpp's constructor), so restating it is pure boilerplate.
+	#
+	# RELATIVE_RF here is a deliberate choice, not the "didn't bother" default it might look like:
+	# this camera never sets its own view/projection, so it inherits whatever the cull traversal's
+	# current matrices are at its position in the scene graph -- in this example, that's the SAME
+	# live view the interactive viewer is using, diverted into an FBO instead of the backbuffer.
+	# Use ABSOLUTE_RF (osgx.RTT's own default) instead when the RTT camera needs a fixed,
+	# independent view/projection of its own.
+	cam = osgx.RTT(
+		w, h, osg.Transform.RELATIVE_RF,
+		clearColor=osg.Vec4(0.1, 0.5, 0.2, 1.0),
+		name="RTT Camera"
+	)
 
-	cam.renderOrder = osg.Camera.PRE_RENDER
-	cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
-	cam.clearMask = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT
-	cam.clearColor = osg.Vec4(0.1, 0.5, 0.2, 1.0)
-	cam.viewport = osg.Viewport(0, 0, w, h)
-	cam.name = "RTT Camera"
-
-	cam.attach(osg.Camera.COLOR_BUFFER, cb)
-	cam.attach(osg.Camera.DEPTH_BUFFER, db)
+	# One declarative call instead of two -- osgx.RTT.attach() takes a list of
+	# (component, texture) pairs (same shape as osgx.HookList), attached in order.
+	cam.attach([
+		(osg.Camera.COLOR_BUFFER, cb),
+		(osg.Camera.DEPTH_BUFFER, db)
+	])
 
 	return cam, cb, db
 
@@ -213,15 +228,24 @@ def create_rtt_camera(w=512, h=512):
 # to the raw buffers in its shader pipeline (via `sampler2d` or similar in GLSL), all
 # kinds of cool techniques open up!
 def create_hud_camera(cb, db):
-	cam = osg.Camera()
-
-	cam.referenceFrame = osg.Transform.ABSOLUTE_RF
-	cam.renderOrder = osg.Camera.POST_RENDER
-	cam.clearMask = 0
-	cam.allowEventFocus = False
-	cam.projectionMatrix = osg.Matrix.identity()
-	cam.viewMatrix = osg.Matrix.identity()
-	cam.name = "HUD Camera"
+	# NOT an osgx.RTT camera: this one composites onto the real backbuffer (no FBO, no
+	# texture attachments of its own) -- it's the CONSUMER of the RTT camera's output, not
+	# an RTT camera itself. osgx.RTT specifically means "render into a texture"; reaching
+	# for it here just because it also builds a fullscreen NDC quad (see osgx.RTT.fullscreenQuad)
+	# would be misleading even where it happened to work, since fullscreenQuad() returns an
+	# RTT camera already shaped for PRE_RENDER + FRAME_BUFFER_OBJECT.
+	#
+	# osg.Camera has the SAME kwargs-forwarding constructor osgx.RTT uses (they share the same
+	# pybind11x::kwargs_init chain). Only the properties that actually DIFFER from a fresh
+	# osg.Camera's own defaults are listed here -- renderOrder (already POST_RENDER) and
+	# projectionMatrix/viewMatrix (osg.Matrix's own default constructor is already identity)
+	# used to be set explicitly below too, but were pure restated boilerplate the whole time.
+	cam = osg.Camera(
+		referenceFrame=osg.Transform.ABSOLUTE_RF,
+		clearMask=0,
+		allowEventFocus=False,
+		name="HUD Camera"
+	)
 
 	g = osg.Geode()
 

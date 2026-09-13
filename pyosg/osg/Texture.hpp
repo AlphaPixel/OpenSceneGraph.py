@@ -31,9 +31,9 @@ namespace detail {
 			// Variable arity (1-3 elements, S/T/R in order): tried largest-first via exact-arity
 			// unpacks rather than a single cascading `if(n >= k)` -- each branch below is now
 			// also immune to the "string happens to satisfy isinstance<sequence>" trap (see
-			// `pyx::try_unpack_sequence`), which an unconditional `obj.cast<py::sequence>()` with
+			// `pyx::unpack_sequence`), which an unconditional `obj.cast<py::sequence>()` with
 			// no isinstance guard at all would not be.
-			else if(auto vals3 = pyx::try_unpack_sequence<
+			else if(auto vals3 = pyx::unpack_sequence<
 				osg::Texture::WrapMode, osg::Texture::WrapMode, osg::Texture::WrapMode
 			>(obj)) {
 				auto& [s, t, r] = *vals3;
@@ -43,7 +43,7 @@ namespace detail {
 				self.setWrap(osg::Texture::WrapParameter::WRAP_R, r);
 			}
 
-			else if(auto vals2 = pyx::try_unpack_sequence<
+			else if(auto vals2 = pyx::unpack_sequence<
 				osg::Texture::WrapMode, osg::Texture::WrapMode
 			>(obj)) {
 				auto& [s, t] = *vals2;
@@ -52,7 +52,7 @@ namespace detail {
 				self.setWrap(osg::Texture::WrapParameter::WRAP_T, t);
 			}
 
-			else if(auto vals1 = pyx::try_unpack_sequence<osg::Texture::WrapMode>(obj)) {
+			else if(auto vals1 = pyx::unpack_sequence<osg::Texture::WrapMode>(obj)) {
 				self.setWrap(osg::Texture::WrapParameter::WRAP_S, std::get<0>(*vals1));
 			}
 
@@ -82,7 +82,7 @@ namespace detail {
 
 			// Variable arity (1-2 elements, MIN/MAG in order) -- same chained exact-arity
 			// approach as `wrap` above.
-			else if(auto vals2 = pyx::try_unpack_sequence<
+			else if(auto vals2 = pyx::unpack_sequence<
 				osg::Texture::FilterMode, osg::Texture::FilterMode
 			>(obj)) {
 				auto& [min, mag] = *vals2;
@@ -91,7 +91,7 @@ namespace detail {
 				self.setFilter(osg::Texture::FilterParameter::MAG_FILTER, mag);
 			}
 
-			else if(auto vals1 = pyx::try_unpack_sequence<osg::Texture::FilterMode>(obj)) {
+			else if(auto vals1 = pyx::unpack_sequence<osg::Texture::FilterMode>(obj)) {
 				self.setFilter(osg::Texture::FilterParameter::MIN_FILTER, std::get<0>(*vals1));
 			}
 
@@ -105,7 +105,7 @@ namespace detail {
 	// pre-existing `.def_property("image", ...)` this replaces.
 	inline auto texture_image_property_setter() {
 		return [](osg::Texture& self, py::object obj) {
-			// A bare `osg.Image` isn't `py::sequence`-like, so `try_unpack_sequence<Image*>`
+			// A bare `osg.Image` isn't `py::sequence`-like, so `unpack_sequence<Image*>`
 			// (arity 1) can never match one -- that branch used to be unreachable dead code and
 			// `t.image = img` always fell through to the "(face, Image) required" error. Check
 			// the direct-instance case first instead of trying to fake it through the sequence
@@ -114,7 +114,7 @@ namespace detail {
 				self.setImage(0, obj.cast<osg::Image*>());
 			}
 
-			else if(auto vals = pyx::try_unpack_sequence<unsigned int, osg::Image*>(obj)) {
+			else if(auto vals = pyx::unpack_sequence<unsigned int, osg::Image*>(obj)) {
 				auto& [face, img] = *vals;
 
 				self.setImage(face, img);

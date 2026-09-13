@@ -38,6 +38,8 @@ from pyosg_example import label
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
 
+import osgx
+
 from pyosg_visitor import GatherVisitor
 
 W, H = 800, 600
@@ -302,21 +304,29 @@ def create_gbuffer_camera(w=W, h=H):
 		filter=(osg.Texture.NEAREST, osg.Texture.NEAREST),
 	)
 
-	cam = osg.Camera(
-		renderOrder=osg.Camera.PRE_RENDER,
-		renderTargetImplementation=osg.Camera.FRAME_BUFFER_OBJECT,
-		clearMask=GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
+	# osgx.RTT replaces the hand-rolled PRE_RENDER/FRAME_BUFFER_OBJECT/viewport boilerplate --
+	# see pyosg-rtt.py's create_rtt_camera() for the single-attachment precedent this mirrors.
+	# clearMask is deliberately NOT passed: GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT is already
+	# osg.Camera's own default, so restating it here was pure boilerplate.
+	#
+	# RELATIVE_RF (osgx.RTT's non-default second shape, same choice pyosg-rtt.py makes): this
+	# camera never sets its own view/projection, so it inherits whatever the cull traversal's
+	# current matrices are at its position in the scene graph -- the SAME live view the
+	# interactive viewer/TrackballManipulator is driving.
+	cam = osgx.RTT(
+		w, h, osg.Transform.RELATIVE_RF,
 		clearColor=osg.Vec4(0.0, 0.0, 0.0, 0.0),
-		viewport=osg.Viewport(0, 0, w, h),
-		name="G-Buffer Camera",
+		name="G-Buffer Camera"
 	)
 
-	# True MRT: two SIMULTANEOUS color attachments from a single geometry
-	# pass, plus depth -- the thing neither pyosg-rtt.py (COLOR+DEPTH, one
-	# color slot) nor pyosg-blur.py (chained single-output passes) proves.
-	cam.attach(osg.Camera.COLOR_BUFFER0, color_tex)
-	cam.attach(osg.Camera.COLOR_BUFFER1, normal_tex)
-	cam.attach(osg.Camera.DEPTH_BUFFER, depth_tex)
+	# True MRT: two SIMULTANEOUS color attachments from a single geometry pass, plus depth --
+	# the thing neither pyosg-rtt.py (COLOR+DEPTH, one color slot) nor pyosg-blur.py (chained
+	# single-output passes) proves. One declarative call via osgx.RTT.attach() instead of three.
+	cam.attach([
+		(osg.Camera.COLOR_BUFFER0, color_tex),
+		(osg.Camera.COLOR_BUFFER1, normal_tex),
+		(osg.Camera.DEPTH_BUFFER, depth_tex)
+	])
 
 	return cam, color_tex, normal_tex, depth_tex
 

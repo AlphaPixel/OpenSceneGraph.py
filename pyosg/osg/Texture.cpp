@@ -38,7 +38,7 @@ namespace pybind11x {
 	template<>
 	void kwargs_init_own(osg::Texture2D& self, const py::kwargs& kwargs) {
 		if(kwargs.contains("size")) {
-			auto vals = try_unpack_sequence<int, int>(kwargs["size"]);
+			auto vals = unpack_sequence<int, int>(kwargs["size"]);
 
 			if(!vals) throw py::value_error("size requires (width, height)");
 
@@ -334,7 +334,7 @@ void bind_Texture(py::module_& m) {
 				return py::make_tuple(self.getTextureWidth(), self.getTextureHeight());
 			},
 			[](osg::Texture2D& self, py::object obj) {
-				auto vals = pyx::try_unpack_sequence<int, int>(obj);
+				auto vals = pyx::unpack_sequence<int, int>(obj);
 
 				if(!vals) throw py::value_error("size requires (width, height)");
 

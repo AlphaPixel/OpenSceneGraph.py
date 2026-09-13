@@ -77,6 +77,23 @@ def test_program_binding_location_mappings():
 	assert_binding_mapping(program.bindUniformBlock, "Camera", "Lights")
 
 
+def test_shaders_extend_call_shapes():
+	# Same 3 .extend() shapes covered for Group.children/Geode.drawables -- iterable (tested
+	# elsewhere), bare separate arguments, and a single bare (non-iterable) item.
+	program = Program()
+	s0 = Shader(Shader.VERTEX)
+	s1 = Shader(Shader.FRAGMENT)
+
+	program.shaders.extend(s0, s1)
+
+	assert list(program.shaders) == [s0, s1]
+
+	s2 = Shader(Shader.GEOMETRY)
+
+	program.shaders.extend(s2)
+
+	assert list(program.shaders) == [s0, s1, s2]
+
 def test_shaders_insert():
 	# Program has no native insert-at-position primitive either (only addShader/removeShader),
 	# so this is the same emulation fallback as Geode.drawables.

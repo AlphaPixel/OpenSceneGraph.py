@@ -1,5 +1,34 @@
 # Render-to-texture and multi-camera scene graphs, built live
 
+## Prefer `osgx.RTT` over a hand-rolled `osg.Camera()` for any render-to-texture pass
+
+`osgx.RTT` (`~/dev/osgx/src/osgx/RTT.hpp` + `RTT.cpp`, bound in
+`ext/python/osgx-rtt.cpp`) is the single entry point for "camera that renders
+into a texture" -- it IS-A `osg.Camera` (every method still works directly),
+its constructor sets `renderOrder=PRE_RENDER`,
+`renderTargetImplementation=FRAME_BUFFER_OBJECT`, `referenceFrame` (defaults
+`ABSOLUTE_RF`), and the viewport in one call, and it accepts the same kwargs
+`osg.Camera` does (`clearColor=`, `name=`, ...) on top. `.attach()` takes a
+declarative list of `(component, texture)` pairs instead of one call per
+attachment.
+
+This is a deliberate precedent, not just a shorthand: every new RTT/MRT/
+G-buffer camera in this project's examples should go through `osgx.RTT`
+rather than assembling `osg.Camera(renderOrder=..., renderTargetImplementation=...,
+...)` by hand. `grep -r osgx.RTT` (or `osgx::RTT` on the C++ side) then finds
+every such camera in the codebase; `grep -r osg.Camera` does not, since it
+also matches every ordinary viewer/HUD/consumer camera that was never meant
+to render into a texture. `pyosg-rtt.py`'s `create_rtt_camera()` and
+`pyosg-mrt.py`'s `create_gbuffer_camera()` are the two worked examples.
+
+A camera that only *consumes* another RTT camera's texture output (a HUD/
+composite pass compositing onto the real backbuffer, no FBO or texture
+attachments of its own -- `create_hud_camera()` in both examples) is NOT an
+`osgx.RTT` and should stay a plain `osg.Camera`, even where reaching for
+`osgx.RTT.fullscreenQuad()` would happen to work: that factory returns a
+camera already shaped for `PRE_RENDER` + `FRAME_BUFFER_OBJECT`, which is
+misleading for something that renders straight to the screen.
+
 ## `osg.Camera()` accepts the same kwargs constructor as `osg.Group`
 
 `osg.Camera(children=(a, b), clearColor=..., renderOrder=..., viewport=...)`
@@ -140,6 +169,12 @@ gl_Position = osg_ModelViewProjectionMatrix * vec4(gridX, -depth, gridZ, 1.0);
 
 ## Verified-working RTT setup shape (`pyosg-rtt.py`)
 
+Built with `osgx.RTT` (see the precedent note at the top of this file) rather
+than a hand-rolled `osg.Camera()` -- the constructor already sets
+`renderOrder`/`renderTargetImplementation`/`viewport`/`referenceFrame`, and
+`clearMask` is left unset since `GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT` is
+already `osg.Camera`'s own default:
+
 ```python
 cb = osg.Texture2D()
 cb.size = (w, h)
@@ -153,16 +188,15 @@ db.sourceFormat = GL_DEPTH_COMPONENT
 db.sourceType = GL_FLOAT
 db.filter = (osg.Texture.NEAREST, osg.Texture.NEAREST)
 
-cam = osg.Camera()
-cam.renderOrder = osg.Camera.PRE_RENDER
-cam.renderTargetImplementation = osg.Camera.FRAME_BUFFER_OBJECT
-cam.clearMask = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT
-cam.clearColor = osg.Vec4(0.1, 0.1, 0.1, 1.0)
-cam.viewport = osg.Viewport(0, 0, w, h)
-cam.attach(osg.Camera.COLOR_BUFFER, cb)
-cam.attach(osg.Camera.DEPTH_BUFFER, db)
-# If this camera has its own explicit view — see ABSOLUTE_RF note above:
-cam.referenceFrame = osg.Transform.ABSOLUTE_RF
+# ABSOLUTE_RF is osgx.RTT's default -- use it when this camera has its own
+# explicit view/projection (the common case). Pass RELATIVE_RF explicitly
+# instead when it should inherit whatever the cull traversal's current
+# matrices are (see pyosg-mrt.py's create_gbuffer_camera()).
+cam = osgx.RTT(w, h, osg.Transform.ABSOLUTE_RF, clearColor=osg.Vec4(0.1, 0.1, 0.1, 1.0))
+cam.attach([
+	(osg.Camera.COLOR_BUFFER, cb),
+	(osg.Camera.DEPTH_BUFFER, db)
+])
 cam.viewMatrix = osg.Matrix.lookAt(eye, center, osg.Vec3(0, 0, 1))
 cam.projectionMatrix = osg.Matrix.perspective(40.0, aspect, near, far)
 ```

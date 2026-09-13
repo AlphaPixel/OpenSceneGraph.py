@@ -166,7 +166,7 @@ namespace detail {
 			py::object manip_obj = obj;
 			bool resetPosition = true;
 
-			if(auto vals = pyx::try_unpack_sequence<py::object, bool>(obj)) {
+			if(auto vals = pyx::unpack_sequence<py::object, bool>(obj)) {
 				manip_obj = std::get<0>(*vals);
 				resetPosition = std::get<1>(*vals);
 			}
