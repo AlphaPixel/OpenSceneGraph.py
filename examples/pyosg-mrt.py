@@ -2,7 +2,7 @@
 
 # MRT (Multiple Render Targets) proof-of-concept.
 #
-# pyosg-rtt.py proves COLOR_BUFFER + DEPTH_BUFFER -- two different attachment
+# pyosg-rtt.py proves COLOR_BUFFER + DEPTH_BUFFER - two different attachment
 # *types*, one color slot. pyosg-blur.py proves chained multi-pass (several
 # separate single-output passes feeding each other). Neither proves the thing
 # a deferred G-buffer actually needs: ONE geometry pass writing to MULTIPLE
@@ -12,7 +12,7 @@
 # This example proves that, then goes one step further and actually USES the
 # extra normal buffer: the toon lighting from pyosg-rtt.py's scene shader is
 # moved OUT of the geometry pass entirely (deferred) into the composite pass,
-# computed from the color+normal+depth G-buffer instead -- the same shape
+# computed from the color+normal+depth G-buffer instead - the same shape
 # Step 11 of the lighting-class series (see ai/context-todo-lighting-class.md)
 # will need for its SSAO/SSR post-processing stack. The composite outline is
 # also upgraded to combine depth-edge AND normal-edge detection (silhouette
@@ -69,7 +69,7 @@ void main() {
 }
 """
 
-# G-buffer write pass: NO lighting happens here at all -- just raw albedo and
+# G-buffer write pass: NO lighting happens here at all - just raw albedo and
 # view-space normal, written to two color attachments SIMULTANEOUSLY (true
 # MRT, via the two `layout(location = n) out` declarations below). Depth
 # comes "for free" from this camera's own DEPTH_BUFFER attachment/z-test.
@@ -103,7 +103,7 @@ void main() {
 """
 
 # Deferred composite: reads the G-buffer (color/normal/depth) back and does
-# ALL of the actual lighting HERE instead of in the geometry pass -- the same
+# ALL of the actual lighting HERE instead of in the geometry pass - the same
 # cel-shaded diffuse + rim light as pyosg-rtt.py, just computed from the
 # G-buffer instead of inline per-vertex/per-fragment during the geometry
 # pass. View-space position is reconstructed from depth + the inverse
@@ -161,7 +161,7 @@ void main() {
 	}
 
 	if (visualizeMode == 3) {
-		// Raw (unnormalized) sample -- background pixels the G-buffer pass
+		// Raw (unnormalized) sample - background pixels the G-buffer pass
 		// never touched read back as (0,0,0) -> mid-gray here, which is a
 		// harmless "no data" tell rather than a NaN from normalizing a zero
 		// vector.
@@ -172,7 +172,7 @@ void main() {
 
 	// --- Deferred lit composite (default) -------------------------------- //
 	// A cleared-but-never-written background pixel has a zero-length normal
-	// (real written normals are always unit length) -- use that as a sentinel
+	// (real written normals are always unit length) - use that as a sentinel
 	// for "no geometry here" instead of trusting the color clear value, which
 	// would otherwise get relit as if it were a real (very dark) surface.
 	if (dot(rawNormal, rawNormal) < 0.0001) {
@@ -206,7 +206,7 @@ void main() {
 	// Depth-edge alone (pyosg-rtt.py's original technique) catches silhouette
 	// edges where geometry meets background/other geometry, but misses edges
 	// where depth barely changes yet the surface is turning sharply (grazing
-	// angles, or two coplanar-ish faces meeting at a crease) -- normal-edge
+	// angles, or two coplanar-ish faces meeting at a crease) - normal-edge
 	// catches exactly those. Neighbor normal taps are deliberately left
 	// UNnormalized: a background neighbor's zero vector then contributes a
 	// clean "maximum edge" via dot(N, vec3(0)) == 0, with no normalize(0) NaN
@@ -250,7 +250,7 @@ void main() {
 # Scene / camera setup
 # --------------------------------------------------------------------------- #
 
-# Same four spheres as pyosg-rtt.py -- this example is about proving/using
+# Same four spheres as pyosg-rtt.py - this example is about proving/using
 # MRT, not about the scene content, so keep that constant for a fair
 # comparison against the existing example.
 def create_scene():
@@ -288,7 +288,7 @@ def create_gbuffer_camera(w=W, h=H):
 	)
 
 	# Float format so signed [-1, 1] normal components need no encode/decode
-	# remap -- same convention as the lighting-class series (env_tex/cube_tex/
+	# remap - same convention as the lighting-class series (env_tex/cube_tex/
 	# prefilter_tex all use GL_RGB16F for the same reason).
 	normal_tex = osg.Texture2D(
 		size=(w, h),
@@ -311,7 +311,7 @@ def create_gbuffer_camera(w=W, h=H):
 	#
 	# RELATIVE_RF (osgx.RTT's non-default second shape, same choice pyosg-rtt.py makes): this
 	# camera never sets its own view/projection, so it inherits whatever the cull traversal's
-	# current matrices are at its position in the scene graph -- the SAME live view the
+	# current matrices are at its position in the scene graph - the SAME live view the
 	# interactive viewer/TrackballManipulator is driving.
 	cam = osgx.RTT(
 		w, h, osg.Transform.RELATIVE_RF,
@@ -403,7 +403,7 @@ class VisualizeModeHandler(osgGA.GUIEventHandler):
 
 		return True
 
-# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side
+# The real pipeline-assembly entrypoint - returns the root Node, no viewer/window side
 # effects. This is what external tooling (e.g. etc/pyside6-glsl.py's shader-editor scaffold,
 # ../pyosg-cli) imports and calls directly, so it MUST stay side-effect-free w.r.t. any
 # global viewer state. Takes (w, h) explicitly rather than reading module-level W/H.
@@ -425,10 +425,10 @@ def build_scene(w, h):
 	# both need fresh values every frame, not just at startup.
 	#
 	# ri.state.projectionMatrix is a SHARED per-context value, not scoped to whichever
-	# camera's callback reads it -- it reflects whatever was last applied to the GL state,
+	# camera's callback reads it - it reflects whatever was last applied to the GL state,
 	# not necessarily this camera's own matrix. gbuffer_cam is PRE_RENDER (draws FIRST each
 	# frame), so its preDrawCallback fires before anything THIS frame has applied a fresh
-	# projection -- it read a STALE leftover from the END of the PREVIOUS frame instead:
+	# projection - it read a STALE leftover from the END of the PREVIOUS frame instead:
 	# hud_cam's own identity projectionMatrix (hud_cam draws last). That silently broke
 	# znear/zfar (decomposing an identity matrix as a perspective gives garbage near/far,
 	# killing the depth/normal-edge outline) and invProjectionMatrix (inverse(identity) =
@@ -438,7 +438,7 @@ def build_scene(w, h):
 	#
 	# hud_cam is POST_RENDER (draws LAST), so by the time ITS preDrawCallback fires, the
 	# real viewer camera has already drawn in between (PRE_RENDER -> viewer's own NESTED_RENDER
-	# -> POST_RENDER) and applied its real, this-frame-fresh projection -- the same timing
+	# -> POST_RENDER) and applied its real, this-frame-fresh projection - the same timing
 	# guarantee the original code got directly from attaching to the caller's own
 	# v.camera.preDrawCallback, without build_scene() needing a viewer reference at all.
 	def update_uniforms(ri):
@@ -459,7 +459,7 @@ def build_scene(w, h):
 # Optional second hook, beyond build_scene(): a Node factory has no Viewer to attach
 # osgGA.GUIEventHandlers to, so any example wanting real interactivity (custom key bindings,
 # debug visitors, ...) beyond the default TrackballManipulator defines this too. Purely
-# optional -- an example with nothing interactive just doesn't define it. Called with the
+# optional - an example with nothing interactive just doesn't define it. Called with the
 # SAME (viewer, root) shape by both __main__ below and ../pyosg-cli, so standalone and
 # runner-driven runs behave identically instead of the runner silently dropping this example's
 # interactivity (confirmed missing 2026-08-19, before this hook existed).
@@ -467,13 +467,13 @@ def configure_viewer(viewer, root):
 	gbuffer_cam, hud_cam = root.children[:2]
 
 	# build_scene() doesn't return the visualizeMode Uniform directly (its contract is just
-	# "return a Node") -- pull it back out of the HUD camera's StateSet, the same place
+	# "return a Node") - pull it back out of the HUD camera's StateSet, the same place
 	# build_scene() put it.
 	visualize_mode_u = hud_cam.stateSet.uniforms["visualizeMode"]
 
 	viewer.eventHandlers.append(VisualizeModeHandler(visualize_mode_u))
 
-	# GatherVisitor bound as a default arg -- this file doesn't drive its loop
+	# GatherVisitor bound as a default arg - this file doesn't drive its loop
 	# through aipython/pyosg_repl today, but a callback's free variables resolve
 	# unpredictably the moment it IS invoked from that bridge (confirmed live in
 	# 11-sketchfab.py's --repl session). See aipython/01-core.md rule 2.

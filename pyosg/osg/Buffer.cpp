@@ -31,7 +31,7 @@ void bind_Buffer(py::module_& m) {
 
 		// Increments the modified count, telling the render backend a buffer object needs
 		// re-uploading. Mutating an osg.Array's elements in place (e.g. via __setitem__) does
-		// NOT call this automatically -- without it, GLBufferObject::compileBuffer() has no way
+		// NOT call this automatically - without it, GLBufferObject::compileBuffer() has no way
 		// to know the CPU-side data changed, so the GPU-side buffer silently goes stale. Needed
 		// for any per-frame in-place array mutation to actually show up on screen; reusing the
 		// same Array object (rather than constructing a new one every frame, which forces an
@@ -64,7 +64,7 @@ void bind_Buffer(py::module_& m) {
 
 	// The live, per-context GL object (glGenBuffers() name) backing a compiled BufferObject.
 	// Needed to hand a raw GL buffer id to anything outside OSG that wants to touch the same
-	// GPU memory directly -- e.g. CUDA/GL interop (cudaGraphicsGLRegisterBuffer()) for zero-copy
+	// GPU memory directly - e.g. CUDA/GL interop (cudaGraphicsGLRegisterBuffer()) for zero-copy
 	// access to tensors already living on the GPU. glObjectID reads 0 until the buffer has
 	// actually been compiled (uploaded) at least once by the render backend.
 	py::class_<

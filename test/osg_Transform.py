@@ -25,7 +25,7 @@ def test_matrixtransform_construction():
 
 	assert mt.matrix == m
 
-	# `kwargs_ctor<osg::MatrixTransform, const osg::Matrix&>()` -- the leading positional Matrix
+	# `kwargs_ctor<osg::MatrixTransform, const osg::Matrix&>()` - the leading positional Matrix
 	# arg AND kwargs (here, the Object-level `name`) working together in one constructor call.
 	mt = MatrixTransform(m, name="mt")
 

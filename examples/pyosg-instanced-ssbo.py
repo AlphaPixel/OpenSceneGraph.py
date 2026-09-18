@@ -5,7 +5,7 @@ import time
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size
 
 from OpenSceneGraph import *
@@ -99,7 +99,7 @@ if __name__ == "__main__":
 
 	# osg.ArgumentParser here (rather than plain osgViewer.Viewer()) picks up OSG's own standard
 	# command-line options (--samples, --clear-color, ...) mentioned in the #vimrun! header above
-	# -- standalone-only; a runner-driven run constructs its own bare Viewer and won't parse those.
+	# - standalone-only; a runner-driven run constructs its own bare Viewer and won't parse those.
 	v = osgViewer.Viewer(osg.ArgumentParser("pyosg-instanced-ssbo.py", sys.argv))
 
 	W, H = window_size()

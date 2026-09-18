@@ -11,7 +11,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size, resolve_model
 
 from OpenSceneGraph import *
@@ -71,7 +71,7 @@ uniform vec3 specularColor;
 uniform float ambient;
 uniform float shininess;
 
-// OSG built-in -- gives us world->eye transform for light positions.
+// OSG built-in - gives us world->eye transform for light positions.
 uniform mat4 osg_ViewMatrix;
 
 uniform vec3 lightPos[NUM_LIGHTS]; // world space
@@ -84,7 +84,7 @@ void main() {
 	vec3 N = normalize(vNormal);
 	vec3 V = normalize(-vPosition);
 
-	// Start with ambient -- independent of all lights.
+	// Start with ambient - independent of all lights.
 	vec3 result = albedo * ambient;
 
 	for (int i = 0; i < NUM_LIGHTS; i++) {
@@ -112,7 +112,7 @@ def build_scene(w, h):
 	path = resolve_model(sys.argv[1] if len(sys.argv) > 1 else "BoomBox")
 
 	if not path:
-		sys.exit("Cannot find model -- clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
+		sys.exit("Cannot find model - clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
 
 	root = osgDB.readNodeFile(path)
 

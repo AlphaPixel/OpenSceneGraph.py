@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
 """Sanity check for pyosg_dice.rotate_ibl_environment()'s 90-degree axis permutation --
-NOT a real IBL bake. Builds a synthetic 6-face osg.TextureCubeMap by hand -- a smooth
+NOT a real IBL bake. Builds a synthetic 6-face osg.TextureCubeMap by hand - a smooth
 per-texel vertical (cubemap-space Y, i.e. OSG world Z/up) gradient, black at the bottom
 to white at the top, the SAME on all 6 faces, plus a soft cosine-power "spotlight"
 centered on world +X, ADDED ON EVERY FACE as a continuous function of direction (not a
-flag on one discrete face) -- and mirror-reflects it off an osgx.Cube -- 6 flat faces,
+flag on one discrete face) - and mirror-reflects it off an osgx.Cube - 6 flat faces,
 easy to eyeball 1:1 against the 6 cubemap faces (unlike a higher-face-count shape, where a
 visible facet's reflection is never exactly its own face-normal direction and is harder
 to reason about at a glance).
@@ -13,21 +13,21 @@ to reason about at a glance).
 A discrete "this ONE cubemap face is red, the other five aren't" flag was tried first and
 rejected: each physical cube face has an exactly constant normal, so at ordinary camera
 distances the reflected direction rarely sweeps far enough across ONE face to cross into
-a neighboring cubemap face's bucket -- you'd see the accent fully on one face and NEVER
+a neighboring cubemap face's bucket - you'd see the accent fully on one face and NEVER
 bleeding onto its neighbor, even viewed corner-on, which is confusing to read. The smooth
 falloff blends continuously across every edge/corner instead, so an edge-on or corner-on
 view naturally splits it across the visible faces the way you'd intuitively expect.
 
 The gradient depends only on cubemap Y, and rotate_ibl_environment()'s 90-degree steps
-only ever permute iblAxis's X/Z rows -- Y is untouched at every step (see its own
-docstring) -- so the gradient should stay COMPLETELY STATIONARY as you press 'r', while
+only ever permute iblAxis's X/Z rows - Y is untouched at every step (see its own
+docstring) - so the gradient should stay COMPLETELY STATIONARY as you press 'r', while
 only the red spotlight sweeps to a new compass position. If the gradient itself visibly
 shifts too, that's a real bug in the "rotation never touches up/down" invariant, not a
 rendering quirk.
 
 Deliberately bypasses osgx's real bake pipeline (computeLambertianCubeMap/
 GGXPrefilterScene.create both take an equirectangular osg.Image, not a cubemap already
-in face-space) -- this hand-fills 6 gradient faces directly (see direction_for_face(),
+in face-space) - this hand-fills 6 gradient faces directly (see direction_for_face(),
 the standard per-face inverse-cubemap-projection formulas) and samples with a plain
 mirror reflection (no roughness/BRDF/Fresnel), since the only thing under test is the
 osgx_ZUpToGLTF/osgx_OrientIBL remap itself, ported verbatim from pyosg_dice.py's
@@ -40,7 +40,7 @@ import argparse
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import label, window_size
 
 from OpenSceneGraph import *
@@ -54,7 +54,7 @@ FACE_SIZE = 32
 # A soft, continuous "spotlight" centered on world +X, NOT a discrete cubemap-face flag --
 # a flag only ever shows fully on or fully off per physical cube face (each face has an
 # exactly constant normal, and the reflected direction rarely sweeps far enough across
-# one face to cross into a neighboring cubemap face's bucket -- see the conversation this
+# one face to cross into a neighboring cubemap face's bucket - see the conversation this
 # came out of). A smooth cosine-power falloff blends continuously across every face and
 # every cubemap seam, so a corner/edge-on view naturally shows it split across neighbors.
 ACCENT_DIRECTION = osg.Vec3(1.0, 0.0, 0.0)
@@ -70,7 +70,7 @@ FACES = {
 # Standard inverse cubemap-face projection: texel (s, t), each in [0, 1], to the 3D
 # direction on the unit cube that face/texel represents. Cross-checked against both the
 # OpenGL spec's direction-to-face table (inverted) and the common LearnOpenGL-style
-# per-face (u, v) -> direction convention -- they agree. s=t=0 is the image's first
+# per-face (u, v) -> direction convention - they agree. s=t=0 is the image's first
 # (lowest-address) row/column, which osg.Image stores bottom-to-top by default, so t=0
 # below means cubemap-space v=-1 (bottom), matching GL's own texture origin.
 def direction_for_face(face_name, s, t):
@@ -84,7 +84,7 @@ def direction_for_face(face_name, s, t):
 
 # The one orthonormal basis every consumer (PBRIBLScene.create()'s glTF shader,
 # FRAGMENT_SHADER_IBL, and this test's own shader below) rotates identically via
-# dice.rotate_ibl_environment() -- same default osgx::gltf::pbribl ships.
+# dice.rotate_ibl_environment() - same default osgx::gltf::pbribl ships.
 DEFAULT_IBL_AXIS = (
 	osg.Vec3(0.0, 0.0, 1.0),
 	osg.Vec3(0.0, 1.0, 0.0),
@@ -114,10 +114,10 @@ void main() {
 }
 """
 
-# Ported verbatim from pyosg_dice.py's FRAGMENT_SHADER_IBL -- same osgx_ZUpToGLTF/
+# Ported verbatim from pyosg_dice.py's FRAGMENT_SHADER_IBL - same osgx_ZUpToGLTF/
 # osgx_OrientIBL remap, same eye-space-to-world-space N/V trick, just a plain mirror
 # reflection instead of the diffuse+specular PBR combine (nothing here needs roughness/
-# metallic/brdfLUT -- this is purely a "which direction am I looking" test).
+# metallic/brdfLUT - this is purely a "which direction am I looking" test).
 FRAGMENT_SHADER = """
 #version 460 core
 
@@ -128,11 +128,11 @@ uniform mat4 osg_ViewMatrix;
 uniform samplerCube envMap;
 uniform vec3 iblAxis[3];
 // Debug mode: show the raw per-face world-space normal as color instead of the cubemap
-// reflection -- proves (or disproves) that flat per-face shading survives this shader,
+// reflection - proves (or disproves) that flat per-face shading survives this shader,
 // independent of the cubemap's own 6-color quantization. Press 'n' to toggle.
 uniform int debugNormals;
 // Diffuse-style mode: sample the SAME cubemap by N instead of the view-dependent
-// reflection vector R -- exactly how real diffuse IBL differs from specular IBL
+// reflection vector R - exactly how real diffuse IBL differs from specular IBL
 // (osgx_LambertianIrradiance samples by N too). No view-dependence at all: whichever
 // face's normal points closest to the accent direction shows the most accent color,
 // full stop, regardless of camera angle. Press 'd' to toggle.
@@ -165,7 +165,7 @@ void main() {
 
 def gradient_face_image(face_name, size):
 	"""An RGBA osg.Image for one cubemap face: per-texel color from the REAL 3D
-	direction that texel represents (direction_for_face()) -- black at direction.y = -1
+	direction that texel represents (direction_for_face()) - black at direction.y = -1
 	(cubemap-space bottom) to white at +1 (top), plus a smooth cosine-power "spotlight"
 	centered on ACCENT_DIRECTION, added on EVERY face (not one discrete face) so it blends
 	continuously across cube edges/corners. Plain buffer protocol, same technique as
@@ -215,14 +215,14 @@ def build_test_cubemap():
 
 class Basis:
 	"""Just enough of a PBRIBLEnvironment's shape (a single `.iblAxis` list of 3 Vec3)
-	for dice.rotate_ibl_environment() to operate on -- this test has no other
+	for dice.rotate_ibl_environment() to operate on - this test has no other
 	environment resources (envMap/brdfLUT/diffuseEnv/root) to speak of."""
 
 	def __init__(self, axis):
 		self.iblAxis = list(axis)
 
 def set_ibl_axis_uniform(uniform, axis):
-	"""Update a live FLOAT_VEC3[3] uniform in place -- .array is the flat 9-float
+	"""Update a live FLOAT_VEC3[3] uniform in place - .array is the flat 9-float
 	backing store (no per-Vec3 __setitem__), so write 3 floats per axis and dirty()
 	to flag it for re-upload."""
 	array = uniform.array
@@ -258,7 +258,7 @@ class RotateKeyHandler(osgGA.GUIEventHandler):
 		return True
 
 class ToggleUniformKeyHandler(osgGA.GUIEventHandler):
-	"""Flips an int 0/1 uniform on a given keypress -- shared by 'n' (debugNormals) and
+	"""Flips an int 0/1 uniform on a given keypress - shared by 'n' (debugNormals) and
 	'd' (diffuseView)."""
 
 	def __init__(self, uniform, key, label):
@@ -280,7 +280,7 @@ class ToggleUniformKeyHandler(osgGA.GUIEventHandler):
 
 		return True
 
-# Set by build_scene(), read by configure_viewer() -- args.ibl_rotate has no natural home in
+# Set by build_scene(), read by configure_viewer() - args.ibl_rotate has no natural home in
 # the returned Node the way the three uniforms below do (recovered straight back out of the
 # geode's own StateSet instead of needing a second stash). Same reason/shape as
 # pyosg-khronos-viewer.py's _args.
@@ -340,8 +340,8 @@ def configure_viewer(viewer, root):
 
 	osg.notice(
 		f"[pyosg-ibl-rotate-test] black-to-white vertical gradient on all 6 faces, plus a "
-		f"soft red spotlight centered on +X that blends across every edge/corner -- "
-		f"starting rotation = {_args.ibl_rotate} -- "
+		f"soft red spotlight centered on +X that blends across every edge/corner - "
+		f"starting rotation = {_args.ibl_rotate} - "
 		f"'r' steps 90 degrees (gradient should stay put, only the red spot should sweep), "
 		f"'n' toggles a per-face-normal debug view, "
 		f"'d' toggles diffuse-style (view-independent, sampled by N not R) shading"

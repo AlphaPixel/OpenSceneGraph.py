@@ -11,7 +11,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size, resolve_model
 
 from OpenSceneGraph import *
@@ -19,18 +19,18 @@ from OpenSceneGraph import *
 # Normal mapping: replace the smooth per-vertex geometric normal with a
 # per-TEXEL normal sampled from a texture.
 #
-# The normal map stores normals in TANGENT SPACE -- a coordinate frame local
+# The normal map stores normals in TANGENT SPACE - a coordinate frame local
 # to each surface point defined by three basis vectors:
 #
-#   T (Tangent)   -- points along the U axis of the UV map
-#   B (Bitangent) -- points along the V axis (computed, not stored directly)
-#   N (Normal)    -- the geometric surface normal
+#   T (Tangent)   - points along the U axis of the UV map
+#   B (Bitangent) - points along the V axis (computed, not stored directly)
+#   N (Normal)    - the geometric surface normal
 #
 # The TBN matrix built from these three vectors transforms a tangent-space
 # normal into eye space, where all our lighting math already lives.
 #
 # GLTF 2.0 stores tangents as VEC4: xyz = direction, w = handedness sign
-# (+1 or -1) used to compute B = cross(N, T) * w. Never ignore w -- flipped
+# (+1 or -1) used to compute B = cross(N, T) * w. Never ignore w - flipped
 # UVs will light incorrectly without it.
 #
 # Loader changes (GLTFReader.h):
@@ -67,7 +67,7 @@ void main() {
 	// Gram-Schmidt: ensure T is perpendicular to N after interpolation drift.
 	T = normalize(T - dot(T, N) * N);
 
-	// w encodes the handedness of the tangent frame -- critical for mirrored UVs.
+	// w encodes the handedness of the tangent frame - critical for mirrored UVs.
 	vec3 B = cross(N, T) * osg_Tangent.w;
 
 	vNGeom = N;
@@ -148,7 +148,7 @@ def build_scene(w, h):
 	path = resolve_model(sys.argv[1] if len(sys.argv) > 1 else "BoomBox")
 
 	if not path:
-		sys.exit("Cannot find model -- clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
+		sys.exit("Cannot find model - clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
 
 	root = osgDB.readNodeFile(path)
 

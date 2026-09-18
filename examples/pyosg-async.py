@@ -107,7 +107,7 @@ def run(viewer):
 			await asyncio.sleep(1.0)
 
 	# The queue-draining half of the OLD push-based pattern (queue.put() -> call_soon_threadsafe
-	# -> queue.get_nowait()) is still exactly right for THIS kind of event -- irregular,
+	# -> queue.get_nowait()) is still exactly right for THIS kind of event - irregular,
 	# Python-shaped values a C++ background thread genuinely needs to hand back, not a hot
 	# native loop's numeric progress ticks. Contrast with osgx.gltf.AsyncProgress (see
 	# pyosg-async-gltf.py), which polls instead of pushing because its update shape is simple

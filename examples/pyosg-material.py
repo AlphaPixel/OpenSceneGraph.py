@@ -4,28 +4,28 @@
 customize OSG.py/osgx's PBR material pipeline. Each scene picks a different point in that
 pipeline to hook:
 
-- sweep [default] -- the SANCTIONED path: a real osgx.Material StateAttribute per mesh, under a
-  live GL context, rendered via osgx.gltf.pbribl.PBRIBLScene.create() -- the same production
+- sweep [default] - the SANCTIONED path: a real osgx.Material StateAttribute per mesh, under a
+  live GL context, rendered via osgx.gltf.pbribl.PBRIBLScene.create() - the same production
   PBR/IBL pipeline pyosg-khronos-viewer.py uses for real glTF assets, applied here to plain
   osgx/OSG geometry instead (see pyosg-metal-sphere.py for the single-shape version of this same
   idea, and aipython/30-pbribl.md's "PBRIBLScene.create() is not limited to glTF-loaded nodes"
   section). Two rows of small osgx Polyhedron instances (--shape: tetrahedron/cube/octahedron/
   icosahedron [default]/dodecahedron/pentagonal-trapezohedron): metallic=0.0 (dielectric) on top,
   metallic=1.0 (metal) on the bottom, roughness sweeping left to right on both rows. A fixed
-  reddish baseColor makes the metal/dielectric difference obvious -- metals tint their specular
+  reddish baseColor makes the metal/dielectric difference obvious - metals tint their specular
   by albedo, dielectrics keep a neutral white F0=0.04 specular. A single osg.ShapeDrawable
   "chrome ball" (metallic=1.0, roughness=0.0, near-white base color) sits in front of the two
-  rows -- a smooth continuous surface gives roughness/metallic every angle to show up, unlike a
+  rows - a smooth continuous surface gives roughness/metallic every angle to show up, unlike a
   polyhedron's flat facets, and confirms osgx.Material also works as a plain
   StateSet.attributes.append() on vanilla geometry, not just osgx's own shapes.
 
-- glitter -- the BYPASS path, take one: fine, camera-stable specular sparkle/"dust", driven by a
+- glitter - the BYPASS path, take one: fine, camera-stable specular sparkle/"dust", driven by a
   hand-rolled per-face vertex attribute instead of a real osgx.Material StateAttribute. Started
   as osgx's "how do we reproduce, on a bare osgx.Polyhedron, the accidental dust-grain look that
   fell out of osgx-gbuffer-dice.cpp's curvature estimator at an extreme gain" thread (see osgx's
   CLAUDE.md/TODO.md for the fuller writeup of the original accident). A cellular/Voronoi hash
   partitions world-space position into irregular cells, each contributing a small CONSTANT random
-  offset to the shading NORMAL before it reaches osgx_DirectLighting() -- a real normal
+  offset to the shading NORMAL before it reaches osgx_DirectLighting() - a real normal
   perturbation, not a color mask, so it's a genuine PBR/lighting interaction (confirmed live: a
   tight near-mirror lobe reads as loud dense sparkle, a fully rough dielectric lobe averages the
   same jitter away to nearly nothing). The 20-face metallic/roughness sweep (GLITTER_MATERIAL_
@@ -33,15 +33,15 @@ pipeline to hook:
   object. Confirmed camera-stable (doesn't swim as the view orbits) and correctly scaled (grain
   gets physically bigger/smaller on screen as you zoom, not pinned to a fixed pixel size).
 
-- spots -- the BYPASS path, take two: a winding, contiguous "maze"/animal-print blob pattern
+- spots - the BYPASS path, take two: a winding, contiguous "maze"/animal-print blob pattern
   (multi-octave world-space FBM noise, thresholded, with a second high-frequency hash layered
   onto the THRESHOLD comparison itself so the blob boundary reads as finely jagged/staticky
   rather than a smooth anti-aliased curve), selecting between two real osgx_Material presets
   (cream/rough base, near-black/slightly-glossier spots) fed through osgx_DirectLighting(), same
-  as glitter -- but no per-vertex data at all, just fragment-shader math and uniforms. The pattern
-  was first tuned in isolation as a raw black/white mask -- the same "isolate the pattern
+  as glitter - but no per-vertex data at all, just fragment-shader math and uniforms. The pattern
+  was first tuned in isolation as a raw black/white mask - the same "isolate the pattern
   question from the lighting question" approach osgx-gbuffer-dice.cpp's own "Wear Mask" debug
-  view uses -- before being wired in here. Confirmed live: this reads as genuine hide/coat
+  view uses - before being wired in here. Confirmed live: this reads as genuine hide/coat
   material variation (a sheen difference between patches, not just a flat color swap), and the
   object's own faceted shading still shows through underneath rather than flattening into a
   decal. Live-tunable uniforms: mazeFrequency (blob size), mazeThreshold/mazeOctaves (topology),
@@ -52,7 +52,7 @@ pipeline to hook:
   leaves less calm interior per blob) and/or widening jitterAmount/mazeEdge together (a wider
   soft zone with the same jitter riding on it eats further into the interiors).
 
-Run standalone (scene name, default "sweep", may be omitted -- see parse_args()):
+Run standalone (scene name, default "sweep", may be omitted - see parse_args()):
 
 	./pyosg-material.py
 	./pyosg-material.py sweep --shape cube
@@ -63,8 +63,8 @@ Run standalone (scene name, default "sweep", may be omitted -- see parse_args())
 Run through the Qt-free example runner (build_scene(w, h) is this file's runnable contract --
 see ../pyosg-cli for the convention):
 
-	../pyosg-cli material -- --hdr path/to/environment.hdr
-	../pyosg-cli material -- spots
+	../pyosg-cli material - --hdr path/to/environment.hdr
+	../pyosg-cli material - spots
 """
 
 import argparse
@@ -91,12 +91,12 @@ from OpenSceneGraph.GL import *
 
 import osgx
 
-# Must happen before the first GraphicsContext is created -- see pyosg-metal-sphere.py/
+# Must happen before the first GraphicsContext is created - see pyosg-metal-sphere.py/
 # pyosg-khronos-viewer.py's own module-level numMultiSamples = 8. Without this, a near-mirror
 # surface's fast-changing reflection has nothing smoothing it and looks visibly noisy/jagged.
 osg.DisplaySettings.instance.numMultiSamples = 8
 
-# The one directional light every scene below shares -- factored out now that having all three
+# The one directional light every scene below shares - factored out now that having all three
 # scenes in one file makes the duplication obvious (each used to carry its own identical copy).
 def build_light_set():
 	lights = osgx.LightSet()
@@ -114,13 +114,13 @@ SWEEP_BASE_COLOR = (0.75, 0.15, 0.12)
 SWEEP_ROUGHNESS_STEPS = (0.05, 0.20, 0.40, 0.60, 0.80, 1.00)
 SWEEP_SPACING = 1.4
 
-# Near-white, not pure black-and-white -- a metal with albedo (1,1,1) is non-physical (real metals
+# Near-white, not pure black-and-white - a metal with albedo (1,1,1) is non-physical (real metals
 # always absorb SOME wavelengths; that's what gives gold/copper their tint), but close enough here,
-# and keeping it colorless is the whole point -- see the sphere's own module-doc paragraph above.
+# and keeping it colorless is the whole point - see the sphere's own module-doc paragraph above.
 SWEEP_SPHERE_BASE_COLOR = (0.95, 0.95, 0.95)
 SWEEP_SPHERE_RADIUS = 0.75
 
-# All six share the exact same (center, radius, layout) constructor -- see osgx-shapes.cpp.
+# All six share the exact same (center, radius, layout) constructor - see osgx-shapes.cpp.
 SWEEP_SHAPES = {
 	"tetrahedron": osgx.Tetrahedron,
 	"cube": osgx.Cube,
@@ -131,7 +131,7 @@ SWEEP_SHAPES = {
 }
 SWEEP_SHAPE_RADIUS = 0.55
 
-# Verbatim from pyosg-khronos-viewer.py -- same HDR/manifest resolution contract (a literal path,
+# Verbatim from pyosg-khronos-viewer.py - same HDR/manifest resolution contract (a literal path,
 # then osgx.findDataFile()), duplicated rather than imported since these example scripts are each
 # independently runnable, same reasoning osgx's own conftest.py gives for not sharing test helpers
 # cross-repo.
@@ -148,7 +148,7 @@ def resolve_asset(value, suffix, candidates=()):
 
 	raise FileNotFoundError(f"Cannot find {value!r}")
 
-# OSG_FILE_PATH doesn't cover osgx's own build-tree env/ manifests -- see
+# OSG_FILE_PATH doesn't cover osgx's own build-tree env/ manifests - see
 # pyosg-metal-sphere.py's identical helper for why OSGX_ENV_DIR is needed as a fallback.
 OSGX_ENV_DIR = pathlib.Path("/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/env")
 
@@ -170,10 +170,10 @@ def resolve_environment_manifest(value):
 
 	raise FileNotFoundError(f"Cannot find environment manifest {value!r}")
 
-# One shape per (metallic, roughness) combo -- a SEPARATE mesh, SEPARATE StateSet, SEPARATE
+# One shape per (metallic, roughness) combo - a SEPARATE mesh, SEPARATE StateSet, SEPARATE
 # osgx.Material each, not one mesh with per-face/per-vertex variation (that's what the glitter
 # scene's own GLITTER_MATERIAL_COMBOS already exercises, via a hand-rolled vertex attribute
-# instead of a real StateAttribute -- deliberately not what this scene is testing).
+# instead of a real StateAttribute - deliberately not what this scene is testing).
 def build_sweep_row(y, metallic, shape_cls):
 	group = osg.Group(name=f"row-metallic-{metallic}")
 
@@ -203,7 +203,7 @@ def build_sweep_row(y, metallic, shape_cls):
 
 	return group
 
-# The "chrome ball" reflection probe -- see the module docstring's own paragraph on why.
+# The "chrome ball" reflection probe - see the module docstring's own paragraph on why.
 def build_sweep_sphere():
 	geode = osg.Geode(name="chrome-sphere")
 	drawable = osg.ShapeDrawable(osg.Sphere(osg.Vec3(), SWEEP_SPHERE_RADIUS))
@@ -256,7 +256,7 @@ def build_sweep_scene(args):
 	# only each Geode's own osgx.Material differs, matching how a real scene shares one shader
 	# (and one environment) across many differently-materialed primitives. LightSet (above) and
 	# the Program PBRIBLScene.create() attaches here coexist on the same StateSet without
-	# conflict -- different StateAttribute::Type/member slots (LightSet is Type.CAPABILITY
+	# conflict - different StateAttribute::Type/member slots (LightSet is Type.CAPABILITY
 	# member=1, Material is member=0, Program is its own Type entirely).
 	pbr = osgx.gltf.pbribl.PBRIBLScene.create(
 		shapes, environment, iblDiffuseIntensity=1.0, iblSpecularIntensity=1.0
@@ -284,7 +284,7 @@ GRAIN_FREQUENCY = 60.0
 GRAIN_AMPLITUDE = 0.5
 
 # One (metallic, roughness) pair per icosahedron face, cycling if there are more faces than
-# entries -- sweeps from mirror-metal through fully-rough-dielectric so the roughness/grain
+# entries - sweeps from mirror-metal through fully-rough-dielectric so the roughness/grain
 # coupling above is visible on one object. A real single-material consumer would drop this and
 # just set flat `metallic`/`roughness` uniforms instead of a per-face vertex attribute.
 GLITTER_MATERIAL_COMBOS = (
@@ -355,9 +355,9 @@ vec3 cellPoint(vec3 cell) {
 	return cell + h;
 }
 
-// Cellular/Voronoi partition -- irregular grain SHAPES (nearest jittered feature point wins),
+// Cellular/Voronoi partition - irregular grain SHAPES (nearest jittered feature point wins),
 // but still a per-cell CONSTANT random normal offset once a winning cell is found. No distance
-// value is used as a mask/color anywhere -- only the cell SHAPE changes, not what's done with it.
+// value is used as a mask/color anywhere - only the cell SHAPE changes, not what's done with it.
 vec3 grainOffset(vec3 p) {
 	vec3 baseCell = floor(p);
 	float bestDist = 1e9;
@@ -468,7 +468,7 @@ SPOTS_MAZE_OCTAVES = 5
 SPOTS_JITTER_FREQUENCY = 500.0
 SPOTS_JITTER_AMOUNT = 0.10
 
-# The two osgx_Material presets the spot mask blends between -- animal-print styling: cream/
+# The two osgx_Material presets the spot mask blends between - animal-print styling: cream/
 # rough base, near-black/slightly-glossier spots (a real roughness difference, not just color,
 # so the two patches catch specular light differently under osgx_DirectLighting()).
 SPOTS_BASE_COLOR = (0.85, 0.78, 0.65)
@@ -652,7 +652,7 @@ def build_spots_scene():
 
 SCENES = ("sweep", "glitter", "spots")
 
-# Scene name is a subcommand (each scene owns its own flags -- only "sweep" takes --shape/--hdr/
+# Scene name is a subcommand (each scene owns its own flags - only "sweep" takes --shape/--hdr/
 # --env, and there's no reason for "glitter"/"spots" to inherit those), but it's also OPTIONAL:
 # bare `./pyosg-material.py` or `./pyosg-material.py --hdr foo.hdr` must keep working exactly as
 # pyosg-material.py always has, so a missing/unrecognized leading token is treated as "sweep" was
@@ -694,12 +694,12 @@ def parse_args():
 
 	return parser.parse_args(argv)
 
-# Recovered by configure_viewer() below (module-level stash -- same convention as
-# pyosg-khronos-viewer.py's _args/_pbr -- build_scene()'s own contract is "return a Node", no
+# Recovered by configure_viewer() below (module-level stash - same convention as
+# pyosg-khronos-viewer.py's _args/_pbr - build_scene()'s own contract is "return a Node", no
 # second channel to hand back a plain Python closure it also needs later).
 _switch_scene = None
 
-# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+# The real pipeline-assembly entrypoint - returns the root Node, no viewer/window side effects.
 # Matches ../pyosg-cli's convention (and etc/pyside6-glsl.py's Qt-embedded sibling) so both can
 # run this too. All three scenes are pure functions of (args) with no shared/global state, so
 # switch_scene() below can freely rebuild any of them again later, live.
@@ -724,7 +724,7 @@ def build_scene(w, h):
 	root.children.append(current["scene"])
 	root.children.append(hint)
 
-	# Swaps root's scene child for a freshly-built one -- re-appending hint afterward instead of
+	# Swaps root's scene child for a freshly-built one - re-appending hint afterward instead of
 	# inserting the new scene at a fixed index, since root.children has no positional insert;
 	# append+remove is the only mutation every other example in this repo already relies on.
 	def switch_scene(name):
@@ -741,7 +741,7 @@ def build_scene(w, h):
 
 	return root
 
-# 1/2/3 rebuild and swap in the sweep/glitter/spots scene live -- --scene/--shape/--hdr/--env
+# 1/2/3 rebuild and swap in the sweep/glitter/spots scene live - --scene/--shape/--hdr/--env
 # still select the INITIAL scene (and sweep's own look) at startup; this only adds live
 # switching between the three on top, matching every other keyboard-driven example in this repo.
 class SceneSwitchHandler(osgGA.GUIEventHandler):

@@ -16,20 +16,20 @@ class TaggedHandler(GUIEventHandler):
 def test_event_handlers_insert_preserves_identity_without_local_ref():
 	# Regression test for a real bug hit live: SequenceProxy.insert()'s native-path cache
 	# invalidation originally ERASED shifted slots instead of shifting them. A trampoline-
-	# backed handler appended with no local variable retaining it -- exactly how
+	# backed handler appended with no local variable retaining it - exactly how
 	# `viewer.eventHandlers.append(SomeHandler())` is commonly written, e.g.
-	# pyosg-praxis.py's `v.eventHandlers.append(PraxisKeyHandler(v.sceneData, v))` -- can have
+	# pyosg-praxis.py's `v.eventHandlers.append(PraxisKeyHandler(v.sceneData, v))` - can have
 	# that SlotCache slot as its ONLY strong Python reference; erasing it let the wrapper get
 	# garbage collected even though OSG's own ref_ptr kept the underlying C++ object alive,
 	# silently downgrading later access to the nearest bound C++ base (GUIEventHandler),
 	# losing the subclass identity and handle() override with no error raised anywhere. Fixed
 	# by shifting cached slots instead of erasing them. (A second, different bug in that same
-	# fix -- an evaluation-order hazard where `slot(j) = slot(j - 1)` read a reference that the
-	# SAME assignment's own vector resize had just invalidated -- segfaulted outright before
+	# fix - an evaluation-order hazard where `slot(j) = slot(j - 1)` read a reference that the
+	# SAME assignment's own vector resize had just invalidated - segfaulted outright before
 	# this got to the point of passing or failing on identity.)
 	v = View()
 
-	v.eventHandlers.append(TaggedHandler("praxis"))  # no local var -- matches the real bug
+	v.eventHandlers.append(TaggedHandler("praxis"))  # no local var - matches the real bug
 
 	v.eventHandlers.insert(0, TaggedHandler("lock"))
 
@@ -40,15 +40,15 @@ def test_event_handlers_insert_preserves_identity_without_local_ref():
 
 def test_event_handlers_del_preserves_identity_of_shifted_elements():
 	# Companion regression test to the insert() one above, for del(). Same root cause, same
-	# fix shape: deleting index i shifts every LATER element down by one -- those are still
+	# fix shape: deleting index i shifts every LATER element down by one - those are still
 	# live, still-present elements, just relocated, so del()'s cache invalidation must shift
 	# their slots down with them rather than erasing them. This is very likely the actual
 	# root cause the feedback_eventhandlers_delitem_bug memory documented as a symptom+
 	# workaround ("del viewer.eventHandlers[i] corrupts identity; use [i] = x") without ever
-	# root-causing it -- that workaround should no longer be necessary after this fix.
+	# root-causing it - that workaround should no longer be necessary after this fix.
 	v = View()
 
-	v.eventHandlers.append(TaggedHandler("a"))  # no local vars -- matches the real bug
+	v.eventHandlers.append(TaggedHandler("a"))  # no local vars - matches the real bug
 	v.eventHandlers.append(TaggedHandler("b"))
 	v.eventHandlers.append(TaggedHandler("c"))
 
@@ -64,7 +64,7 @@ def test_event_handlers_del_last_index():
 	v.eventHandlers.append(TaggedHandler("a"))
 	v.eventHandlers.append(TaggedHandler("b"))
 
-	del v.eventHandlers[1]  # no later elements to shift -- straight erase
+	del v.eventHandlers[1]  # no later elements to shift - straight erase
 
 	result = [(type(h), h.tag) for h in v.eventHandlers]
 

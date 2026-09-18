@@ -107,7 +107,7 @@ struct pyx::SequenceTraits<osgViewer::View> {
 	}
 
 	// std::list::insert(), so this is the actual native primitive the original
-	// eventHandlers.insert(0, handler) request wanted -- not an append()/del() emulation.
+	// eventHandlers.insert(0, handler) request wanted - not an append()/del() emulation.
 	// Unlike nth() above, `i == size()` (insert-at-end) is a valid, in-range request here,
 	// so this walks to ehs.end() itself instead of reusing nth()'s stricter bounds check.
 	static void insert(osgViewer::View* v, size_t i, value_type eh) {
@@ -472,7 +472,7 @@ void bind(py::module_& m) {
 		.def("TODO", [](osgViewer::Viewer& self, bool glModern) {
 			// Confirmed 2026-08-28: leaving this unset means whatever OSG's default threading
 			// model resolves to (a real background draw thread on multi-core machines, not just
-			// SingleThreaded like every example's own OSG_THREADING env var requests) -- close()
+			// SingleThreaded like every example's own OSG_THREADING env var requests) - close()
 			// destructing a Viewer while that thread is still alive and parked in
 			// Renderer::ThreadSafeQueue::takeFront() hangs forever in pthread_cond_destroy()
 			// (POSIX forbids destroying a condvar another thread is still waiting on). close()
@@ -503,7 +503,7 @@ void bind(py::module_& m) {
 				// still alive and parked in Renderer::ThreadSafeQueue::takeFront() at this point.
 				// Destructing the Viewer (Camera -> Renderer -> ~Condition()) while that thread is
 				// still waiting on it is undefined by POSIX and hangs forever in
-				// pthread_cond_destroy() on glibc, rather than erroring -- confirmed 2026-08-28 via
+				// pthread_cond_destroy() on glibc, rather than erroring - confirmed 2026-08-28 via
 				// a real core dump (SIGQUIT) after a Viewer created without SingleThreaded was
 				// close()'d then left to be garbage-collected. stopThreading() is a safe no-op
 				// under SingleThreaded, so this doesn't special-case that.

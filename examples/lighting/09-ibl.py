@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
 
-# Step 9 -- Image-Based Lighting (IBL)
+# Step 9 - Image-Based Lighting (IBL)
 #
 # This step used to hand-roll its own SH9 diffuse projection (numpy/cv2, see git history) and its
-# own GGX-prefiltered-cubemap + split-sum BRDF LUT shader math -- reasonable the first time through,
+# own GGX-prefiltered-cubemap + split-sum BRDF LUT shader math - reasonable the first time through,
 # but osgx.gltf.pbribl now exists as a real, battle-tested production pipeline (it grew out of
-# exactly this example's needs -- see PBRIBL.cpp's own history comment). Re-deriving IBL by hand a
+# exactly this example's needs - see PBRIBL.cpp's own history comment). Re-deriving IBL by hand a
 # second time here would be re-teaching a solved problem, not teaching a new one, so this step pivots
 # to consuming it directly:
 #
-# osgx.gltf.pbribl.PBRIBLEnvironment.prepare(hdrPath) -- bakes diffuse irradiance, the BRDF LUT, and
+# osgx.gltf.pbribl.PBRIBLEnvironment.prepare(hdrPath) - bakes diffuse irradiance, the BRDF LUT, and
 # a GGX-prefiltered specular cubemap all LIVE from one equirectangular .hdr, via a handful of
 # PRE_RENDER passes added to the scene graph (environment.root). No .ktx2 pre-bake step needed
-# anymore -- that's what this step's numpy/cv2 SH compute + --ktx2 loading used to stand in for.
+# anymore - that's what this step's numpy/cv2 SH compute + --ktx2 loading used to stand in for.
 #
-# osgx.gltf.pbribl.PBRIBLScene.create(node, environment, ..., shadowMap=...) -- wires the whole
+# osgx.gltf.pbribl.PBRIBLScene.create(node, environment, ..., shadowMap=...) - wires the whole
 # thing (material + IBL + optional direct lights + optional shadow) onto node's own StateSet with
 # one call. Direct lights still come from osgx.LightSet exactly as Step 8 introduced; passing
 # a shadowMap here is the same osgx.ShadowMap Step 8 built, just handed to PBRIBLScene.create
 # instead of wired by hand.
 #
-# The floor is NOT glTF -- it's still a hand-rolled osgx_Material + osgx_DirectLighting() call
+# The floor is NOT glTF - it's still a hand-rolled osgx_Material + osgx_DirectLighting() call
 # (identical shape to Step 8's floor), since PBRIBLScene.create() is specifically the glTF-material
 # convenience path and a flat quad has no glTF material to feed it.
 
@@ -36,7 +36,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size, resolve_model, resolve_asset
 
 from OpenSceneGraph import *
@@ -44,7 +44,7 @@ from OpenSceneGraph.GL import *
 
 import osgx
 
-# Same light positions as Step 7/8 -- no animation.
+# Same light positions as Step 7/8 - no animation.
 KEY_LIGHT_POS = osg.Vec3( 0.1, 0.1, 1.0) # front-center key (shadow caster)
 FILL_LIGHT_POS_0 = osg.Vec3(-0.8, 0.3, 0.5) # cool fill, left
 FILL_LIGHT_POS_1 = osg.Vec3( 0.0, -0.6, 0.2) # warm back/rim
@@ -70,8 +70,8 @@ void main() {
 }
 """
 
-# Flat albedo, no textures, no IBL term (the glTF model is this step's IBL demonstration -- the
-# floor is just a plausible shadow receiver) -- otherwise identical shape to Step 8's floor.
+# Flat albedo, no textures, no IBL term (the glTF model is this step's IBL demonstration - the
+# floor is just a plausible shadow receiver) - otherwise identical shape to Step 8's floor.
 FLOOR_FRAGMENT = """
 #version 460 core
 
@@ -106,7 +106,7 @@ void main() {
 """
 
 # 1/2/3 cycle PBRIBLScene.create()'s debugMode (combined/diffuse-only/specular-only) when
-# --diagnostics is passed -- isolates what IBL's two independent intensity knobs are each
+# --diagnostics is passed - isolates what IBL's two independent intensity knobs are each
 # actually contributing.
 class Diagnostics(osgGA.GUIEventHandler):
 	MODE_NAMES = ("combined", "diffuse only", "specular only")
@@ -131,7 +131,7 @@ class Diagnostics(osgGA.GUIEventHandler):
 
 		return True
 
-# Set by build_scene(), read by configure_viewer() -- the Diagnostics eventHandler needs the live
+# Set by build_scene(), read by configure_viewer() - the Diagnostics eventHandler needs the live
 # viewer to register on, which build_scene() never receives. Same "no other channel exists"
 # reasoning as pyosg-khronos-viewer.py's own _args/_pbr stash.
 _args = None
@@ -171,7 +171,7 @@ def build_scene(w, h):
 	args = ap.parse_args()
 
 	# --env, not --hdr: only pre-baked manifests are ever bundled in the openscenegraph-
-	# examples wheel (see resolve_asset()'s own comment in pyosg_example.py) -- a bare
+	# examples wheel (see resolve_asset()'s own comment in pyosg_example.py) - a bare
 	# invocation with neither flag must work out of the box against a plain `pip install`,
 	# not require OSG_FILE_PATH pointed at a real glTF-Sample-Environments checkout.
 	if not args.hdr and not args.env:
@@ -188,7 +188,7 @@ def build_scene(w, h):
 	path = resolve_model(args.path or "BoomBox")
 
 	if not path:
-		sys.exit("Cannot find model -- clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
+		sys.exit("Cannot find model - clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
 
 	model = osgDB.readNodeFile(path)
 
@@ -197,7 +197,7 @@ def build_scene(w, h):
 		hdr_path = resolve_asset(args.hdr, "hdr")
 
 		if not hdr_path:
-			sys.exit(f"Cannot find HDR {args.hdr!r} -- check OSG_FILE_PATH")
+			sys.exit(f"Cannot find HDR {args.hdr!r} - check OSG_FILE_PATH")
 
 		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepare(hdr_path, lutSize=1024)
 
@@ -217,8 +217,8 @@ def build_scene(w, h):
 	mg_ss = main_group.stateSet
 
 	# LightSet must live on the SAME StateSet as the Program that actually calls
-	# osgx_DirectLighting() (model's own StateSet, wired by PBRIBLScene.create() below -- not
-	# main_group, an ancestor) -- osgx::LightSet::apply() pushes osgx_lightCount to whatever
+	# osgx_DirectLighting() (model's own StateSet, wired by PBRIBLScene.create() below - not
+	# main_group, an ancestor) - osgx::LightSet::apply() pushes osgx_lightCount to whatever
 	# Program is CURRENTLY bound at the moment it runs, so attaching it on an ancestor pushes to
 	# whatever (stale/unrelated) program was bound before this subtree even started descending.
 	# Confirmed root cause + osgx-level fix 2026-09-03 (see 08-shadows.py's own history); the
@@ -236,7 +236,7 @@ def build_scene(w, h):
 		lights.count = 0
 
 	# --- Shadow map (Step 8's rig, unchanged) ---------------------------------- #
-	# Only built when there's a light to cast it -- with --no-lights there's no direct-light term
+	# Only built when there's a light to cast it - with --no-lights there's no direct-light term
 	# for a shadow to darken, so the extra PRE_RENDER depth pass would be pure waste.
 	shadow_map = None
 
@@ -283,7 +283,7 @@ def build_scene(w, h):
 
 	# --- Scene graph ------------------------------------------------------------ #
 	# Shadow uniforms/texture live on main_group's StateSet so the hand-rolled floor shader sees
-	# them by inheritance -- PBRIBLScene.create() already wired them directly onto model's own
+	# them by inheritance - PBRIBLScene.create() already wired them directly onto model's own
 	# StateSet above, so this is redundant (but harmless) for the model itself.
 	if shadow_map is not None:
 		mg_ss.textureAttributes[4] = shadow_map.depthTexture

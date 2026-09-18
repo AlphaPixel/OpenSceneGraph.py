@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-"""Combined D4/D6/D8/D10/D12/D20 procedural-number-atlas prototype -- see
+"""Combined D4/D6/D8/D10/D12/D20 procedural-number-atlas prototype - see
 ai/context-todo-dice.md. Supersedes the separate `pyosg-d4.py`/
 `pyosg-d6-numbers.py` prototypes now that all these dice reduce to the same
 mesh/shader mechanism via `pyosg_dice.py` (see that module's docstring for
 the full writeup: one shared vertex-attribute layout, one shared decal
-shader, the only real difference between die types being DATA -- which base
+shader, the only real difference between die types being DATA - which base
 vertices/faces, and whether numbering is per-face-center or per-vertex-corner).
 
 Usage: `--die d4,d6,d8,d10,d12,d20` (default: all six) shows any subset of the
@@ -18,11 +18,11 @@ shape topology, face UVs, and support geometry now come from the named
 `osgx` polyhedra. This example remains responsible only for the procedural
 number atlas, dice-specific shader, scene assembly, and result highlight.
 
-`--hdr PATH`/`--env MANIFEST` (mutually exclusive, both optional -- same
+`--hdr PATH`/`--env MANIFEST` (mutually exclusive, both optional - same
 contract as `pyosg-khronos-viewer.py`) swap the dice's lighting from the
 fixed N.L term to real PBR/IBL: the atlas-decal fragment logic is unchanged,
 only the term the decal-composited albedo is lit by. Dice are treated as a
-fixed dielectric plastic (metallic=0, a constant roughness) for now -- no
+fixed dielectric plastic (metallic=0, a constant roughness) for now - no
 per-face material data yet, that's still future work. The floor stays on
 the plain N.L shader either way; this is a first proof that the procedural
 dice mesh/shader can sit under osgx's PBR/IBL substrate at all.
@@ -43,7 +43,7 @@ os.environ.setdefault(
 # Import side effect: fills in OSG_THREADING/OSG_GL_* env var defaults (see pyosg_example.py).
 # Deliberately after the OSG_WINDOW/OSG_LIBRARY_PATH overrides above (setdefault() means order
 # between these doesn't actually matter, but matching pyosg-khronos-viewer.py's style) and before
-# `from OpenSceneGraph import *` -- these need to land before OSG's DisplaySettings reads them.
+# `from OpenSceneGraph import *` - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import label, window_size
 
 from OpenSceneGraph import *
@@ -116,7 +116,7 @@ void main() {
 				(decalValue + (lu * 0.5 + 0.5)) / float(digitCount),
 				lv * 0.5 + 0.5
 			);
-			// osgx.PixelText.createAtlas() is a coverage-only (single-channel) atlas -- the
+			// osgx.PixelText.createAtlas() is a coverage-only (single-channel) atlas - the
 			// ink color is no longer baked into the image, so it comes from the ink uniform.
 			float coverage = texture(numberAtlas, atlasUV).r;
 			bool activeDecal = activeFace && int(decalValue + 0.5) == activeDecalValue;
@@ -161,17 +161,17 @@ uniform sampler2D brdfLUT;
 uniform samplerCube diffuseEnv;
 
 // Same cubemap lookup basis osgx.gltf.pbribl.PBRIBLScene.create() reads off
-// PBRIBLEnvironment.iblAxis -- see dice.rotate_ibl_environment().
+// PBRIBLEnvironment.iblAxis - see dice.rotate_ibl_environment().
 uniform vec3 iblAxis[3];
 
-// Whole-die material knobs -- no per-face roughness/metallic data yet, just a uniform
+// Whole-die material knobs - no per-face roughness/metallic data yet, just a uniform
 // scalar pair so the PBR/IBL response is at least visibly tunable from the CLI.
 uniform float roughness;
 uniform float metallic;
 
 out vec4 fragColor;
 
-// Ported from osgx::gltf::pbribl's own PBRIBL.cpp shader -- Z-up world direction to the
+// Ported from osgx::gltf::pbribl's own PBRIBL.cpp shader - Z-up world direction to the
 // baked cubemap's Y-up convention, then onto the (possibly rotated) lookup basis.
 vec3 osgx_ZUpToGLTF(vec3 d) { return vec3(d.x, d.z, -d.y); }
 vec3 osgx_OrientIBL(vec3 d) {
@@ -214,7 +214,7 @@ void main() {
 				(decalValue + (lu * 0.5 + 0.5)) / float(digitCount),
 				lv * 0.5 + 0.5
 			);
-			// osgx.PixelText.createAtlas() is a coverage-only (single-channel) atlas -- the
+			// osgx.PixelText.createAtlas() is a coverage-only (single-channel) atlas - the
 			// ink color is no longer baked into the image, so it comes from the ink uniform.
 			float coverage = texture(numberAtlas, atlasUV).r;
 			bool activeDecal = activeFace && int(decalValue + 0.5) == activeDecalValue;
@@ -225,7 +225,7 @@ void main() {
 	}
 
 	// Eye-space N/V, rotated into world space the same way pyosg-khronos-viewer.py's
-	// underlying shader does -- transpose(mat3(osg_ViewMatrix)) is the view rotation's
+	// underlying shader does - transpose(mat3(osg_ViewMatrix)) is the view rotation's
 	// inverse, since it's orthonormal.
 	mat3 invView = transpose(mat3(osg_ViewMatrix));
 	vec3 N = invView * normalize(vNormal);
@@ -337,10 +337,10 @@ def create_scene(die_names, environment=None, roughness=0.45, metallic=0.0):
 
 	return root, rollable_dice, active_face_uniforms, active_decal_uniforms
 
-# Set by build_scene(), read by configure_viewer() -- rollable_dice/active_face_uniforms/
+# Set by build_scene(), read by configure_viewer() - rollable_dice/active_face_uniforms/
 # active_decal_uniforms/roll_totals/total_label are plain Python state (roll_spec data, uniform
 # lists, running-total bookkeeping) with no single natural home in the returned Node the way
-# pyosg-mrt.py pulls a lone Uniform back out of a StateSet -- same shape/reason as
+# pyosg-mrt.py pulls a lone Uniform back out of a StateSet - same shape/reason as
 # pyosg-khronos-viewer.py's _args/_pbr.
 _args = None
 _rollable_dice = None
@@ -349,7 +349,7 @@ _active_decal_uniforms = None
 _roll_totals = None
 _total_label = None
 
-# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+# The real pipeline-assembly entrypoint - returns the root Node, no viewer/window side effects.
 def build_scene(w, h):
 	global _args, _rollable_dice, _active_face_uniforms, _active_decal_uniforms
 	global _roll_totals, _total_label
@@ -397,7 +397,7 @@ def build_scene(w, h):
 
 	for name in die_names:
 		if name not in DIE_SPECS:
-			parser.error(f"unknown die {name!r} -- choose from {{{', '.join(sorted(DIE_SPECS))}}}")
+			parser.error(f"unknown die {name!r} - choose from {{{', '.join(sorted(DIE_SPECS))}}}")
 
 	environment = dice.prepare_environment(args.hdr, args.env, args.ibl_rotate)
 
@@ -412,12 +412,12 @@ def build_scene(w, h):
 		scene.children.append(environment.root)
 
 	# 0 until a die's first roll completes, so the total is always the sum of whatever's
-	# currently showing -- populated by highlight_result() below, same per-die "which value did
+	# currently showing - populated by highlight_result() below, same per-die "which value did
 	# THIS die land on" data DiceRollCallback already threads through result_callback for the
 	# highlight uniforms above; this was already tracked, just not summed/displayed anywhere.
 	roll_totals = [0] * len(rollable_dice)
 
-	# A screen-aligned running-total HUD, top-left -- same POST_RENDER/ABSOLUTE_RF overlay-camera
+	# A screen-aligned running-total HUD, top-left - same POST_RENDER/ABSOLUTE_RF overlay-camera
 	# shape pyosg_async.Progress already uses for a screen-space indicator, just a pixel-space
 	# ortho (0..w, 0..h) projection instead of Progress' identity/clip-space one, since
 	# osgx.PixelText expects local-space units in screen pixels, not NDC. w/h are fixed for this

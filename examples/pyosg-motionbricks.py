@@ -44,7 +44,7 @@ os.environ.setdefault(
 # Import side effect: fills in OSG_THREADING/OSG_GL_* env var defaults (see pyosg_example.py).
 # Deliberately after the OSG_WINDOW/OSG_LIBRARY_PATH overrides above (setdefault() means order
 # between these doesn't actually matter, but matching pyosg-khronos-viewer.py's style) and before
-# `from OpenSceneGraph import *` -- these need to land before OSG's DisplaySettings reads them.
+# `from OpenSceneGraph import *` - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size
 
 from OpenSceneGraph import *
@@ -208,7 +208,7 @@ def relative_quaternion(current, reference):
 	"""Return the rotation taking reference WXYZ orientation to current."""
 
 	# Plain indexing works whether `reference` itself is a numpy array, a torch tensor
-	# (both from MotionBricks -- see qpos/reference_qpos), or a plain tuple; only the
+	# (both from MotionBricks - see qpos/reference_qpos), or a plain tuple; only the
 	# .copy()+slice-assignment numpy idiom this replaced actually required an array type.
 	conjugate = (reference[0], -reference[1], -reference[2], -reference[3])
 
@@ -398,13 +398,13 @@ def make_motionbricks_args(args):
 	)
 
 
-# Set by build_scene(), read by configure_viewer() -- keyboard/args have no natural home in the
+# Set by build_scene(), read by configure_viewer() - keyboard/args have no natural home in the
 # returned Node (build_scene()'s contract is just "return a Node"); same shape/reason as
 # pyosg-khronos-viewer.py's _args/_pbr.
 _args = None
 _keyboard = None
 
-# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+# The real pipeline-assembly entrypoint - returns the root Node, no viewer/window side effects.
 def build_scene(w, h):
 	global _args, _keyboard
 

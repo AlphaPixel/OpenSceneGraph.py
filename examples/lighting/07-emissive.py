@@ -11,12 +11,12 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size, resolve_model
 
 from OpenSceneGraph import *
 
-# Emissive: the simplest addition in the series -- one texture sample added
+# Emissive: the simplest addition in the series - one texture sample added
 # unconditionally AFTER all lighting, as if the surface generates its own light.
 #
 # Unlike every other term, emissive is NOT multiplied by any light contribution.
@@ -24,7 +24,7 @@ from OpenSceneGraph import *
 # hot metal) add their color on top of whatever the lighting computed.
 #
 # The GLTF material also carries an emissiveFactor (a vec3 multiplier).
-# BoomBox sets it to [1,1,1] -- full brightness, texture used as-is.
+# BoomBox sets it to [1,1,1] - full brightness, texture used as-is.
 #
 # Loader change (GLTFReader.h): emissiveTexture bound to unit 3.
 
@@ -165,7 +165,7 @@ void main() {
 	// Emissive: purely additive, independent of all lighting.
 	vec3 emissive = texture(emissiveTex, vUV).rgb * emissiveFactor;
 
-	// Scanlines applied to emissive only -- screen-space Y so the bands stay
+	// Scanlines applied to emissive only - screen-space Y so the bands stay
 	// horizontal regardless of how the model is oriented.
 	float scanline = 0.5 + 0.5 * sin(gl_FragCoord.y * scanlineFreq);
 	emissive *= mix(1.0, scanline, scanlineStrength);
@@ -178,7 +178,7 @@ def build_scene(w, h):
 	path = resolve_model(sys.argv[1] if len(sys.argv) > 1 else "BoomBox")
 
 	if not path:
-		sys.exit("Cannot find model -- clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
+		sys.exit("Cannot find model - clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
 
 	root = osgDB.readNodeFile(path)
 
@@ -198,11 +198,11 @@ def build_scene(w, h):
 	ss.uniforms["ormTex"] = 2
 	ss.uniforms["emissiveTex"] = 3
 
-	# BoomBox GLTF sets emissiveFactor to [1,1,1] -- full brightness.
+	# BoomBox GLTF sets emissiveFactor to [1,1,1] - full brightness.
 	# Tune this down (e.g. 0.5, 0.5, 0.5) to taste.
 	ss.uniforms["emissiveFactor"] = osg.Vec3(1.0, 1.0, 1.0)
 
-	# scanlineFreq: radians per pixel -- 1.5 ? one band every 4 pixels.
+	# scanlineFreq: radians per pixel - 1.5 ? one band every 4 pixels.
 	# scanlineStrength: 0=no effect, 1=full black-to-bright bands.
 	ss.uniforms["scanlineFreq"] = 1.5
 	ss.uniforms["scanlineStrength"] = 0.5

@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 
-# Small, reusable pieces of the "async OSG.py" idiom -- not a framework, just the two things every
+# Small, reusable pieces of the "async OSG.py" idiom - not a framework, just the two things every
 # example kept hand-rolling: (1) running viewer.frame() as an ordinary asyncio task instead of a
 # bespoke synchronous pump loop, so it composes with `await` like any other coroutine, and (2)
 # draining a poll()-shaped progress object (see osgx.gltf.AsyncProgress) from the coroutine that's
 # already awaiting the background work, instead of routing progress through a queue and a
 # call_soon_threadsafe bridge. See aipython/25-async-osgpy.md for why the poll-based half of this
 # exists (a real measured 2x async/sync slowdown from the push-based alternative, caused by the
-# background thread contending for the GIL with a render loop that -- under OSG_THREADING=
-# SingleThreaded -- almost never voluntarily releases it).
+# background thread contending for the GIL with a render loop that - under OSG_THREADING=
+# SingleThreaded - almost never voluntarily releases it).
 #
 # Part of the base openscenegraph wheel via examples/manifest.cmake's PYOSG_CORE_EXAMPLES, same as
-# pyosg_repl.py/pyosg_visitor.py/pyosg_example.py -- stays here in examples/ rather than moving
+# pyosg_repl.py/pyosg_visitor.py/pyosg_example.py - stays here in examples/ rather than moving
 # into python/OpenSceneGraph/, matching how those three already resolved the same question.
 
 import asyncio
@@ -24,27 +24,27 @@ import osgx
 async def run(viewer, *coros, fps=60, max_frames=None):
 	"""Runs viewer.frame() as an ordinary asyncio task alongside `coros`, so application code
 	never hand-writes its own `while not viewer.done: viewer.frame(); loop.run_until_complete(...)`
-	pump -- rendering is just another coroutine competing for the same event loop, the same way a
+	pump - rendering is just another coroutine competing for the same event loop, the same way a
 	browser's requestAnimationFrame callback or Node's setInterval share their loop with everything
 	else.
 
 	The window closing (`viewer.done` becoming true, i.e. the user hit Escape or closed it) always
-	ends the session immediately, cancelling any `coros` still running -- same as it would in a
+	ends the session immediately, cancelling any `coros` still running - same as it would in a
 	hand-written `while not viewer.done: ...` loop, where nothing after the loop runs once it
-	exits. Conversely, a `coros` task finishing early does NOT end the session on its own -- a
+	exits. Conversely, a `coros` task finishing early does NOT end the session on its own - a
 	one-shot startup task (e.g. a single load-and-attach coroutine) completing must not close the
 	window out from under whoever's still looking at it. These two exit conditions are genuinely
 	asymmetric, not "wait for everything": treat `render()`'s own completion as authoritative, and
 	`coros` completing as informational only, unless one of them raises (which ends the session
 	either way, exception propagated here).
 
-	`fps` bounds how often frame() is called -- await asyncio.sleep(1 / fps) between calls, a real
+	`fps` bounds how often frame() is called - await asyncio.sleep(1 / fps) between calls, a real
 	sleep, so this task genuinely yields control (including, if it's a busy moment, the GIL) rather
 	than spinning. There is no reason to poll faster than the display can show anyway.
 
 	`max_frames`, if given, sets `viewer.done = True` after exactly that many frame() calls --
 	matching how the window actually closes (Escape / OS close button), NOT `viewer.close()`
-	(see the comment at the actual call site for why that's deliberately avoided) -- for
+	(see the comment at the actual call site for why that's deliberately avoided) - for
 	deterministic, scriptable runs (apitrace captures, crash repros) that don't depend on a
 	human pressing Escape at some approximate moment.
 	"""
@@ -60,15 +60,15 @@ async def run(viewer, *coros, fps=60, max_frames=None):
 			count += 1
 
 			if max_frames is not None and count >= max_frames:
-				# NOT viewer.close() -- that calls GraphicsContext::close(), which (when this
+				# NOT viewer.close() - that calls GraphicsContext::close(), which (when this
 				# context isn't shared) unconditionally runs osg::deleteAllGLObjects(contextID):
 				# a blanket "delete every GL object ever registered for this context" sweep,
 				# regardless of whether the owning C++ objects are still alive. A still-alive
 				# orphaned Camera (kept alive by another task, like Progress.watch()) has its
 				# real GL-side Program/buffers deleted out from under it while it still believes
-				# it owns them -- confirmed 2026-08-23 as the likely mechanism behind a real
+				# it owns them - confirmed 2026-08-23 as the likely mechanism behind a real
 				# "corrupted double-linked list" abort. `done = True` matches how a window
-				# actually closes (Escape / OS close button) -- no explicit teardown call here.
+				# actually closes (Escape / OS close button) - no explicit teardown call here.
 				viewer.done = True
 
 				break
@@ -80,10 +80,10 @@ async def run(viewer, *coros, fps=60, max_frames=None):
 	pending = {render_task, *other_tasks}
 
 	try:
-		# Wait incrementally rather than for one fixed condition -- a `coros` task finishing (in
+		# Wait incrementally rather than for one fixed condition - a `coros` task finishing (in
 		# `done`) is only checked for an exception and then dropped from `pending`; the loop keeps
 		# going. Only `render_task` leaving `pending` (the window actually closed) ends it, and
-		# only that specific check breaks the loop -- an exception from ANY task still ends things
+		# only that specific check breaks the loop - an exception from ANY task still ends things
 		# immediately via the raise below, on either task's completion.
 		while True:
 			done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
@@ -126,21 +126,21 @@ async def run_with_progress(
 	blocking_fn's return value.
 
 	This is the "pull" half of the pattern: `blocking_fn` must never call back into Python itself
-	(no queue, no loop, no call_soon_threadsafe) -- it only needs to write into `progress` via
+	(no queue, no loop, no call_soon_threadsafe) - it only needs to write into `progress` via
 	plain atomics, and this coroutine (which already owns the GIL as a matter of course, same as
 	any Python code) does the work of noticing and reacting to changes. The one exception is the
 	final return value, which really does cross back into Python exactly once, at completion --
 	that's asyncio.to_thread's own Future machinery, not something this function adds, and it was
 	never the source of the GIL contention this pattern exists to avoid (see the module docstring).
 
-	`poll_interval` MUST be a real, positive sleep, not 0 -- `poll()` itself being cheap (a few
+	`poll_interval` MUST be a real, positive sleep, not 0 - `poll()` itself being cheap (a few
 	atomic loads, no GIL crossing) is only free to call often when it's piggybacking on a loop
 	that already ticks for other reasons, like `run()`'s render loop above. This loop exists
 	*purely* to poll, so `await asyncio.sleep(0)` here would be a genuine unthrottled busy-loop --
 	CPython's zero-delay sleep is a bare cooperative yield, not a real wait, so this coroutine
 	would be rescheduled continuously for the entire duration of `blocking_fn`, burning ~100% of
 	one core on pure polling overhead. That's real OS-level CPU contention with the background
-	thread actually doing the work -- measured as a genuine slowdown (worse than the GIL
+	thread actually doing the work - measured as a genuine slowdown (worse than the GIL
 	contention this pattern was built to remove), not a theoretical concern. Default matches a
 	typical 60fps render cadence; there's no reason to poll faster than progress can be displayed
 	anyway.
@@ -179,14 +179,14 @@ async def run_with_progress(
 
 class Progress(osg.Camera):
 	"""Base class for a screen-space progress indicator, rendered by a dedicated POST_RENDER
-	overlay Camera -- guaranteed to draw after (on top of) the main scene regardless of its
+	overlay Camera - guaranteed to draw after (on top of) the main scene regardless of its
 	content, same shape as pyosg-fire.py's build_flash_camera(): identity view/projection
 	(children emit clip-space coordinates directly, ignoring gl_ModelViewProjectionMatrix
-	entirely), ABSOLUTE_RF, and clearMask=0 since this is an overlay -- clearing here would wipe
+	entirely), ABSOLUTE_RF, and clearMask=0 since this is an overlay - clearing here would wipe
 	out everything the main camera already rendered this frame.
 
 	This is deliberately a real Python subclass of osg.Camera, not a plain osg.Camera returned
-	from a factory function with attributes bolted on afterward -- pybind11 types aren't
+	from a factory function with attributes bolted on afterward - pybind11 types aren't
 	dynamic_attr (see feedback_avoid_dynamic_attr_use_proxy), so a genuine subclass is the only
 	way to get both `isinstance(x, osg.Camera)` (for attaching into a scene graph the normal way)
 	and Python-level state (`fraction`, `update()`) on the same object.
@@ -247,7 +247,7 @@ class Progress(osg.Camera):
 	@staticmethod
 	def _default_to_fraction(update):
 		"""Interprets an osgx.gltf.AsyncProgress-shaped (stage, current, total, section, overall)
-		update as a 0..1 fraction -- the only progress-source shape this codebase has today. Uses
+		update as a 0..1 fraction - the only progress-source shape this codebase has today. Uses
 		`overall` (a monotonic, whole-load estimate computed on the C++ side) rather than
 		re-deriving a fraction from current/total, which resets at every section boundary within
 		Parsing and would visibly jump backward. Pass a different `to_fraction` to watch() for any
@@ -260,7 +260,7 @@ class Progress(osg.Camera):
 	async def watch(self, progress, poll_interval=1.0 / 60.0, to_fraction=None):
 		"""Drives this indicator's fraction from any `.poll()`-shaped progress source (e.g.
 		osgx.gltf.AsyncProgress), independently of however the underlying operation is actually
-		run. Deliberately NOT wired through run_with_progress()'s on_progress callback -- add
+		run. Deliberately NOT wired through run_with_progress()'s on_progress callback - add
 		this as its own coroutine to pyosg_async.run()'s task list instead:
 
 		    asyncio.run(pyosg_async.run(viewer, load(...), bar.watch(progress)))
@@ -270,7 +270,7 @@ class Progress(osg.Camera):
 		know how `load()` runs. Anyone wanting a different display style writes their own
 		coroutine of this same shape instead of subclassing anything.
 
-		Runs forever, polling at `poll_interval`, until cancelled -- normally when the whole
+		Runs forever, polling at `poll_interval`, until cancelled - normally when the whole
 		session ends (see pyosg_async.run()'s docstring: only the window closing ends things,
 		so this harmlessly keeps polling a progress object that stopped changing once the load
 		it's watching finishes, until then).
@@ -311,7 +311,7 @@ BAR_VERTEX_SHADER = """
 
 	void main() {
 		// Same gl_VertexID-indexed quad-corner trick as pyosg-instanced.py/pyosg-fire.py, but
-		// pinned to the bottom of NDC space instead of centered -- a horizontal strip from
+		// pinned to the bottom of NDC space instead of centered - a horizontal strip from
 		// y=-1 up to y=-1+uHeight, spanning the full width.
 		vec2 base[4] = vec2[4](
 			vec2(-1.0, -1.0),
@@ -348,14 +348,14 @@ class ProgressBar(Progress):
 	"""A left-to-right horizontal progress bar pinned to the bottom of the screen.
 
 	`bar_height` is a literal pixel thickness (default 2.5x PixelText's native glyph height --
-	see NATIVE_TEXT_HEIGHT below), not a window-relative divisor -- unlike the bar's own clip-
+	see NATIVE_TEXT_HEIGHT below), not a window-relative divisor - unlike the bar's own clip-
 	space quad shader, a percentage label needs a REAL pixel size to look right regardless of
 	window size (an NDC-relative font would grow/shrink with the window along with the bar), so
 	this class converts it to the NDC fraction (`uHeight = 2 * bar_height / height`) itself
 	rather than pushing that math onto every caller.
 	"""
 
-	# PixelText's font is a fixed 5x7 grid (see osgx::PixelText::GLYPH_ROWS) -- "native" height
+	# PixelText's font is a fixed 5x7 grid (see osgx::PixelText::GLYPH_ROWS) - "native" height
 	# here means cellSize=GLYPH_ROWS, i.e. one glyph pixel per cellSize unit, the smallest size
 	# at which the font is still drawn 1:1 rather than up/down-scaled.
 	NATIVE_TEXT_HEIGHT = osgx.PixelText.GLYPH_ROWS
@@ -381,7 +381,7 @@ class ProgressBar(Progress):
 		g = osg.Geometry()
 
 		g.primitiveSets.append(osg.DrawArrays(osg.PrimitiveSet.TRIANGLE_FAN, 0, 4))
-		# No real vertex data -- positions come entirely from gl_VertexID in the shader, so
+		# No real vertex data - positions come entirely from gl_VertexID in the shader, so
 		# OSG has nothing to compute a bound from. Set one manually, matching the shader's own
 		# clip-space output range, or cull traversal (testing against this Camera's own
 		# identity-matrix frustum, which IS exactly the NDC cube) drops this silently.
@@ -406,11 +406,11 @@ class ProgressBar(Progress):
 
 	def _build_label(self):
 		"""Adds a "NN%" osgx.PixelText label, white-inked, vertically centered inside the bar
-		itself -- as a plain child of THIS Camera (same POST_RENDER subgraph as the bar quad),
+		itself - as a plain child of THIS Camera (same POST_RENDER subgraph as the bar quad),
 		not a second nested Camera. PixelText's vertex shader positions glyphs via the standard
 		osg_ModelViewProjectionMatrix; since this Camera's view/projection are both identity
 		(see Progress.__init__), that MVP is just whatever Model matrix sits above the label in
-		the scene graph -- so `self._label_transform` below IS this label's only "projection",
+		the scene graph - so `self._label_transform` below IS this label's only "projection",
 		reproducing an osg.Matrix.ortho2D(0, width, 0, height) camera (the convention every
 		other PixelText call site uses, e.g. pyosg-dice.py's HUD label) as one plain matrix
 		instead of a second Camera. See _position_label() for the actual math.
@@ -433,7 +433,7 @@ class ProgressBar(Progress):
 
 	def _position_label(self):
 		"""Re-centers the label (both axes) over the bar. Called on every update() since the
-		text's width changes as the digit count changes ("0%" vs "100%") -- width is derived
+		text's width changes as the digit count changes ("0%" vs "100%") - width is derived
 		from cellSize * len(text) rather than PixelText's own bounding box, since advance
 		defaults to cellSize (the monospace case) and this avoids depending on a bounding-box
 		query that may not be exposed to Python.

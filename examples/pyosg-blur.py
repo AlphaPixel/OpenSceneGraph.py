@@ -284,11 +284,11 @@ def make_composite_hud(scene_tex, blur_tex, w, h):
 def create_scene():
 	return osgDB.readNodeFile(len(sys.argv) >= 2 and sys.argv[1] or "glsl_simple.osgt")
 
-# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side
+# The real pipeline-assembly entrypoint - returns the root Node, no viewer/window side
 # effects. This is what external tooling (e.g. etc/pyside6-glsl.py's shader-editor scaffold)
 # imports and calls directly, so it MUST stay side-effect-free w.r.t. any global viewer state.
-# Takes (w, h) explicitly -- e.g. the real widget size at the caller's GL-context-current
-# point -- rather than reading the module-level W/H globals, which only __main__ below uses.
+# Takes (w, h) explicitly - e.g. the real widget size at the caller's GL-context-current
+# point - rather than reading the module-level W/H globals, which only __main__ below uses.
 def build_scene(w, h):
 	# Pass outputs:
 	#

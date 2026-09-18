@@ -194,15 +194,15 @@ def create_rtt_camera(w=512, h=512):
 	db.sourceType = GL_FLOAT
 	db.filter = (osg.Texture.NEAREST, osg.Texture.NEAREST)
 
-	# osgx.RTT replaces the four lines every hand-rolled RTT camera used to repeat -- PRE_RENDER,
-	# FRAME_BUFFER_OBJECT, a viewport matching (w, h), and a reference frame -- with one
+	# osgx.RTT replaces the four lines every hand-rolled RTT camera used to repeat - PRE_RENDER,
+	# FRAME_BUFFER_OBJECT, a viewport matching (w, h), and a reference frame - with one
 	# constructor call, plus clearColor/name via the same kwargs support osg.Camera itself has.
 	# clearMask is deliberately NOT passed: GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT is already
 	# osg.Camera's own default (osg/Camera.cpp's constructor), so restating it is pure boilerplate.
 	#
 	# RELATIVE_RF here is a deliberate choice, not the "didn't bother" default it might look like:
 	# this camera never sets its own view/projection, so it inherits whatever the cull traversal's
-	# current matrices are at its position in the scene graph -- in this example, that's the SAME
+	# current matrices are at its position in the scene graph - in this example, that's the SAME
 	# live view the interactive viewer is using, diverted into an FBO instead of the backbuffer.
 	# Use ABSOLUTE_RF (osgx.RTT's own default) instead when the RTT camera needs a fixed,
 	# independent view/projection of its own.
@@ -212,7 +212,7 @@ def create_rtt_camera(w=512, h=512):
 		name="RTT Camera"
 	)
 
-	# One declarative call instead of two -- osgx.RTT.attach() takes a list of
+	# One declarative call instead of two - osgx.RTT.attach() takes a list of
 	# (component, texture) pairs (same shape as osgx.HookList), attached in order.
 	cam.attach([
 		(osg.Camera.COLOR_BUFFER, cb),
@@ -229,7 +229,7 @@ def create_rtt_camera(w=512, h=512):
 # kinds of cool techniques open up!
 def create_hud_camera(cb, db):
 	# NOT an osgx.RTT camera: this one composites onto the real backbuffer (no FBO, no
-	# texture attachments of its own) -- it's the CONSUMER of the RTT camera's output, not
+	# texture attachments of its own) - it's the CONSUMER of the RTT camera's output, not
 	# an RTT camera itself. osgx.RTT specifically means "render into a texture"; reaching
 	# for it here just because it also builds a fullscreen NDC quad (see osgx.RTT.fullscreenQuad)
 	# would be misleading even where it happened to work, since fullscreenQuad() returns an
@@ -237,7 +237,7 @@ def create_hud_camera(cb, db):
 	#
 	# osg.Camera has the SAME kwargs-forwarding constructor osgx.RTT uses (they share the same
 	# pybind11x::kwargs_init chain). Only the properties that actually DIFFER from a fresh
-	# osg.Camera's own defaults are listed here -- renderOrder (already POST_RENDER) and
+	# osg.Camera's own defaults are listed here - renderOrder (already POST_RENDER) and
 	# projectionMatrix/viewMatrix (osg.Matrix's own default constructor is already identity)
 	# used to be set explicitly below too, but were pure restated boilerplate the whole time.
 	cam = osg.Camera(
@@ -280,7 +280,7 @@ def create_hud_camera(cb, db):
 
 	return cam
 
-# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side
+# The real pipeline-assembly entrypoint - returns the root Node, no viewer/window side
 # effects. This is what external tooling (e.g. etc/pyside6-glsl.py's shader-editor scaffold,
 # ../pyosg-cli) imports and calls directly, so it MUST stay side-effect-free w.r.t. any
 # global viewer state. Takes (w, h) explicitly rather than reading module-level constants.
@@ -303,16 +303,16 @@ def build_scene(w, h):
 	# it's important that you're always working with accurate values.
 	#
 	# state.projectionMatrix (osg::State::getProjectionMatrix()) is a SHARED per-context
-	# value, not scoped to whichever camera's callback reads it -- it reflects whatever was
+	# value, not scoped to whichever camera's callback reads it - it reflects whatever was
 	# LAST applied to the GL state, not necessarily this camera's own matrix. rttCam is
 	# PRE_RENDER (draws FIRST each frame), so attaching this callback there would read a
 	# STALE value left over from the END of the previous frame (hudCam's own identity
-	# projectionMatrix, since hudCam draws last) -- confirmed the hard way on pyosg-mrt.py's
+	# projectionMatrix, since hudCam draws last) - confirmed the hard way on pyosg-mrt.py's
 	# equivalent gbuffer_cam (see [[project_pyosg_examples_runner]] memory): garbage
 	# near/far, and inverse(identity) breaking anything relying on invProjectionMatrix.
 	# hudCam is POST_RENDER (draws LAST), so by the time ITS preDrawCallback fires, the real
 	# viewer camera has already drawn in between and applied its real, this-frame-fresh
-	# projection -- the same timing guarantee this used to get directly from the caller's own
+	# projection - the same timing guarantee this used to get directly from the caller's own
 	# v.camera.preDrawCallback, without build_scene() needing a viewer reference at all.
 	def update_uniforms(ri):
 		pm = ri.state.projectionMatrix

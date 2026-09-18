@@ -11,7 +11,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size, resolve_model
 
 from OpenSceneGraph import *
@@ -25,7 +25,7 @@ from OpenSceneGraph import *
 # to tell the fragment shader which unit to sample and pass UV coordinates
 # through from the vertex shader.
 #
-# `osg_MultiTexCoord0` is the OSG built-in alias for TEXCOORD_0 -- the same
+# `osg_MultiTexCoord0` is the OSG built-in alias for TEXCOORD_0 - the same
 # attribute the loader stored via setTexCoordArray(0, ...).
 
 VERTEX_SHADER = """
@@ -115,7 +115,7 @@ def build_scene(w, h):
 	path = resolve_model(sys.argv[1] if len(sys.argv) > 1 else "BoomBox")
 
 	if not path:
-		sys.exit("Cannot find model -- clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
+		sys.exit("Cannot find model - clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
 
 	root = osgDB.readNodeFile(path)
 
@@ -129,7 +129,7 @@ def build_scene(w, h):
 	ss.attributes.append(p)
 
 	# The texture is on the geometry's stateSet (bound by the GLTF loader).
-	# We just tell the shader which unit to sample -- OSG state inheritance
+	# We just tell the shader which unit to sample - OSG state inheritance
 	# makes it visible at render time.
 	ss.uniforms["baseColorTex"] = 0
 

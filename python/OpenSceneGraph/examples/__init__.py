@@ -7,7 +7,7 @@ hooks. Every module is also directly runnable on its own, e.g.
 ``python -m OpenSceneGraph.examples.mrt``.
 
 This is a small, curated subset of the full example sandbox in the project's `examples/`
-source directory -- not everything there implements the build_scene()/configure_viewer()
+source directory - not everything there implements the build_scene()/configure_viewer()
 contract (yet), and most of that directory (the Lighting Series, GLSL experiments, data
 files, etc.) isn't meant to ship in the wheel at all.
 """

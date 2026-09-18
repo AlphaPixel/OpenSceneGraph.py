@@ -11,8 +11,8 @@
 # pyosg_polyhaven.py qwantani_dusk_2 --hdr --res 4k
 #
 # Installs as OpenSceneGraph/examples/polyhaven.py (manifest.cmake strips the pyosg_ prefix on
-# install, same as every other runnable demo here -- only the pure-library helpers like
-# pyosg_example.py keep it) -- import its download/cache functions via
+# install, same as every other runnable demo here - only the pure-library helpers like
+# pyosg_example.py keep it) - import its download/cache functions via
 # `from OpenSceneGraph.examples import polyhaven`.
 
 import sys
@@ -28,7 +28,7 @@ os.environ.setdefault("OSG_WINDOW", "50 50 800 800")
 # Import side effect: fills in OSG_THREADING/OSG_GL_* env var defaults (see pyosg_example.py).
 # Deliberately after the OSG_WINDOW override above (setdefault() means order between these
 # doesn't actually matter, but matching pyosg-khronos-viewer.py's style) and before
-# `from OpenSceneGraph import *` -- these need to land before OSG's DisplaySettings reads them.
+# `from OpenSceneGraph import *` - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size
 
 from OpenSceneGraph import osg, osgDB, osgViewer, osgGA
@@ -85,8 +85,8 @@ uniform vec3 groundColor;
 uniform mat4 osg_ViewMatrix;
 uniform vec3 lightPos[NUM_LIGHTS];
 uniform vec3 lightColor[NUM_LIGHTS];
-uniform float lightRadius[NUM_LIGHTS]; // attenuation falloff distance only -- NOT physical size
-uniform float lightSourceRadius[NUM_LIGHTS]; // physical sphere radius -- widens the highlight itself
+uniform float lightRadius[NUM_LIGHTS]; // attenuation falloff distance only - NOT physical size
+uniform float lightSourceRadius[NUM_LIGHTS]; // physical sphere radius - widens the highlight itself
 
 out vec4 fragColor;
 
@@ -114,7 +114,7 @@ vec3 F_Schlick(float HdotV, vec3 F0) {
 // Sphere light "representative point" trick (Karis, "Real Shading in Unreal Engine 4", 2013):
 // bends the light direction used for the specular term toward the closest point on the light's
 // physical sphere to the ideal mirror-reflection ray, instead of always pointing at its center.
-// This is what actually makes a highlight bigger/softer as the light gets larger -- unlike
+// This is what actually makes a highlight bigger/softer as the light gets larger - unlike
 // lightRadius above, which only changes attenuation. toLightCenter is UNNORMALIZED (light center
 // minus shading point); R is the normalized reflection vector.
 vec3 sphereLightDir(vec3 toLightCenter, vec3 R, float sourceRadius) {
@@ -155,20 +155,20 @@ void main() {
 		vec3 lEye = (osg_ViewMatrix * vec4(lightPos[i], 1.0)).xyz;
 		vec3 lVec = lEye - vPosition;
 		float dist = length(lVec);
-		vec3 L = lVec / dist; // true direction to light center -- used for diffuse/atten
+		vec3 L = lVec / dist; // true direction to light center - used for diffuse/atten
 
 		float r = lightRadius[i];
 		float atten = 1.0 / (1.0 + (dist * dist) / (r * r));
 		float NdotV = max(dot(N, V), 0.0);
 
-		// Diffuse stays on the true light direction -- Lambertian doesn't have a highlight-size
+		// Diffuse stays on the true light direction - Lambertian doesn't have a highlight-size
 		// problem, only specular does.
 		float NdotL = max(dot(N, L), 0.0);
 		vec3 F_diffuse = F_Schlick(max(dot(normalize(L + V), V), 0.0), F0);
 		vec3 kD = (vec3(1.0) - F_diffuse) * (1.0 - metallic);
 		vec3 diffuse = kD * albedo / PI;
 
-		// Specular uses the sphere-light representative point instead of L -- this is what
+		// Specular uses the sphere-light representative point instead of L - this is what
 		// actually makes the highlight bigger/softer as lightSourceRadius grows, unlike
 		// lightRadius (attenuation only, see uniform declaration above).
 		vec3 Lspec = sphereLightDir(lVec, R, lightSourceRadius[i]);
@@ -177,7 +177,7 @@ void main() {
 		float NdotHspec = max(dot(N, Hspec), 0.0);
 		float HdotVspec = max(dot(Hspec, V), 0.0);
 
-		// Widen roughness to conserve energy as the sphere gets bigger/closer -- otherwise a
+		// Widen roughness to conserve energy as the sphere gets bigger/closer - otherwise a
 		// large source would just paint a brighter SMALL highlight instead of a genuinely
 		// bigger/softer one (same normalization Karis 2013 uses).
 		float alpha = roughness * roughness;
@@ -203,7 +203,7 @@ void main() {
 """
 
 # --------------------------------------------------------------------------- #
-# --hdr mode shaders -- horizontal cross layout, literal GL cubemap face
+# --hdr mode shaders - horizontal cross layout, literal GL cubemap face
 # directions baked into the geometry (see build_cross_geode() below). Matches
 # osgx-ktx2-skybox.cpp/osgx-ibl.cpp's cross-mode convention exactly, which is
 # why no Z-up remap is needed here.
@@ -236,7 +236,7 @@ out vec4 fragColor;
 void main() {
 	vec3 color = textureLod(envMap, normalize(vDir), mipLevel).rgb;
 
-	// Reinhard tone map + gamma -- the cubemap is linear HDR.
+	// Reinhard tone map + gamma - the cubemap is linear HDR.
 	color = color / (color + vec3(1.0));
 	color = pow(color, vec3(1.0 / 2.2));
 
@@ -375,7 +375,7 @@ def download_polyhaven_hdr(slug, res="2k"):
 # --------------------------------------------------------------------------- #
 
 # 6 quads in NDC, arranged as a horizontal cross (4 cols x 3 rows), unindexed
-# (2 triangles/6 verts per face) -- osg.DrawElementsUInt isn't exposed to
+# (2 triangles/6 verts per face) - osg.DrawElementsUInt isn't exposed to
 # Python in this binding, only osg.DrawArrays, so there's no index buffer.
 #
 # [+Y] row 2
@@ -452,7 +452,7 @@ def build_cross_geode(cubemap, mip_uniform):
 
 class MipScrollHandler(osgGA.GUIEventHandler):
 	"""
-	+/-, ,/., or scroll to step the roughness mip level -- matches
+	+/-, ,/., or scroll to step the roughness mip level - matches
 	osgx-ibl.cpp's MipScrollHandler so the tools share muscle memory.
 	"""
 
@@ -551,11 +551,11 @@ def build_texture_root(args):
 	return root
 
 # --hdr mode's bake needs a real GL context and drives several v.frame() calls of its own DURING
-# construction (PRE_RENDER FBO passes plus a GPU readback poll loop) -- genuinely incompatible
+# construction (PRE_RENDER FBO passes plus a GPU readback poll loop) - genuinely incompatible
 # with build_scene()'s "no viewer/window side effects" contract, unlike every other example. So
 # --hdr mode has build_scene() return an empty placeholder osg.Group() (still a valid Node for
 # viewer.sceneData), and does the ENTIRE bake in configure_viewer() instead, which already
-# receives the live viewer -- both runners assign viewer.sceneData = root BEFORE calling
+# receives the live viewer - both runners assign viewer.sceneData = root BEFORE calling
 # configure_viewer(), so the bake's own intermediate v.frame() calls render exactly the
 # growing/settling subgraph the original run_hdr() produced, just through the runner's viewer
 # instead of a locally-constructed one.
@@ -571,7 +571,7 @@ def configure_hdr(viewer, root, args):
 	viewer.camera.clearColor = osg.Vec4(0.05, 0.05, 0.05, 1.0)
 
 	# The bake needs a real GL context (PRE_RENDER FBO cameras), so realize
-	# one frame of nothing before touching osgx -- same ordering
+	# one frame of nothing before touching osgx - same ordering
 	# 10-dynamicprobes.py uses for its first live bake.
 	viewer.frame()
 
@@ -612,7 +612,7 @@ def configure_hdr(viewer, root, args):
 
 	cubemap = bake_scene.readback.finish()
 
-	# GPU-baked mips are already embedded per-face -- don't let OSG
+	# GPU-baked mips are already embedded per-face - don't let OSG
 	# regenerate them (see GGXPrefilter.hpp).
 	cubemap.useHardwareMipMapGeneration = False
 
@@ -625,15 +625,15 @@ def configure_hdr(viewer, root, args):
 	viewer.eventHandlers.append(MipScrollHandler(mip_uniform, max_mip))
 
 	osg.notice(
-		f"[polyhaven] done -- {max_mip + 1} mip levels; "
+		f"[polyhaven] done - {max_mip + 1} mip levels; "
 		"+/-, ,/., or scroll to step roughness"
 	)
 
-# Set by build_scene(), read by configure_viewer() -- args has no natural home in the returned
+# Set by build_scene(), read by configure_viewer() - args has no natural home in the returned
 # Node; same shape/reason as pyosg-khronos-viewer.py's _args.
 _args = None
 
-# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects
+# The real pipeline-assembly entrypoint - returns the root Node, no viewer/window side effects
 # for --texture mode. --hdr mode returns an empty placeholder Group instead; see configure_hdr()'s
 # own comment for why that mode's real work has to live in configure_viewer().
 def build_scene(w, h):
@@ -660,12 +660,12 @@ def build_scene(w, h):
 
 	ap.add_argument(
 		"--res", default="2k",
-		help="Download resolution, e.g. 1k/2k/4k/8k -- availability depends on the asset "
+		help="Download resolution, e.g. 1k/2k/4k/8k - availability depends on the asset "
 			"(default: 2k)"
 	)
 	ap.add_argument(
 		"--light-source-radius", type=float, default=1.0,
-		help="[--texture] Physical sphere radius of both lights, in scene units -- widens/"
+		help="[--texture] Physical sphere radius of both lights, in scene units - widens/"
 			"softens the specular highlight itself (0 = point light, sharp). NOT the same as "
 			"the existing per-light falloff distance. Default: 1.0"
 	)

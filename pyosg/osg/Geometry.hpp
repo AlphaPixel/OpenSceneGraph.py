@@ -20,11 +20,11 @@ namespace pyosg::detail {
 // getVertexAttribArray use. Binding and normalize are deliberately NOT part of this proxy's
 // value_type: the modern (non-deprecated) osg::Geometry API only takes an optional binding
 // alongside the array purely to forward it into `array->setBinding(...)` (see
-// Geometry::setVertexAttribArray's implementation) -- binding and normalize are properties of
+// Geometry::setVertexAttribArray's implementation) - binding and normalize are properties of
 // the osg::Array itself (osg.Array.binding/.normalize, see Array.cpp), not per-index state on
 // Geometry. The old `Geometry::setVertexAttribBinding`/`setVertexAttribNormalize` methods that
 // would have suggested otherwise are deprecated shims to the same array-side calls. So the
-// setter here just accepts a bare `osg.Array` -- no sequence-unpack tuple form needed at all.
+// setter here just accepts a bare `osg.Array` - no sequence-unpack tuple form needed at all.
 template<>
 struct pyx::MappingTraits<osg::Geometry, pyosg::detail::VertexAttribTag> {
 	using element_type = osg::Array;
@@ -35,7 +35,7 @@ struct pyx::MappingTraits<osg::Geometry, pyosg::detail::VertexAttribTag> {
 		return h.cast<value_type>();
 	}
 
-	// Counts populated slots, not the raw (possibly sparse) list length -- matches
+	// Counts populated slots, not the raw (possibly sparse) list length - matches
 	// StateSet.textureAttributes's TextureAttributesTag convention.
 	static size_t size(osg::Geometry* g) {
 		size_t out = 0;
@@ -68,7 +68,7 @@ struct pyx::MappingTraits<osg::Geometry, pyosg::detail::VertexAttribTag> {
 	}
 };
 
-// Default tag -- Geometry only needs one SequenceProxy, matching Program's ShadersProxy.
+// Default tag - Geometry only needs one SequenceProxy, matching Program's ShadersProxy.
 template<>
 struct pyx::SequenceTraits<osg::Geometry> {
 	using element_type = osg::PrimitiveSet;
@@ -87,7 +87,7 @@ struct pyx::SequenceTraits<osg::Geometry> {
 	}
 
 	// getPrimitiveSetList() returns a mutable reference, so item assignment is a direct index
-	// write -- no OSG-side "replace at index" method needed, unlike `del`/`append` below.
+	// write - no OSG-side "replace at index" method needed, unlike `del`/`append` below.
 	static void set(osg::Geometry* g, size_t i, element_type* ps) {
 		g->getPrimitiveSetList()[i] = ps;
 	}
@@ -116,7 +116,7 @@ namespace detail {
 	using VertexAttribProxy = pyx::MappingProxy<osg::Geometry, VertexAttribTag>;
 	using PrimitiveSetsProxy = pyx::SequenceProxy<osg::Geometry>;
 
-	// One canonical storage alias per owner type -- see ai/context-todo-pybind11x.md's
+	// One canonical storage alias per owner type - see ai/context-todo-pybind11x.md's
 	// "Important Storage Rule": splitting this into per-proxy storage aliases would attach
 	// independent sidecars to the same OSG object instead of one shared one.
 	using GeometryStorage = pyx::ProxyStorageOSG<

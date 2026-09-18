@@ -105,7 +105,7 @@ namespace detail {
 	}
 
 	// Shared setters used by both `bind_Camera()`'s `.def_property()` calls and
-	// `kwargs_init_own()` -- keeps the parsing/validation logic for each property in one place.
+	// `kwargs_init_own()` - keeps the parsing/validation logic for each property in one place.
 	inline auto camera_viewport_property_setter() {
 		return [](osg::Camera& self, py::object obj) {
 			if(py::isinstance<osg::Viewport>(obj)) {

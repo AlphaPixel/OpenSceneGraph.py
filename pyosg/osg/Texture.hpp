@@ -17,7 +17,7 @@ namespace pyosg {
 
 namespace detail {
 	// Shared setters used by both `bind_Texture()`'s `.def_property()` calls and
-	// `kwargs_init_own()` -- keeps the parsing/validation logic for each property in one place.
+	// `kwargs_init_own()` - keeps the parsing/validation logic for each property in one place.
 	inline auto texture_wrap_property_setter() {
 		return [](osg::Texture& self, py::object obj) {
 			if(py::isinstance<osg::Texture::WrapMode>(obj)) {
@@ -29,7 +29,7 @@ namespace detail {
 			}
 
 			// Variable arity (1-3 elements, S/T/R in order): tried largest-first via exact-arity
-			// unpacks rather than a single cascading `if(n >= k)` -- each branch below is now
+			// unpacks rather than a single cascading `if(n >= k)` - each branch below is now
 			// also immune to the "string happens to satisfy isinstance<sequence>" trap (see
 			// `pyx::unpack_sequence`), which an unconditional `obj.cast<py::sequence>()` with
 			// no isinstance guard at all would not be.
@@ -80,7 +80,7 @@ namespace detail {
 				self.setFilter(osg::Texture::FilterParameter::MAG_FILTER, mag);
 			}
 
-			// Variable arity (1-2 elements, MIN/MAG in order) -- same chained exact-arity
+			// Variable arity (1-2 elements, MIN/MAG in order) - same chained exact-arity
 			// approach as `wrap` above.
 			else if(auto vals2 = pyx::unpack_sequence<
 				osg::Texture::FilterMode, osg::Texture::FilterMode
@@ -101,12 +101,12 @@ namespace detail {
 		};
 	}
 
-	// TODO: Convert `image` to `pyx::*Proxy` -- no identity/keep_alive tracking yet, matching the
+	// TODO: Convert `image` to `pyx::*Proxy` - no identity/keep_alive tracking yet, matching the
 	// pre-existing `.def_property("image", ...)` this replaces.
 	inline auto texture_image_property_setter() {
 		return [](osg::Texture& self, py::object obj) {
 			// A bare `osg.Image` isn't `py::sequence`-like, so `unpack_sequence<Image*>`
-			// (arity 1) can never match one -- that branch used to be unreachable dead code and
+			// (arity 1) can never match one - that branch used to be unreachable dead code and
 			// `t.image = img` always fell through to the "(face, Image) required" error. Check
 			// the direct-instance case first instead of trying to fake it through the sequence
 			// unpacker.

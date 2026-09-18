@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Procedural crosshatch/ink shading as a fullscreen-quad PoC -- three angled hatchFamily()
+# Procedural crosshatch/ink shading as a fullscreen-quad PoC - three angled hatchFamily()
 # layers, each keyed off a synthetic left-dark/right-light lighting field plus a soft highlight
 # spot, warped/broken/dropped-out so the strokes read as hand-drawn rather than mathematically
 # perfect stripes. Every constant that shaped the original one-off (angles, spacing, warp/break/
@@ -13,7 +13,7 @@ import time
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size
 
 from OpenSceneGraph import *
@@ -225,7 +225,7 @@ STROKE_PARAMS = (
 
 # Each hatch family shares the exact same shape of knobs (angle/spacing/thickness/seed, plus the
 # darkness range where it "turns on"), so the defaults/params/section-drawing are all generated
-# from one shared shape rather than copy-pasted three times -- adding a fourth family later is
+# from one shared shape rather than copy-pasted three times - adding a fourth family later is
 # one more hatch_family_defaults()/hatch_family_params() call, not three new functions.
 def hatch_family_defaults(prefix, angle, spacing, thickness, seed, onset_low, onset_high):
 	return {
@@ -255,9 +255,9 @@ H1_PARAMS = hatch_family_params("h1", "Hatch 1")
 H2_PARAMS = hatch_family_params("h2", "Hatch 2")
 H3_PARAMS = hatch_family_params("h3", "Hatch 3")
 
-# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+# The real pipeline-assembly entrypoint - returns the root Node, no viewer/window side effects.
 # Interactivity (the ImGui panel below) needs a live viewer, so it lives in configure_viewer()
-# instead -- same split as pyosg-mrt.py.
+# instead - same split as pyosg-mrt.py.
 def build_scene(w, h):
 	g = osg.Geometry()
 

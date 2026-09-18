@@ -5,7 +5,7 @@ from OpenSceneGraph.osg import Array, Geometry, Vec2Array, Vec3Array, DrawArrays
 
 def test_construction_kwargs():
 	# `vertexArray`/`colorArray`/`normalArray` share the same `GeometrySlots::setter` functor as
-	# the identically-named properties below -- exercising them via the constructor here, not
+	# the identically-named properties below - exercising them via the constructor here, not
 	# just `g.vertexArray = ...` afterward.
 	va = Vec3Array([Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0)])
 	ca = Vec3Array([Vec3(1, 1, 1)])
@@ -133,6 +133,6 @@ def test_primitive_sets_insert():
 	assert list(g.primitiveSets) == [front, ps0, ps1, ps2, back]
 
 def test_geometry_has_no_add_primitive_set_method():
-	# addPrimitiveSet() was removed once .primitiveSets (SequenceProxy) existed -- use
+	# addPrimitiveSet() was removed once .primitiveSets (SequenceProxy) existed - use
 	# `.primitiveSets.append(...)` instead.
 	assert not hasattr(Geometry(), "addPrimitiveSet")

@@ -5,7 +5,7 @@ import numpy as np
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size
 
 from OpenSceneGraph import *
@@ -50,7 +50,7 @@ void main(void) {
 	// float alpha = exp(-r2 * 0.75);
 	float dotGlow = exp(-r2 * 2.5);
 
-	// A thin 360-degree ring around the glow -- pure "bling," proves the point-sprite
+	// A thin 360-degree ring around the glow - pure "bling," proves the point-sprite
 	// footprint can carry more than just the dot without any extra geometry/draw calls.
 	float r = sqrt(r2);
 	float ring = smoothstep(0.12, 0.0, abs(r - 0.85));

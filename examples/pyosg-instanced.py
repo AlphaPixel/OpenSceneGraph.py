@@ -3,7 +3,7 @@
 import time
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
-# pyosg_example.py) for anything this file doesn't set itself -- nothing below overrides them.
+# pyosg_example.py) for anything this file doesn't set itself - nothing below overrides them.
 # Deliberately BEFORE `from OpenSceneGraph import *`, matching every other example: these need to
 # land before OSG's DisplaySettings reads them, not just before a Viewer gets constructed.
 from pyosg_example import window_size

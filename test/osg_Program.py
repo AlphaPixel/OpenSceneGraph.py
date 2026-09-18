@@ -49,10 +49,10 @@ def assert_binding_mapping(mapping, first, second):
 
 	mapping[first] = 5
 
-	# already present -- returns the existing value, unchanged
+	# already present - returns the existing value, unchanged
 	assert mapping.setdefault(first, 999) == 5
 
-	# absent -- sets it, then returns the (now-existing) value
+	# absent - sets it, then returns the (now-existing) value
 	assert mapping.setdefault(second, 7) == 7
 	assert mapping[second] == 7
 
@@ -78,7 +78,7 @@ def test_program_binding_location_mappings():
 
 
 def test_shaders_extend_call_shapes():
-	# Same 3 .extend() shapes covered for Group.children/Geode.drawables -- iterable (tested
+	# Same 3 .extend() shapes covered for Group.children/Geode.drawables - iterable (tested
 	# elsewhere), bare separate arguments, and a single bare (non-iterable) item.
 	program = Program()
 	s0 = Shader(Shader.VERTEX)

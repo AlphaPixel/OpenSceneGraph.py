@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Step 8 -- Shadow Mapping
+# Step 8 - Shadow Mapping
 # New concept: a PRE_RENDER "shadow camera" looks at the scene from the key light's POV
 # and writes a depth texture (the shadow map). In the main PBR pass every fragment is
 # transformed to light-clip space; comparing that depth against the shadow map tells us
@@ -10,7 +10,7 @@
 # both come from osgx (osgx.LightSet for the lights, osgx for the shadow camera +
 # the shadowed osgx_DirectLighting() hook). That's a deliberate choice specific to this step:
 # by now (Step 6 already taught the underlying Cook-Torrance math), re-deriving it a second
-# time just to add shadows would be re-teaching, not teaching -- see the fragment shaders
+# time just to add shadows would be re-teaching, not teaching - see the fragment shaders
 # below for how little is left once osgx/osgx do the actual lighting work.
 #
 # Scene-graph structure (avoids texture feedback loops):
@@ -24,12 +24,12 @@
 #
 # The shadow texture is ONLY bound at unit 4 on main_group's stateSet. During the
 # shadow pass the camera traverses shadow_map.camera -> model (main_group is not in that
-# path), so unit 4 is unbound there -- no read-while-write feedback loop on the depth texture.
+# path), so unit 4 is unbound there - no read-while-write feedback loop on the depth texture.
 #
 # The shadow matrix is WORLD space (not eye space, unlike the old hand-rolled version this
-# replaced) -- osgx_DirectLighting()/osgx_ShadowFactor() both work in world space, so
+# replaced) - osgx_DirectLighting()/osgx_ShadowFactor() both work in world space, so
 # ShadowMap.create() only has to compose lightView*lightProj once at setup. Since
-# the key light is static here, that's the only computation needed -- no per-frame
+# the key light is static here, that's the only computation needed - no per-frame
 # preDrawCallback recomputing the shadow matrix off the orbiting viewer camera.
 
 import argparse
@@ -44,7 +44,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size, resolve_model
 
 from OpenSceneGraph import *
@@ -52,7 +52,7 @@ from OpenSceneGraph.GL import *
 
 import osgx
 
-# Same light positions as step 7 (pyosg-lighting-7-emissive.py) -- no animation.
+# Same light positions as step 7 (pyosg-lighting-7-emissive.py) - no animation.
 KEY_LIGHT_POS = osg.Vec3( 0.1, 0.1, 1.0) # front-center key (shadow caster)
 FILL_LIGHT_POS_0 = osg.Vec3(-0.8, 0.3, 0.5) # cool fill, left
 FILL_LIGHT_POS_1 = osg.Vec3( 0.0, -0.6, 0.2) # warm back/rim
@@ -97,10 +97,10 @@ void main() {
 """
 
 # Only material reading (baseColor/normal/ORM/emissive) and the TBN reconstruction are
-# hand-rolled here -- that's Step 4/5/6 material, already taught. Direct lighting is one call:
+# hand-rolled here - that's Step 4/5/6 material, already taught. Direct lighting is one call:
 # osgx_DirectLighting(N, V, worldPos, mat), declared by DIRECT_LIGHTING_DECL and DEFINED by a
 # separate shader object added in __main__ below (osgx.makeShadowedDirectLightingHookShader()
-# instead of osgx's unshadowed default -- same call site either way, see PBR.hpp's
+# instead of osgx's unshadowed default - same call site either way, see PBR.hpp's
 # DIRECT_LIGHTING_DECL/DIRECT_LIGHTING_HOOK_DEFAULT comment for why that swap needs nothing else
 # to change here).
 FRAGMENT_SHADER = """
@@ -166,7 +166,7 @@ void main() {
 	mat.metallic = texture(ormTex, vUV).b;
 	mat.F0 = mix(vec3(0.04), mat.albedo, mat.metallic);
 
-	// osgx_DirectLighting()/osgx_ShadowFactor() both work in WORLD space -- rotate N/V and
+	// osgx_DirectLighting()/osgx_ShadowFactor() both work in WORLD space - rotate N/V and
 	// reconstruct worldPos from the eye-space values the vertex shader already computed.
 	mat3 invViewRot = transpose(mat3(osg_ViewMatrix));
 	vec3 N = invViewRot * N_eye;
@@ -175,7 +175,7 @@ void main() {
 
 	vec3 Lo = osgx_DirectLighting(N, V, worldPos, mat);
 
-	// World up is just (0,0,1) now that N is already in world space -- no rotation needed
+	// World up is just (0,0,1) now that N is already in world space - no rotation needed
 	// (the old eye-space version had to rotate world-up INTO eye space to compare against N).
 	float hemi = dot(N, vec3(0.0, 0.0, 1.0)) * 0.5 + 0.5;
 	vec3 ambient = mix(groundColor, skyColor, hemi) * mat.albedo * mat.ao;
@@ -209,7 +209,7 @@ void main() {
 }
 """
 
-# Flat albedo, no textures -- otherwise identical shape to the model's fragment shader above:
+# Flat albedo, no textures - otherwise identical shape to the model's fragment shader above:
 # build an osgx_Material by hand, call osgx_DirectLighting() once.
 FLOOR_FRAGMENT = """
 #version 460 core
@@ -271,12 +271,12 @@ def build_scene(w, h):
 	path = resolve_model(args.path or "BoomBox")
 
 	if not path:
-		sys.exit("Cannot find model -- clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
+		sys.exit("Cannot find model - clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
 
 	model = osgDB.readNodeFile(path)
 
 	# One shader object defines osgx_DirectLighting() for BOTH programs below (model and floor)
-	# -- osg.Shader objects can be shared/attached to more than one Program, same as any other
+	# - osg.Shader objects can be shared/attached to more than one Program, same as any other
 	# osgx hook shader.
 	hook_shader = osgx.makeShadowedDirectLightingHookShader()
 
@@ -349,7 +349,7 @@ def build_scene(w, h):
 	lights.setPoint(2, FILL_LIGHT_POS_1, osg.Vec3(1.0, 0.5, 0.2), 1.0)
 
 	# --- Shadow map ----------------------------------------------------------- #
-	# Only light 0 (the key light) casts a shadow -- ShadowMap.casterIndex defaults to 0.
+	# Only light 0 (the key light) casts a shadow - ShadowMap.casterIndex defaults to 0.
 	# Direction is derived from the key light's position toward the model's own bound, scaled
 	# off that bound (like 09-ibl.py's light rig) instead of hardcoded near/far/FOV tuned to
 	# BoomBox's specific size.

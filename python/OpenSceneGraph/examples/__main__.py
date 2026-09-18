@@ -4,7 +4,7 @@ Runs one of this package's example modules standalone (no Qt, no aipython) by cr
 bare osgViewer.Viewer, calling the example's build_scene(w, h), and its
 configure_viewer(viewer, root) if it defines one. Adapted from the pyosg-cli
 proof-of-concept in the project's repository root, which loads examples by file path out of
-examples/ instead -- useful for the full example sandbox, most of which doesn't implement
+examples/ instead - useful for the full example sandbox, most of which doesn't implement
 this module's build_scene()/configure_viewer() contract (yet).
 """
 
@@ -14,7 +14,6 @@ import pkgutil
 import sys
 
 from OpenSceneGraph import *
-
 
 def _load_module(name):
 	try:
@@ -31,7 +30,7 @@ def _load_module(name):
 		import OpenSceneGraph.examples as _examples
 
 		# pyosg_* are shared helper modules (pyosg_example, pyosg_visitor, pyosg_repl,
-		# pyosg_dice), not runnable examples -- they have no build_scene() and were never meant
+		# pyosg_dice), not runnable examples - they have no build_scene() and were never meant
 		# to appear here, same reason a leading "_" is already excluded.
 		available = sorted(
 			mod.name for mod in pkgutil.iter_modules(_examples.__path__)
@@ -47,7 +46,7 @@ def run_module(module, width=800, height=600, extra_argv=(), name=None):
 	`run()` below loads it from the installed OpenSceneGraph.examples package, while pyosg-cli
 	(repo root) loads an arbitrary examples/*.py file by path and calls this directly, so the
 	actual viewer-setup/frame-loop logic exists in exactly one place instead of two copies that
-	can silently drift (this bit pyosg-cli once already -- see PYOSG_BUILD_PACKAGE_OVERLAY/
+	can silently drift (this bit pyosg-cli once already - see PYOSG_BUILD_PACKAGE_OVERLAY/
 	setUpViewInWindow ordering history in project_pyosg_contract_conversion for the pyosg-
 	polyhaven.py --hdr bug that ordering mismatch caused)."""
 
@@ -56,7 +55,7 @@ def run_module(module, width=800, height=600, extra_argv=(), name=None):
 
 	viewer = osgViewer.Viewer()
 
-	# Explicit window setup, driven by the same width/height build_scene() receives -- a single
+	# Explicit window setup, driven by the same width/height build_scene() receives - a single
 	# source of truth instead of every example hardcoding its own OSG_WINDOW env var string that
 	# has to be kept in sync by hand (and silently isn't, the moment --width/--height differs from
 	# an example's own hardcoded default). x/y match the "50 50 ..." every example's old OSG_WINDOW
@@ -87,7 +86,7 @@ def run_module(module, width=800, height=600, extra_argv=(), name=None):
 
 	viewer.TODO()
 
-	# KNOWN ISSUE, deliberately not "fixed" with a sleep() here -- see feedback_runner_unthrottled_loop
+	# KNOWN ISSUE, deliberately not "fixed" with a sleep() here - see feedback_runner_unthrottled_loop
 	# for the full writeup. Short version: a sleep() here treats the symptom (starves anything else
 	# on the process needing the GIL on a regular cadence, confirmed via audible clicking in
 	# pyosg-animusic-grid.py's sounddevice callback thread); the real fix under consideration is
@@ -95,12 +94,10 @@ def run_module(module, width=800, height=600, extra_argv=(), name=None):
 	while not viewer.done:
 		viewer.frame()
 
-
 def run(name, width=800, height=600, extra_argv=()):
 	module = _load_module(name)
 
 	run_module(module, width, height, extra_argv, name=name)
-
 
 def main():
 	parser = argparse.ArgumentParser(
@@ -116,12 +113,12 @@ def main():
 	# only the part before that. argparse.add_argument("extra", nargs="*") looks like the
 	# obvious way to do this instead, but has a real, confirmed bug: "mrt -- foo.osgt" parses
 	# fine, but "mrt --width 640 -- foo.osgt" fails with "unrecognized arguments: -- foo.osgt"
-	# -- a known CPython argparse limitation around "--" interacting with a nargs="*"
+	# - a known CPython argparse limitation around "--" interacting with a nargs="*"
 	# positional when other flags are interspersed, not something fixable by reordering our
 	# own argument definitions.
 	#
 	# KNOWN FRICTION (deferred, not fixed, same as pyosg-cli): every one of the target example's
-	# own arguments -- including its OWN required positionals/flags -- has to go after this "--",
+	# own arguments - including its OWN required positionals/flags - has to go after this "--",
 	# since this parser only knows about name/--width/--height. A `parse_known_args()`-based
 	# two-pass parse could remove the need for "--" in the common case; not attempted, needs real
 	# testing against the SAME argparse quirk documented above first.
@@ -137,7 +134,6 @@ def main():
 	args = parser.parse_args(own_argv)
 
 	run(args.name, args.width, args.height, extra_argv)
-
 
 if __name__ == "__main__":
 	main()

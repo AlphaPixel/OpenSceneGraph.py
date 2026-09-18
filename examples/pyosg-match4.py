@@ -3,29 +3,29 @@
 """Match-4 demo, per the plan in ~/dev/osgx/CLAUDE.md ("Planned/next steps for
 picking", item 5). Two layers in this one file:
 
-  - Board: pure-Python game state, no OSG/osgx dependency -- grid, match
+  - Board: pure-Python game state, no OSG/osgx dependency - grid, match
     detection, swap/resolve, constructive deal. Reusable/importable standalone.
-  - __main__: the OSG scene + osgx interaction on top of it -- one
+  - __main__: the OSG scene + osgx interaction on top of it - one
     sphere per cell, full-window SYNC click picking (same wiring as
     pyosg-picking.py). First cut, proof-of-concept only: click a piece, click
     an adjacent piece, and it swaps if that creates a match (reverts silently
-    if not) -- no hover preview yet (see pyosg-hover.py for that mechanism,
+    if not) - no hover preview yet (see pyosg-hover.py for that mechanism,
     not yet wired in here).
 
 Design decisions (confirmed 2026-08-07):
-  - Match shape: MatchMode.CONNECTED (default) -- any 4-connected (orthogonal)
+  - Match shape: MatchMode.CONNECTED (default) - any 4-connected (orthogonal)
     same-color blob, covering straight lines AND L/T-shapes in one flood fill,
-    no separate detectors needed. MatchMode.LINE -- straight horizontal/vertical
-    runs of >=4 only, the more classic "4-in-a-row" rule -- added after
+    no separate detectors needed. MatchMode.LINE - straight horizontal/vertical
+    runs of >=4 only, the more classic "4-in-a-row" rule - added after
     CONNECTED's blob matches (e.g. "RBR / BBB", a T-shape) turned out to read as
     surprising in practice even though it was the originally-requested behavior.
-    MatchMode.LINE_CONNECTED -- LINE's straight-run rule gates whether a match
+    MatchMode.LINE_CONNECTED - LINE's straight-run rule gates whether a match
     exists, then floods outward from a qualifying run to sweep up any other
     touching same-color cells (other runs, blobs, loose singles) into it.
     --match-mode on the command line selects between the three.
   - Match length: 4 or more (not exactly-4).
   - Board size: configurable (width/height/num_colors are constructor args).
-  - Interaction: simplest possible first proof -- two-click select-then-swap,
+  - Interaction: simplest possible first proof - two-click select-then-swap,
     no legality preview on hover, no adjacency hint. "Swap these two I clicked."
 
 Board.find_legal_moves()/has_legal_move() is the swap-scanner shared between
@@ -33,7 +33,7 @@ initial-deal validation and in-game "no moves left -> reshuffle" detection, per
 the same osgx notes. Initial deal is CONSTRUCTIVE, not generate-and-retry:
 _fill() places each cell under a "no color completes a run of 4" constraint,
 then _plant_legal_move() deliberately constructs one guaranteed swap if the
-constrained fill didn't happen to leave one -- retrying whole-board generation
+constrained fill didn't happen to leave one - retrying whole-board generation
 would be unreliable here, since landing a 4-in-a-row opportunity by chance is
 much rarer than a 3-in-a-row one.
 """
@@ -45,22 +45,22 @@ import random
 EMPTY = -1
 
 class MatchMode(enum.Enum):
-	# Any 4-connected same-color blob (straight lines, L/T-shapes, blobs) -- one flood
-	# fill covers all of those shapes at once. Default -- see module docstring.
+	# Any 4-connected same-color blob (straight lines, L/T-shapes, blobs) - one flood
+	# fill covers all of those shapes at once. Default - see module docstring.
 	CONNECTED = "connected"
-	# Straight horizontal/vertical runs of >=4 only, scanned independently -- the more
+	# Straight horizontal/vertical runs of >=4 only, scanned independently - the more
 	# classic "4-in-a-row" match-3/4 rule. A cell can be part of both a horizontal and
 	# a vertical run at once (both clear); runs never merge into one blob the way
 	# CONNECTED's flood fill does.
 	LINE = "line"
 	# LINE's straight-run-of->=4 rule decides whether a match exists at all, but once
 	# a run qualifies, flood-fill outward from it (reusing CONNECTED's _flood()) sweeps
-	# up any other same-color cells touching it -- other runs, blobs, loose singles --
+	# up any other same-color cells touching it - other runs, blobs, loose singles --
 	# into the same match. A pure blob with no straight run of >=4 still doesn't match.
 	LINE_CONNECTED = "line_connected"
 
 class ResetMode(enum.Enum):
-	# Regenerate the whole board from scratch when no legal moves remain -- same
+	# Regenerate the whole board from scratch when no legal moves remain - same
 	# constructive, region-spread deal as the initial one (Board.reset() just calls
 	# _fill() again). Default and only mode for now; a future mode that reshuffles the
 	# tiles already on the board in place (no new colors introduced, retried until a
@@ -145,7 +145,7 @@ class Board:
 		return matches
 
 	def _find_matches_line(self):
-		"""Straight horizontal/vertical runs of >=4 only -- no L/T/blob merging."""
+		"""Straight horizontal/vertical runs of >=4 only - no L/T/blob merging."""
 		matches = []
 
 		for x in range(self.width):
@@ -179,7 +179,7 @@ class Board:
 	def _find_matches_line_connected(self):
 		"""LINE's runs gate whether a match exists; each qualifying run then floods
 		outward to absorb any other same-color cells touching it. `seen` is shared
-		across runs -- a run whose seed cell is already swept up by an earlier flood
+		across runs - a run whose seed cell is already swept up by an earlier flood
 		(e.g. the other arm of a plus shape) is skipped, since flood-filling from a
 		same-color run necessarily already reached it.
 		"""
@@ -292,17 +292,17 @@ class Board:
 		return passes
 
 	def resolve_one_pass(self):
-		"""One pass of what resolve()'s loop does internally -- clear the matches
-		currently on the board, drop survivors, refill from the top -- but returns
+		"""One pass of what resolve()'s loop does internally - clear the matches
+		currently on the board, drop survivors, refill from the top - but returns
 		the per-cell movement/fill detail resolve() itself throws away, for an
 		animated gravity collapse instead of an instant snap. Returns None if
 		there's nothing to resolve this pass.
 
 		Returns (matched, moves, filled):
-		  matched -- match-groups just cleared (same shape as find_matches())
-		  moves   -- (x, old_y, new_y) triples, one per surviving cell that shifted
+		  matched - match-groups just cleared (same shape as find_matches())
+		  moves   - (x, old_y, new_y) triples, one per surviving cell that shifted
 		             down within its column (color unchanged, only position moves)
-		  filled  -- (x, y, color) triples, one per newly refilled cell
+		  filled  - (x, y, color) triples, one per newly refilled cell
 		"""
 		matched = self.find_matches()
 
@@ -341,7 +341,7 @@ class Board:
 
 	def _refill(self):
 		"""Fill every remaining EMPTY cell with a random color. Returns
-		(x, y, color) triples for each newly filled cell -- see resolve_one_pass().
+		(x, y, color) triples for each newly filled cell - see resolve_one_pass().
 		resolve()'s own loop ignores the return value.
 		"""
 		filled = []
@@ -381,7 +381,7 @@ class Board:
 			if len(self._flood(x, y, color, set())) < 4:
 				return color
 
-		# Every color would complete a match -- only possible with very few colors
+		# Every color would complete a match - only possible with very few colors
 		# on a tiny board. Fall back to whichever creates the smallest group.
 		return min(colors, key=lambda c: self._preview_group_size(x, y, c))
 
@@ -394,10 +394,10 @@ class Board:
 		"""Construct a 'C C C D' run with a same-colored donor one swap away from D,
 		so swapping D<->donor completes a 4-run. Verified via a real find_matches()
 		before committing (never introduces an accidental pre-swap match) and
-		retried locally on collision -- not a whole-board regeneration.
+		retried locally on collision - not a whole-board regeneration.
 
 		`x_range`/`y_range` (default: the whole board) confine where the run is
-		planted -- used by `_ensure_spread_legal_moves()` to target a specific
+		planted - used by `_ensure_spread_legal_moves()` to target a specific
 		region. `orientation` ("horizontal"/"vertical", default: whichever fits,
 		coin-flipping if both do) forces the run's axis; a region split narrow
 		along one axis still has the *other* axis at full board length, so it
@@ -450,7 +450,7 @@ class Board:
 
 	def _region_bands(self, count):
 		"""Partition the board into up to `count` bands along whichever axis is
-		longer, each spanning the FULL extent of the other axis -- every band is
+		longer, each spanning the FULL extent of the other axis - every band is
 		plantable (>=4 cells) along that unsplit axis as long as the board itself
 		is, regardless of how narrow the split makes the band. Returns
 		(x_range, y_range, orientation) triples for `_plant_legal_move()`.
@@ -484,14 +484,14 @@ class Board:
 		>=min_moves, leave the board alone. Otherwise repeatedly plant a
 		guaranteed move into whichever board region (region count == min_moves)
 		currently has the fewest, re-checking the real move count fresh every
-		iteration -- not a single one-pass-per-region walk, since a plant's
+		iteration - not a single one-pass-per-region walk, since a plant's
 		donor cell can straddle into a neighboring region (making it look
 		already-covered when it isn't) or, rarely, incidentally invalidate an
 		earlier move elsewhere on the board (match footprints can extend past
 		the swapped cells themselves, e.g. under LINE_CONNECTED). Recomputing
 		from scratch each time is self-correcting against both. The goal is
 		spreading activity across the board instead of it all clustering
-		wherever a single fallback plant happened to go -- which left
+		wherever a single fallback plant happened to go - which left
 		everywhere else frozen from the match-avoiding deal for the rest of the
 		game, since resolve() only re-rolls columns that actually matched.
 		"""
@@ -526,7 +526,7 @@ class Board:
 		self._fill()
 
 # ================================================================================================
-# OSG scene + osgx interaction -- everything above this line is pure Python and
+# OSG scene + osgx interaction - everything above this line is pure Python and
 # importable without OSG; everything below requires it.
 # ================================================================================================
 
@@ -534,7 +534,7 @@ import time
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size
 
 from OpenSceneGraph import *
@@ -662,7 +662,7 @@ def make_piece(board, x, y):
 
 def rebuild_scene(scene, board, pieces):
 	"""Destroy and repopulate: clears every child and rebuilds one sphere per cell
-	from current Board state. No per-cell diffing -- called at startup and again
+	from current Board state. No per-cell diffing - called at startup and again
 	once a full match-resolution animation sequence (shrink -> fall -> any
 	cascades) finishes, to snap `pieces` back to a clean, correctly pid-keyed
 	state for hover/selection to rely on.
@@ -685,12 +685,12 @@ class ShrinkCallback:
 	"""Animates one piece's MatrixTransform scale from 1.0 down to `target_scale`
 	over `duration` seconds (wall-clock via time.time(), same pattern as
 	LiveUpdateCallback in pyosg-dynamic-verts.py), then marks itself done by
-	discarding `key` from the shared `pending` set -- the main loop watches that
+	discarding `key` from the shared `pending` set - the main loop watches that
 	set to know when every matched piece has finished shrinking. No need to
 	detach the callback on completion: the whole node is destroyed by the next
 	rebuild_scene() call regardless, so a finished callback just goes stale/inert
 	until then. `key` is whatever the caller uses to track this piece in `pending`
-	(board position, in start_shrink() below) -- opaque to the callback itself.
+	(board position, in start_shrink() below) - opaque to the callback itself.
 	"""
 
 	def __init__(self, mt, base, pending, key, duration, target_scale):
@@ -756,7 +756,7 @@ class FallCallback:
 class StepAdvancer(osgGA.GUIEventHandler):
 	"""Drives the shrink -> fall -> (cascade or finish) state machine forward, one check per
 	frame, via the FRAME event osgGA dispatches to every registered eventHandler once per
-	viewer.frame() call -- the same mechanism pyosg-taa.py's Controls uses for its own per-frame
+	viewer.frame() call - the same mechanism pyosg-taa.py's Controls uses for its own per-frame
 	bookkeeping (see [[project_pyosg_contract_conversion]]).
 
 	NOT a node updateCallback, deliberately: an EARLIER version of this attached a plain-callable
@@ -765,7 +765,7 @@ class StepAdvancer(osgGA.GUIEventHandler):
 	(ShrinkCallback/FallCallback), and update traversal did not reliably continue past `scene`'s
 	newly-added plain-callable callback to reach them, so pending_shrink/pending_fall never
 	emptied and this check never saw a completed animation. Confirmed live 2026-08-29. A
-	GUIEventHandler carries none of that scene-graph-nesting risk -- it's dispatched by the
+	GUIEventHandler carries none of that scene-graph-nesting risk - it's dispatched by the
 	viewer directly, entirely outside the node hierarchy."""
 
 	def __init__(self, phase, pending_shrink, pending_fall, start_fall, advance_after_fall):
@@ -789,11 +789,11 @@ class StepAdvancer(osgGA.GUIEventHandler):
 
 		return False
 
-# Set by build_scene(), read by configure_viewer() -- PickCameraSync's sub-frustum math needs the
+# Set by build_scene(), read by configure_viewer() - PickCameraSync's sub-frustum math needs the
 # real viewport size, but configure_viewer(viewer, root) has no direct channel for it. Same
 # pattern as pyosg-hover.py's own _viewport. `_advancer` is the StepAdvancer instance itself:
 # unlike `rb` (recoverable from pick_cam.updateCallback, an actual graph slot), StepAdvancer is
-# registered as an eventHandler, not stashed anywhere in the returned Node -- same "too much
+# registered as an eventHandler, not stashed anywhere in the returned Node - same "too much
 # plain Python state for the graph to carry" shape as pyosg-khronos-viewer.py's _args/_pbr.
 _viewport = (800, 600)
 _advancer = None
@@ -833,7 +833,7 @@ def parse_match4_args():
 
 	return seed, match_mode, reset_mode
 
-# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+# The real pipeline-assembly entrypoint - returns the root Node, no viewer/window side effects.
 def build_scene(w, h):
 	global _viewport, _advancer
 
@@ -876,14 +876,14 @@ def build_scene(w, h):
 	# Match-resolution is a small frame-driven state machine, not a single instant
 	# snap: a successful swap kicks off shrink -> fall (survivors drop into gaps,
 	# new pieces fall in from above their column) -> repeat from shrink if that
-	# fall revealed a cascade, else finish. Nothing here blocks/sleeps -- `phase`
+	# fall revealed a cascade, else finish. Nothing here blocks/sleeps - `phase`
 	# and the two `pending_*` sets are advanced from the main loop after each
 	# viewer.frame(), since that's what actually ticks ShrinkCallback/FallCallback
 	# (attached as each piece's updateCallback, same mechanism as LiveUpdateCallback
 	# in pyosg-dynamic-verts.py) via OSG's own update traversal.
 	#
 	# `live_nodes` is a (x, y) -> MatrixTransform map of what's really on screen
-	# *during* a sequence -- `pieces` (pid-keyed) goes stale the instant pieces
+	# *during* a sequence - `pieces` (pid-keyed) goes stale the instant pieces
 	# start moving and is only trustworthy again once rebuild_scene() restores it
 	# at the very end. Input (on_pick/on_enter/on_leave) is locked out for the
 	# whole sequence via `animating`, so that staleness never leaks into picking.
@@ -893,7 +893,7 @@ def build_scene(w, h):
 	pending_fall = set()
 	live_nodes = {}
 
-	# 1x1 FBO + continuous sub-frustum, same mechanism as pyosg-hover.py -- lets us layer
+	# 1x1 FBO + continuous sub-frustum, same mechanism as pyosg-hover.py - lets us layer
 	# real-time onEnter/onLeave hover feedback on top of the click-to-select-then-swap loop
 	# from the first pass (that version used full-window CLICK-only picking).
 	pick_image = osg.Image()
@@ -913,8 +913,8 @@ def build_scene(w, h):
 	# Two-click select-then-swap, same game logic as the first pass, now layered with
 	# visual feedback: a persistent SELECT_SCALE indicator on the first-clicked piece,
 	# and a lighter HOVER_SCALE indicator that follows the cursor over every OTHER piece
-	# (skipped on the selected piece itself -- its own indicator already covers that,
-	# and stacking both would just be confusing) -- "hover indicator applies to the 2nd one."
+	# (skipped on the selected piece itself - its own indicator already covers that,
+	# and stacking both would just be confusing) - "hover indicator applies to the 2nd one."
 	selected = [None]
 
 	def selected_pid():
@@ -937,7 +937,7 @@ def build_scene(w, h):
 	def start_shrink(matched_positions):
 		"""Phase 1 of a match-resolution sequence: shrink every piece at a
 		matched (x, y) via ShrinkCallback. `matched_positions` must be looked up
-		against `live_nodes`, not `pieces` -- on a cascade (called again from
+		against `live_nodes`, not `pieces` - on a cascade (called again from
 		advance_after_fall()) the pieces at these positions may be ones that just
 		fell into place, which only `live_nodes` knows about.
 		"""
@@ -1003,7 +1003,7 @@ def build_scene(w, h):
 			mt.updateCallback = FallCallback(mt, from_pos, to_pos, pending_fall, key, FALL_DURATION)
 
 	def advance_after_fall():
-		"""Phase 3: the fall settled -- either it revealed a new cascade (back to
+		"""Phase 3: the fall settled - either it revealed a new cascade (back to
 		shrink) or the board is stable (finish the whole sequence)."""
 		matches = board.find_matches()
 
@@ -1014,7 +1014,7 @@ def build_scene(w, h):
 
 	def finish_sequence():
 		if not board.has_legal_move():
-			osg.notice(f"[pyosg-match4] no legal moves left -- auto-reset ({reset_mode.value})")
+			osg.notice(f"[pyosg-match4] no legal moves left - auto-reset ({reset_mode.value})")
 			board.reset(reset_mode)
 
 		rebuild_scene(scene, board, pieces)
@@ -1026,7 +1026,7 @@ def build_scene(w, h):
 
 	def on_pick(pid, action):
 		# PickReadbackSync fires onPick(id, HOVER) on every hover transition too (not just
-		# reportClick() -> CLICK) -- ignore those, or hovering alone drives the whole
+		# reportClick() -> CLICK) - ignore those, or hovering alone drives the whole
 		# select/swap state machine instead of requiring a real click.
 		if action != osgx.ActionType.CLICK:
 			return
@@ -1071,7 +1071,7 @@ def build_scene(w, h):
 
 		if board.try_swap(prev, pos):
 			# Rebuild now so the swap itself is visible immediately, before the matched
-			# pieces start shrinking -- find_matches() on this same (post-swap,
+			# pieces start shrinking - find_matches() on this same (post-swap,
 			# pre-clear) board state is exactly the first pass resolve_one_pass() would
 			# compute, so the animated set and the set it actually clears agree.
 			rebuild_scene(scene, board, pieces)
@@ -1084,11 +1084,11 @@ def build_scene(w, h):
 
 			matched = set().union(*board.find_matches())
 
-			osg.notice(f"[pyosg-match4] swap {prev} <-> {pos} -- match! shrinking {len(matched)} piece(s)")
+			osg.notice(f"[pyosg-match4] swap {prev} <-> {pos} - match! shrinking {len(matched)} piece(s)")
 
 			start_shrink(matched)
 		else:
-			osg.notice(f"[pyosg-match4] swap {prev} <-> {pos} -- no match, reverted")
+			osg.notice(f"[pyosg-match4] swap {prev} <-> {pos} - no match, reverted")
 
 	rb.onPick = on_pick
 	rb.onEnter = on_enter
@@ -1096,12 +1096,12 @@ def build_scene(w, h):
 
 	# Stashed as pick_cam's updateCallback purely so configure_viewer() can recover this SAME rb
 	# object back out of the returned root (build_scene()'s contract is "return a Node", no
-	# second channel for handing back a plain Python object it also needs later) -- same pattern
+	# second channel for handing back a plain Python object it also needs later) - same pattern
 	# as pyosg-hover.py/pyosg-picking.py. Replaced with the real NodeCallbacksGroup (sync/hover/rb)
 	# in configure_viewer(), once the live viewer.camera is available for PickCameraSync.
 	pick_cam.updateCallback = rb
 
-	# Drives the shrink/fall/cascade state machine forward every frame -- see StepAdvancer's own
+	# Drives the shrink/fall/cascade state machine forward every frame - see StepAdvancer's own
 	# docstring for why this is a FRAME-event eventHandler, registered from configure_viewer()
 	# (which has the live viewer), rather than a node updateCallback.
 	_advancer = StepAdvancer(phase, pending_shrink, pending_fall, start_fall, advance_after_fall)

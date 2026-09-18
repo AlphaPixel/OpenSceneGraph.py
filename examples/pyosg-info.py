@@ -5,7 +5,7 @@
 # OSG_GL_CONTEXT_VERSION/OSG_GL_CONTEXT_PROFILE_MASK env vars set below), what a realized
 # GraphicsContext's own Traits resolved that request to, and what the driver ACTUALLY granted
 # (State.glExtensions). Realizes just long enough to populate that last part, then exits.
-# Edit the env vars below (or unset them) to see how the three stages diverge -- e.g. request a
+# Edit the env vars below (or unset them) to see how the three stages diverge - e.g. request a
 # GL version the driver doesn't support and watch Traits echo the request back while
 # GLExtensions reports what was actually negotiated instead.
 
@@ -49,7 +49,7 @@ def section(title):
 def dump(label, value):
 	# Display-only rounding: glVersion/glslLanguageVersion are C++ `float` (32-bit), so e.g.
 	# 4.6's nearest float32 widens to 4.599999904632568 once pybind11 hands it back as a
-	# Python (64-bit) float -- a real, if slightly lossy, binary representation, not corrupted
+	# Python (64-bit) float - a real, if slightly lossy, binary representation, not corrupted
 	# data. Round here for a readable dump only; anything doing a real comparison against
 	# these values should still read the unrounded field directly.
 	if isinstance(value, float):

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Minimal osgx.imgui.Widget smoke test -- mirrors osgx's own
+# Minimal osgx.imgui.Widget smoke test - mirrors osgx's own
 # examples/osgx-imgui.cpp almost exactly (three spheres, StatsSection,
 # and one custom addSection with a slider knob). Deliberately simple: if the
 # panel/mouse-capture behaves correctly here but not in a more complex scene
@@ -9,7 +9,7 @@
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size
 
 from OpenSceneGraph import *
@@ -36,7 +36,7 @@ def build_scene(w, h):
 	return root
 
 # osgx.imgui.Widget needs a live Viewer (it pushes itself onto the view's event handler list),
-# which build_scene() never receives -- same reason pyosg-mrt.py's own interactivity lives here
+# which build_scene() never receives - same reason pyosg-mrt.py's own interactivity lives here
 # instead of in build_scene().
 def configure_viewer(viewer, root):
 	gui = osgx.imgui.Widget(viewer)

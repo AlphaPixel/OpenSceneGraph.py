@@ -2,7 +2,7 @@
 
 """Shared polyhedral-dice mesh factory + atlas/decal shader, factored out of
 `pyosg-d4.py`/`pyosg-d6-numbers.py` once both were proven working
-separately -- see ai/context-todo-dice.md. Not a standalone example (no
+separately - see ai/context-todo-dice.md. Not a standalone example (no
 `__main__`); imported by the per-die scripts, same relationship
 `pyosg_repl.py` has to the examples that `from pyosg_repl import repl`.
 
@@ -17,17 +17,17 @@ except D4, which uses up to three corner digits because its rolled value is
 read from the top vertex rather than the top face.
 
 Vertex attribute layout, identical for every die built through this module:
-  osg_Vertex (location 0)          -- position, via .vertexArray
-  osg_Normal (location 1)          -- flat per-face normal, via .normalArray
-  osg_MultiTexCoord0 (location 3)  -- canonical per-face UV, via .vertexAttrib[3]
+  osg_Vertex (location 0)          - position, via .vertexArray
+  osg_Normal (location 1)          - flat per-face normal, via .normalArray
+  osg_MultiTexCoord0 (location 3)  - canonical per-face UV, via .vertexAttrib[3]
                                        (texcoord unit 0's generic-attrib alias,
-                                       confirmed against OSG source -- see
+                                       confirmed against OSG source - see
                                        pyosg-dice.py's own docstring)
-  decalValues (location 13, vec3)  -- 0-based digit plus packed face ID per
+  decalValues (location 13, vec3)  - 0-based digit plus packed face ID per
                                        decal slot, -1 = unused
-  anchorU/anchorV (locations 14/15, vec3 each) -- each slot's UV anchor point
+  anchorU/anchorV (locations 14/15, vec3 each) - each slot's UV anchor point
 
-MAX_DECALS is 3 -- enough for every die needed here (D4's 3 corners are the
+MAX_DECALS is 3 - enough for every die needed here (D4's 3 corners are the
 upper bound; every other die uses exactly 1, its face center).
 """
 
@@ -79,11 +79,11 @@ void main() {{
 # top points) is DERIVED, not stored: with more than one valid decal slot,
 # it points from the average of all this face's anchors (== the face
 # centroid, since insetting each corner toward it by the same fraction
-# preserves the average -- true for any regular/symmetric face) toward this
-# particular anchor -- i.e. "toward the corner it belongs to", same
+# preserves the average - true for any regular/symmetric face) toward this
+# particular anchor - i.e. "toward the corner it belongs to", same
 # convention proven in pyosg-d4.py. With exactly one valid slot (every die
 # except D4), that degenerates to a zero vector, so a fixed screen-up
-# fallback is used instead -- there's no corner to point toward.
+# fallback is used instead - there's no corner to point toward.
 FRAGMENT_SHADER = """
 #version 330 core
 
@@ -138,7 +138,7 @@ void main() {
 				(decalValue + (lu * 0.5 + 0.5)) / float(digitCount),
 				lv * 0.5 + 0.5
 			);
-			// osgx.PixelText.createAtlas() is a coverage-only (single-channel) atlas -- the
+			// osgx.PixelText.createAtlas() is a coverage-only (single-channel) atlas - the
 			// ink color is no longer baked into the image, so it comes from this uniform.
 			float coverage = texture(numberAtlas, atlasUV).r;
 
@@ -152,7 +152,7 @@ void main() {
 
 # IBL counterpart to FRAGMENT_SHADER above: same decal-atlas logic, lit via osgx's
 # PBR/IBL substrate instead of the fixed N.L term. No highlight uniforms
-# (activeFaceMask/activeDecalValue) -- consumers that need those (pyosg-dice.py) fork
+# (activeFaceMask/activeDecalValue) - consumers that need those (pyosg-dice.py) fork
 # their own copy the same way they already fork FRAGMENT_SHADER; consumers that just
 # need picking (pyosg-match4-dice.py) add pickID the same way they already do for
 # FRAGMENT_SHADER.
@@ -183,18 +183,18 @@ uniform sampler2D brdfLUT;
 uniform samplerCube diffuseEnv;
 
 // Same cubemap lookup basis osgx.gltf.pbribl.PBRIBLScene.create() reads off
-// PBRIBLEnvironment.iblAxis -- rotating that (in Python, on the SAME environment object)
+// PBRIBLEnvironment.iblAxis - rotating that (in Python, on the SAME environment object)
 // rotates a --scene backdrop lit through that renderer and these dice identically, since
 // both end up sampling through this same remap.
 uniform vec3 iblAxis[3];
 
-// Whole-die material knobs -- no per-face roughness/metallic data yet, just a uniform
+// Whole-die material knobs - no per-face roughness/metallic data yet, just a uniform
 // scalar pair so the PBR/IBL response is at least visibly tunable from the CLI.
 uniform float roughness;
 uniform float metallic;
 
 // Independent diffuse-irradiance/specular-reflection intensity, matching the SAME uniform names
-// osgx::gltf::pbribl::PBRIBLScene::create()'s backdrop shader reads -- e.g. --ibl-diffuse/
+// osgx::gltf::pbribl::PBRIBLScene::create()'s backdrop shader reads - e.g. --ibl-diffuse/
 // --ibl-specular dial these down on both the dice AND a --scene backdrop identically, so
 // LIGHT_UNIFORMS' punctual lights (a torch) can be made to read more clearly against IBL.
 uniform float iblDiffuseIntensity;
@@ -202,7 +202,7 @@ uniform float iblSpecularIntensity;
 
 out vec4 fragColor;
 
-// Ported from osgx::gltf::pbribl's own PBRIBL.cpp shader -- Z-up world direction to the
+// Ported from osgx::gltf::pbribl's own PBRIBL.cpp shader - Z-up world direction to the
 // baked cubemap's Y-up convention, then onto the (possibly rotated) lookup basis.
 vec3 osgx_ZUpToGLTF(vec3 d) { return vec3(d.x, d.z, -d.y); }
 vec3 osgx_OrientIBL(vec3 d) {
@@ -242,7 +242,7 @@ void main() {
 				(decalValue + (lu * 0.5 + 0.5)) / float(digitCount),
 				lv * 0.5 + 0.5
 			);
-			// osgx.PixelText.createAtlas() is a coverage-only (single-channel) atlas -- the
+			// osgx.PixelText.createAtlas() is a coverage-only (single-channel) atlas - the
 			// ink color is no longer baked into the image, so it comes from this uniform.
 			float coverage = texture(numberAtlas, atlasUV).r;
 
@@ -251,7 +251,7 @@ void main() {
 	}
 
 	// Eye-space N/V, rotated into world space the same way pyosg-khronos-viewer.py's
-	// underlying shader does -- transpose(mat3(osg_ViewMatrix)) is the view rotation's
+	// underlying shader does - transpose(mat3(osg_ViewMatrix)) is the view rotation's
 	// inverse, since it's orthonormal.
 	mat3 invView = transpose(mat3(osg_ViewMatrix));
 	vec3 N = invView * normalize(vNormal);
@@ -267,12 +267,12 @@ void main() {
 		+ prefiltered * Fd * iblSpecularIntensity;
 
 	// Direct/punctual lights, via the osgx_DirectLighting() CONTRACT (DIRECT_LIGHTING_DECL/
-	// DIRECT_LIGHTING_HOOK_DEFAULT in PBR.hpp) -- worldPos comes from vViewDir's own unnormalized
+	// DIRECT_LIGHTING_HOOK_DEFAULT in PBR.hpp) - worldPos comes from vViewDir's own unnormalized
 	// eye-space encoding (-eyePos.xyz, see VERTEX_SHADER_IBL), so no extra varying is needed. Same
-	// hook backdrop scenes use via osgx::gltf::pbribl::PBRIBLScene::create() -- share the SAME
+	// hook backdrop scenes use via osgx::gltf::pbribl::PBRIBLScene::create() - share the SAME
 	// osgx::pbr.LightSet (e.g. set on a common ancestor StateSet) to light dice and a --scene
 	// backdrop identically. The per-light dispatch loop itself lives ONCE in
-	// DIRECT_LIGHTING_HOOK_DEFAULT (added as a second FRAGMENT shader object -- see where this shader
+	// DIRECT_LIGHTING_HOOK_DEFAULT (added as a second FRAGMENT shader object - see where this shader
 	// is compiled into a Program), not hand-copied here, so this shader can never drift out of sync
 	// with it the way it used to.
 	osgx_Material mat = osgx_Material(albedo, 1.0, roughness, metallic, F0);
@@ -356,18 +356,18 @@ def resolve_environment_manifest(value):
 def rotate_ibl_environment(environment, degrees):
 	"""Rotate `environment`'s cubemap lookup basis (iblAxis, always exactly 3 Vec3 --
 	one orthonormal basis) about the world's vertical (Z) axis, in place, by an exact
-	multiple of 90 degrees -- a pure axis permutation, no interpolation. `degrees` must
+	multiple of 90 degrees - a pure axis permutation, no interpolation. `degrees` must
 	be one of 0/90/180/270 (mod 360).
 
 	This is THE rotation knob for a baked HDRI: there's no authored "this way is north"
 	in an equirect environment map, so however it landed at bake time is arbitrary.
 	Rotating the lookup basis (rather than resampling the cubemap itself) is exact and
-	free -- both PBRIBLScene.create()'s glTF material shader and FRAGMENT_SHADER_IBL read
+	free - both PBRIBLScene.create()'s glTF material shader and FRAGMENT_SHADER_IBL read
 	iblAxis the same way, so applying this once to a shared `environment` before handing
 	it to either rotates dice and backdrop identically.
 
 	iblAxis round-trips through Python as a plain list copy (pybind11/stl.h), not a live
-	view -- reassign the whole list, per-element mutation is silently a no-op.
+	view - reassign the whole list, per-element mutation is silently a no-op.
 	"""
 
 	if degrees % 90 != 0:
@@ -387,7 +387,7 @@ def rotate_ibl_environment(environment, degrees):
 
 def prepare_environment(hdr=None, env=None, rotate=0):
 	"""Resolve --hdr/--env (mutually exclusive; both optional) into a PBRIBLEnvironment,
-	optionally pre-rotated -- see rotate_ibl_environment(). Returns None if neither
+	optionally pre-rotated - see rotate_ibl_environment(). Returns None if neither
 	hdr nor env is given."""
 
 	if hdr:
@@ -425,7 +425,7 @@ void main() {
 """
 
 # The atlas itself is now built by osgx.PixelText.createAtlas() (see make_die()/create_scene()
-# callers) -- osgx generalized this module's own procedural 5x7 font/atlas builder into a
+# callers) - osgx generalized this module's own procedural 5x7 font/atlas builder into a
 # reusable primitive, so it no longer needs to live here. INK stays: the atlas osgx builds is
 # coverage-only (no baked color), so the ink color is supplied as a shader uniform instead --
 # see FRAGMENT_SHADER/FRAGMENT_SHADER_IBL above.
@@ -643,7 +643,7 @@ def roll_die(
 	target_quat = support_down_quat(support_normal) * spin
 	start_quat = random_quat(rng)
 
-	osg.notice(f"[{notice_prefix}] rolling die {index} -- landing on {value} ({label} up)")
+	osg.notice(f"[{notice_prefix}] rolling die {index} - landing on {value} ({label} up)")
 
 	if roll_started_callback is not None:
 		roll_started_callback(index)
@@ -744,9 +744,9 @@ def face_centroid_uv(face_uv):
 	return osg.Vec2(cx, cy)
 
 def center_decal_scheme(values):
-	"""One decal per face, at that face's own UV centroid -- every die
+	"""One decal per face, at that face's own UV centroid - every die
 	except D4. `values` is either a single 0-based digit (same value on
-	every face -- not useful for a real die, mainly for quick prototyping)
+	every face - not useful for a real die, mainly for quick prototyping)
 	or a sequence of one 0-based digit per face, aligned with `faces`."""
 	def decals_for_face(face_index, face, face_uv):
 		value = values[face_index] if hasattr(values, "__getitem__") else values
@@ -756,7 +756,7 @@ def center_decal_scheme(values):
 	return decals_for_face
 
 def corner_decal_scheme(vertex_values, inset=0.34):
-	"""One decal per face-corner, at each vertex's own value -- D4 only.
+	"""One decal per face-corner, at each vertex's own value - D4 only.
 	`vertex_values` maps a base-vertex index (into whatever `base_vertices`
 	the caller built the face list from) to a number-atlas column."""
 	def decals_for_face(face_index, face, face_uv):
@@ -986,10 +986,10 @@ def make_die(name, position=None, orientation=None, node_name=None, display_mode
 	return DIE_SPECS[name].make_instance(position, orientation, node_name, display_mode)
 
 # ---------------------------------------------------------------------------------------------
-# Dice-sum probability -- exact, not sampled/estimated. Prompted by "what's the safer bet, 1d20
+# Dice-sum probability - exact, not sampled/estimated. Prompted by "what's the safer bet, 1d20
 # or 2d10" while balancing a game idea: same max (20) and similar mean, but 2d10's stdev is
 # ~30% smaller, because summing more (smaller) dice concentrates probability toward the middle
-# (many more ways to roll an 11 on 2d10 than a 20) while a single die stays flat -- every face
+# (many more ways to roll an 11 on 2d10 than a 20) while a single die stays flat - every face
 # equally likely. Pure math, no scene-graph/rendering involvement; kept in this module only
 # because "how do these numbers add up" is the same question the dice mesh/roll system exists to
 # animate, not because it needs anything else here.
@@ -997,10 +997,10 @@ def make_die(name, position=None, orientation=None, node_name=None, display_mode
 
 def dice_distribution(dice):
 	"""Exact probability of every reachable total when rolling `dice` (one integer per die, its
-	side count -- e.g. (20,) for 1d20, (10, 10) for 2d10, (4, 6, 8, 10, 12, 20) for pyosg-dice.py's
-	own full set). Computed by convolving each die's uniform distribution -- equivalent to
+	side count - e.g. (20,) for 1d20, (10, 10) for 2d10, (4, 6, 8, 10, 12, 20) for pyosg-dice.py's
+	own full set). Computed by convolving each die's uniform distribution - equivalent to
 	multiplying together one polynomial per die (x^1 + x^2 + ... + x^sides) and reading off each
-	term's coefficient -- so it's exact even in the tails, unlike a normal-distribution estimate
+	term's coefficient - so it's exact even in the tails, unlike a normal-distribution estimate
 	(which is exactly where two options with similar means, like 1d20 vs 2d10, actually differ).
 	Returns {total: probability}, covering every total from len(dice) to sum(dice)."""
 	dist = {0: 1}
@@ -1020,11 +1020,11 @@ def dice_distribution(dice):
 
 def dice_stats(dice, coverage=0.8):
 	"""Game-balance-friendly summary for `dice` (see dice_distribution()): min/max/mean/stdev,
-	plus `typical_range` -- the narrowest band of totals covering at least `coverage` (default
+	plus `typical_range` - the narrowest band of totals covering at least `coverage` (default
 	80%) of outcomes, found by trimming from whichever end currently has less probability mass
 	until `coverage` would be broken. Two abilities can share the same mean and max and still
 	play very differently if one has a much wider typical_range (swingy/high-variance, more
-	exciting but harder to plan around) than the other (consistent/low-variance) -- that's
+	exciting but harder to plan around) than the other (consistent/low-variance) - that's
 	usually the more useful number for balancing than max damage alone."""
 	pmf = dice_distribution(dice)
 	mean = sum(total * p for total, p in pmf.items())
@@ -1057,7 +1057,7 @@ def dice_stats(dice, coverage=0.8):
 	}
 
 def dice_chance_above(dice, threshold):
-	"""P(sum of `dice` > threshold) -- e.g. "how often does this ability's roll beat the
+	"""P(sum of `dice` > threshold) - e.g. "how often does this ability's roll beat the
 	target's defense score" or "how many rolls, on average, before a HUD roll-total display
 	like pyosg-dice.py's crosses X" (expected rolls = 1 / this)."""
 	return sum(p for total, p in dice_distribution(dice).items() if total > threshold)

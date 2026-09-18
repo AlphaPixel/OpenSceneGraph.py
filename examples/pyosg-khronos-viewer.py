@@ -22,7 +22,7 @@ os.environ.setdefault(
 )
 
 # Import side effect: fills in OSG_THREADING/OSG_GL_* env var defaults (see pyosg_example.py),
-# same reason as every other example -- these need to land before OSG's DisplaySettings reads
+# same reason as every other example - these need to land before OSG's DisplaySettings reads
 # them. Deliberately after the OSG_WINDOW/OSG_LIBRARY_PATH overrides above (setdefault() means
 # order between these doesn't actually matter, but matching the rest of this file's style).
 from pyosg_example import window_size
@@ -180,7 +180,7 @@ class FramebufferPNG(osg.Camera.DrawCallback):
 
 		self.done = True
 
-		# Standard runner loops just do `while not viewer.done: viewer.frame()` -- they don't
+		# Standard runner loops just do `while not viewer.done: viewer.frame()` - they don't
 		# know about `capture.done`. Setting this here (rather than main()'s old special-cased
 		# `if capture is not None and capture.done: break`) means the same standard loop exits
 		# on its own after the screenshot, standalone or via a runner, no custom exit condition
@@ -219,7 +219,7 @@ class Diagnostics(osgGA.GUIEventHandler):
 
 		return True
 
-# Set by build_scene(), read by configure_viewer() -- args.camera/args.debug/args.screenshot and
+# Set by build_scene(), read by configure_viewer() - args.camera/args.debug/args.screenshot and
 # the PBRIBLScene object aren't retrievable from the returned root (build_scene()'s contract is
 # just "return a Node"), and args in particular has no natural home in the graph the way e.g.
 # pyosg-mrt.py pulls a Uniform back out of a StateSet. A same-module variable is the simpler
@@ -263,7 +263,7 @@ def build_scene(w, h):
 
 	_args = parser.parse_args()
 
-	# Must happen before any GraphicsContext exists -- build_scene() runs before either runner's
+	# Must happen before any GraphicsContext exists - build_scene() runs before either runner's
 	# viewer.setUpViewInWindow(), and before a standalone __main__ constructs its GraphicsContext
 	# at first realize()/frame(), so this ordering holds either way.
 	osg.DisplaySettings.instance.numMultiSamples = 8

@@ -9,7 +9,7 @@ def test_construction():
 	assert refcmp(cb, 1, 1)
 
 def test_nodecallback_is_a_callback():
-	# osg::NodeCallback : public virtual osg::Callback in real OSG -- confirms the pybind11
+	# osg::NodeCallback : public virtual osg::Callback in real OSG - confirms the pybind11
 	# hierarchy actually reflects that (NodeCallback's py::class_ declares Callback as its base,
 	# not just osg::Object), not merely that both happen to be Referenced-derived.
 	nc = NodeCallback()
@@ -68,7 +68,7 @@ def test_nested_callbacks_del_splices_around_target():
 	del root.nestedCallbacks[1]
 
 	assert [x.name for x in root.nestedCallbacks] == ["a", "c"]
-	# b is fully detached, not just skipped -- it shouldn't still be pointing at c.
+	# b is fully detached, not just skipped - it shouldn't still be pointing at c.
 	assert len(b.nestedCallbacks) == 0
 
 def test_nested_callbacks_insert_splices_in_front():
@@ -96,7 +96,7 @@ def test_nested_callbacks_set_replaces_and_keeps_tail():
 	root.nestedCallbacks[1] = e
 
 	assert [x.name for x in root.nestedCallbacks] == ["a", "e", "c"]
-	# b was REPLACED (not spliced past) -- fully detached, same contract as del.
+	# b was REPLACED (not spliced past) - fully detached, same contract as del.
 	assert len(b.nestedCallbacks) == 0
 
 def test_nested_callbacks_remove_by_identity():

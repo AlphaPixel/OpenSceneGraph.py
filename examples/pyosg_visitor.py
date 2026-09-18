@@ -2,7 +2,7 @@
 
 import os
 
-# setdefault(), not update() -- this module is imported by other examples (pyosg-mrt.py,
+# setdefault(), not update() - this module is imported by other examples (pyosg-mrt.py,
 # etc.) that configure their own OSG_WINDOW/OSG_THREADING before importing pyosg_visitor for
 # its GatherVisitor. update() here would silently clobber whatever the caller already set.
 # Only pyosg_visitor.py's own standalone __main__ use below relies on these being filled in.
@@ -17,10 +17,10 @@ from OpenSceneGraph import *
 # GatherVisitor: a scene-graph inspector, proof-of-concept for a future "active state" panel
 # (e.g. showing every live shader/uniform in a GUI alongside the viewport). Walks the graph
 # and reports every attached Program/Uniform via `osg.notice()`. Meant to be imported --
-# `from pyosg_visitor import GatherVisitor` -- and fired at any live scene, same shape as
+# `from pyosg_visitor import GatherVisitor` - and fired at any live scene, same shape as
 # `pyosg_repl.py`'s `repl()` helper.
 #
-# This originally surfaced two real binding gaps -- osg.Node had no non-creating
+# This originally surfaced two real binding gaps - osg.Node had no non-creating
 # getStateSet(), and osg.StateSet had no way to read a Program back out once attached --
 # both since fixed (osg.getStateSet(node) and StateSet.attributes[], respectively).
 
@@ -60,7 +60,7 @@ void main() {
 class GatherVisitor(osg.NodeVisitor):
 	"""`namespace`, if given (e.g. `locals()`/`globals()` at the call site), is scanned ONCE for
 	`.addr`-bearing values; any gathered object whose `.addr` matches gets an extra "bound to
-	local: 'x'" hint. Only finds BARE top-level names in that dict -- an object only reachable
+	local: 'x'" hint. Only finds BARE top-level names in that dict - an object only reachable
 	via a chain (e.g. `hudCam.stateSet.attributes[PROGRAM]`) won't get a hint, and that's fine.
 	"""
 

@@ -33,7 +33,7 @@ import osgx
 
 # Wall-clock-driven turntable spin, same __call__(self, node, nv) convention as
 # the other UpdateCallback classes across these examples (e.g. LiveUpdateCallback
-# in pyosg-dynamic-verts.py) -- no osg.NodeCallback subclassing needed.
+# in pyosg-dynamic-verts.py) - no osg.NodeCallback subclassing needed.
 class SpinCallback:
 	def __init__(self, axis=(0, 0, 1), speed=0.4):
 		self.axis = osg.Vec3d(*axis)
@@ -46,7 +46,7 @@ class SpinCallback:
 		return True
 
 # Wraps `child` in a new MatrixTransform that spins it about `axis` (default Z,
-# matching this scene's up axis) at `speed` radians/sec -- put this between an
+# matching this scene's up axis) at `speed` radians/sec - put this between an
 # RTT camera and the loaded model so the RTT "slice" keeps changing over time,
 # which makes the instanced-cube grid visibly track a live, moving source
 # rather than looking like a static baked image.
@@ -68,8 +68,8 @@ def make_spinner(child, axis=(0, 0, 1), speed=0.4):
 # osgx/IBL.hpp, pulled in below via shader-library pragmas and
 # osgx.gltf.pbribl.resolveShaderLibs()
 # instead of copy-pasted a third time. Only the direct-light loop, tonemap
-# application, and main() -- the part that's genuinely specific to what this
-# example wants lit and how -- stay hand-written here.
+# application, and main() - the part that's genuinely specific to what this
+# example wants lit and how - stay hand-written here.
 PBR_FALLBACK_VERTEX_SHADER = """
 #version 460 core
 
@@ -103,7 +103,7 @@ PBR_FALLBACK_FRAGMENT_SHADER_SRC = """
 
 #define NUM_LIGHTS 3
 // osgx::pbr's D_GGX/G_SCHLICK/G_SMITH/etc. snippets assume `PI` is already
-// declared (see osgx/PBR.hpp) rather than bundling their own -- it must be
+// declared (see osgx/PBR.hpp) rather than bundling their own - it must be
 // declared here, before the #pragma lines below expand to text that uses it.
 const float PI = 3.14159265359;
 
@@ -128,7 +128,7 @@ uniform float lightRadius[NUM_LIGHTS];
 out vec4 fragColor;
 
 // osgx_DirectSpecular already folds NdotL into its own D*G*F term (see
-// osgx/PBR.hpp) -- only the Lambert diffuse half needs an explicit NdotL
+// osgx/PBR.hpp) - only the Lambert diffuse half needs an explicit NdotL
 // multiply here, or specular would get it applied twice.
 vec3 evaluateDirectLighting(osgx_Material mat, vec3 N, vec3 V, float NdotV) {
 	vec3 Lo = vec3(0.0);
@@ -185,11 +185,11 @@ void main() {
 
 PBR_FALLBACK_FRAGMENT_SHADER = osgx.gltf.pbribl.resolveShaderLibs(PBR_FALLBACK_FRAGMENT_SHADER_SRC)
 
-# Applies the fallback PBR shader above to `node` (in place -- overrides
+# Applies the fallback PBR shader above to `node` (in place - overrides
 # whatever Program the glTF loader's own StateSet may or may not carry).
 # key_dir/fill_dir/*_distance are scaled against `node.bound`, not absolute
 # world coordinates, so the same defaults land reasonably on any model's
-# scale -- these ratios are what got tuned live against Batman (radius
+# scale - these ratios are what got tuned live against Batman (radius
 # ~1.4), just re-expressed as bound-relative so a CLI run against some other
 # model isn't left completely unlit.
 def apply_gltf_fallback_pbr(
@@ -240,10 +240,10 @@ def apply_gltf_fallback_pbr(
 	return node
 
 # gl_VertexID-indexed unit cube (36 verts, hard per-face normals via
-# gl_VertexID / 6) -- no CPU-side vertex/normal arrays or index buffer at
+# gl_VertexID / 6) - no CPU-side vertex/normal arrays or index buffer at
 # all, matching the fully-procedural technique already proven out in
 # pyosg-instanced.py/pyosg-instanced-ssbo.py (DrawElementsUInt isn't exposed
-# to Python in this binding, only DrawArrays -- this sidesteps needing it).
+# to Python in this binding, only DrawArrays - this sidesteps needing it).
 VOXEL_VERTEX_SHADER = """
 #version 430 core
 
@@ -301,7 +301,7 @@ void main() {
 
 	// Collapse this instance's geometry to a single point (zero-area, so it
 	// rasterizes nothing) when nothing was ever rasterized into this texel in
-	// the RTT pass -- i.e. its depth still sits at the cleared far plane
+	// the RTT pass - i.e. its depth still sits at the cleared far plane
 	// (~1.0). A color-distance-from-clear-color test looked equivalent at
 	// first, but a batsuit is itself near-black, so real model texels landed
 	// inside that same "close to background" color radius and got wrongly
@@ -316,7 +316,7 @@ void main() {
 
 	// Grid spans X (horizontal) / Z (vertical); Y is the cube's thin
 	// "depth" axis, facing back toward the RTT camera that produced
-	// srcTex -- so the mosaic reads as a flat picture facing the viewer.
+	// srcTex - so the mosaic reads as a flat picture facing the viewer.
 	vec2 grid = (vec2(gx, gy) - vec2(float(gridW), float(gridH)) * 0.5) * spacing;
 	vec3 world = local + vec3(grid.x, 0.0, grid.y);
 
@@ -345,7 +345,7 @@ void main() {
 	// world-direction light: a flat mosaic viewed dead-on shows almost
 	// exclusively the one face pointed straight at the camera, so a fixed
 	// light direction gives that entire view a single flat shade with no
-	// cue that it's actually a grid of cubes -- looked fine from an angle
+	// cue that it's actually a grid of cubes - looked fine from an angle
 	// (many differently-shaded faces visible at once) but went dark/flat
 	// head-on. A headlight instead makes whichever face is facing the
 	// viewer the brightest one, in any orientation.
@@ -368,7 +368,7 @@ void main() {
 # Loads `model_path`, frames it with a fixed orthographic "front" (-Y looking
 # toward +Y) camera sized to its bounding sphere, and renders it into a
 # `size`x`size` RGBA texture every frame (so this is live/continuous, not a
-# one-shot bake -- cheap at these resolutions, and lets an animated/live
+# one-shot bake - cheap at these resolutions, and lets an animated/live
 # source scene stay reflected in the voxel mosaic for free).
 def create_rtt_camera(
 	model_path,
@@ -480,10 +480,10 @@ def create_voxel_geode(
 # --------------------------------------------------------------------------- #
 # Standalone CLI / runner contract
 # --------------------------------------------------------------------------- #
-# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+# The real pipeline-assembly entrypoint - returns the root Node, no viewer/window side effects.
 # Deliberately does NOT touch os.environ/OpenSceneGraph import order at all (see the module
 # docstring: this file is a "pure helper library with no module-level Viewer/env setup", so it
-# stays exec()-able into an already-running pyosg_repl.py session with zero side effects) -- the
+# stays exec()-able into an already-running pyosg_repl.py session with zero side effects) - the
 # usual `from pyosg_example import window_size` import stays scoped to the `__main__` guard below,
 # not module top, same as `argparse`'s CLI-only usage.
 def build_scene(w, h):
@@ -516,13 +516,13 @@ def build_scene(w, h):
 
 	return osg.Group(children=(rttCam, voxels))
 
-# Set by build_scene(), unused by configure_viewer() today -- kept for parity/future use with the
+# Set by build_scene(), unused by configure_viewer() today - kept for parity/future use with the
 # rest of this project's _args stash convention (pyosg-khronos-viewer.py etc.); this file has no
 # viewer-level interactivity beyond the default TrackballManipulator both runners already provide.
 _args = None
 
 # Guarded on `_osg_repl_controller` (not just `__name__`) because exec()-loading this file into an
-# already-running pyosg_repl.py session -- the documented library usage above -- also runs with
+# already-running pyosg_repl.py session - the documented library usage above - also runs with
 # __name__ == "__main__" in that session's own globals(); `_osg_repl_controller` only exists there
 # once pyosg_repl.repl() has already run, which is exactly the case this block must not fire in
 # (it'd otherwise spin up a second competing osgViewer.Viewer + frame loop).

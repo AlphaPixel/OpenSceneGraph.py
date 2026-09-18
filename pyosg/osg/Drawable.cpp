@@ -85,7 +85,7 @@ void bind_Drawable(py::module_& m) {
 
 				// `kwargs_init<T>()` template-deduces T from the argument's STATIC type, and
 				// `kwargs_base`/`kwargs_init_own` are only specialized for `osg::Drawable`, not
-				// this `detail::Drawable` alias -- deducing T=detail::Drawable here would silently
+				// this `detail::Drawable` alias - deducing T=detail::Drawable here would silently
 				// match the empty default template instead and skip every kwarg (including the
 				// ones from Object/Node further up the chain).
 				pyx::kwargs_init(static_cast<osg::Drawable&>(*d), kwargs);

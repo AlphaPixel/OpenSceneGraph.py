@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-"""A 24-panel GLSL noise/pattern reference gallery -- value, Perlin (+
+"""A 24-panel GLSL noise/pattern reference gallery - value, Perlin (+
 analytic derivatives), simplex, Worley (+ derivatives), voronoi, blue noise (plain + Hilbert-
 curve), craters, gabor, curl, scratches, wavelet, erosion/gullies, paper, stone, wool, and
 interleaved-gradient-noise (IGN), each shown both raw and through a 6-octave fbm. All of it
 (the actual noise/fbm/hash functions in FRAGMENT_SHADER_NOISE below) is third-party, used as-is
-under its own license -- see the SPDX header inside the shader text itself. Original source
+under its own license - see the SPDX header inside the shader text itself. Original source
 pasted into examples/pyosg-fragcoordxyz.py's "noise" gallery entry; pulled out into its own file
 because, in context of osgx's whole "reproduce a fine world-space grain/pattern procedurally"
 thread (see pyosg-material.py's "glitter"/"spots" scenes), this is a far more complete reference of exactly that kind of
@@ -13,45 +13,45 @@ building block than anything hand-rolled during that investigation.
 
 ARCHITECTURE, SECOND REVISION: back to a SINGLE fullscreen quad + one fragment shader picking
 which of the 24 styles to draw via an `id` computed from `gl_FragCoord`, matching the
-ORIGINAL pasted version's own approach -- not the 24-separate-Geode/Program NDC-grid rewrite
+ORIGINAL pasted version's own approach - not the 24-separate-Geode/Program NDC-grid rewrite
 tried first in this file's history (see git log if curious), which turned out to introduce a
 real bug of its own: normalizing every panel's local coordinates independently to the identical
 `-6..6` domain centered on `(0,0)` made EVERY panel hit the same floor()-lattice-boundary
-artifact several of these noise functions have running through the origin, at once -- visible as
+artifact several of these noise functions have running through the origin, at once - visible as
 a seam in nearly every panel, confirmed live, not present in the single-shader version (which
 only ever put ONE screen position through that boundary, not one per panel).
 
-The single real bug the ORIGINAL version had -- `u_resolution` never refreshed after a window
+The single real bug the ORIGINAL version had - `u_resolution` never refreshed after a window
 resize, so `gl_FragCoord` (always live) and `u_resolution` (stale) disagreed about where panel
-boundaries were -- is fixed here properly instead of designed around: `u_resolution` is set to
+boundaries were - is fixed here properly instead of designed around: `u_resolution` is set to
 the REAL current viewport size every frame (see the `while not viewer.done:` loop below), same
 place `u_time` already updates. A thin border is blackened near each cell's edge (the `margin`
-uniform, a fraction of a cell, not a literal pixel count -- falls out of the same `gridF`
+uniform, a fraction of a cell, not a literal pixel count - falls out of the same `gridF`
 fractional-position math already needed for `id`, no extra tracking required) for visual
 separation between panels.
 
 The original also drew a text label under each panel by sampling a bitmap font atlas
-(`u_tex1`, a `codepage12.png` fetched from a CDN URL) -- that texture was never actually loaded
+(`u_tex1`, a `codepage12.png` fetched from a CDN URL) - that texture was never actually loaded
 anywhere in this repo, so the labels were non-functional as pasted, and are still not wired up
 here. This repo has its own in-progress "pixel font" work in pyosg_dice.py; plan is to wire real
 on-screen labels through that once it lands (LEGEND below is a plain console printout of the
 same 24 names as a stand-in until then), plus click-to-fullscreen-in-the-viewer for a single
-selected panel -- both explicitly deferred, not forgotten.
+selected panel - both explicitly deferred, not forgotten.
 
 ARCHITECTURE, THIRD REVISION: one real osg.Geometry quad per panel (24 total), all sharing a
-SINGLE osg.Program -- picking needs real per-object geometry (osgx identifies hits by
+SINGLE osg.Program - picking needs real per-object geometry (osgx identifies hits by
 rendering the same scene through a second camera keyed on a per-object `pickID` uniform, which
 requires each panel to be its own drawable), and the user explicitly asked for this shape
 (Program -> Quad(noise 0), Quad(noise 1), ... instead of 20+ Program instances). Two things
 carried over from the SECOND REVISION on purpose, not accidents:
 
 - The fragment shader still computes its noise-space `p` from raw `gl_FragCoord`/`u_resolution`,
-  never from a panel-local UV -- panel selection is now a `noiseID` uniform instead of a
+  never from a panel-local UV - panel selection is now a `noiseID` uniform instead of a
   computed grid `id`, but the coordinate FEEDING every noise function is still the single
   continuous per-pixel screen position it always was. That's what actually avoided the seam
   bug (see SECOND REVISION above); switching to one draw call per panel doesn't reintroduce it
   as long as this stays true, so don't "simplify" it back to a per-quad local UV.
-- Panel boundaries are no longer a shader-side `margin`/`inMargin` fraction -- each quad's own
+- Panel boundaries are no longer a shader-side `margin`/`inMargin` fraction - each quad's own
   vertex positions are inset by PANEL_GAP directly, so the gap is real geometry, and the
   fragment shader no longer needs to know where panel edges are at all.
 
@@ -60,39 +60,39 @@ is a fixed orthographic front-on view (see __main__) sized to frame the whole 6x
 -- no osgGA manipulator is attached, so nothing fights that. Both the visible camera and
 osgx's pick camera read vertex positions through the standard
 `osg_ModelViewProjectionMatrix * osg_Vertex` pipeline (see VERTEX_SHADER below), matching
-osgx's own pick-camera shader (osgx/Picking.hpp) -- unlike the ORIGINAL/SECOND-REVISION vertex
+osgx's own pick-camera shader (osgx/Picking.hpp) - unlike the ORIGINAL/SECOND-REVISION vertex
 shader, which wrote clip-space positions directly and ignored the camera entirely (fine when
 there was nothing to pick).
 
-ARCHITECTURE, FOURTH REVISION: the noise domain is world-space now -- `vPos`, a vertex-shader
-`out vec2` of the quad's own `osg_Vertex.xy` -- instead of `gl_FragCoord`/`u_resolution`. Both
+ARCHITECTURE, FOURTH REVISION: the noise domain is world-space now - `vPos`, a vertex-shader
+`out vec2` of the quad's own `osg_Vertex.xy` - instead of `gl_FragCoord`/`u_resolution`. Both
 `u_resolution` and a short-lived `u_viewportOrigin` (added and removed in the same session) are
 gone entirely. The THIRD REVISION's caution above ("don't simplify it back to a per-quad local
 UV") is still correct about what NOT to do, but incomplete about why: `gl_FragCoord` avoided the
 seam bug because it's a single coordinate continuous across the WHOLE visible grid, never reset
-per panel -- but `vPos` has that same property, since each quad occupies its own non-overlapping
+per panel - but `vPos` has that same property, since each quad occupies its own non-overlapping
 slice of world space that nothing renormalizes back to a shared per-quad range. World-space gets
 the "stay globally continuous" property `gl_FragCoord` needed, without `gl_FragCoord`'s actual
 cost: it's screen/window/viewport-dependent, which stopped being free the moment __main__ gave
-the ImGui panel its own dead strip of the window (a real camera viewport offset) -- `gl_FragCoord`
+the ImGui panel its own dead strip of the window (a real camera viewport offset) - `gl_FragCoord`
 needed a manually-tracked origin correction to keep sampling the right region; `vPos` never needed
 to know the viewport existed at all. (`gl_FragCoord` tricks like this are exactly what
-fragcoord.xyz -- this file's original source, see the top of this docstring -- is named for; fun
+fragcoord.xyz - this file's original source, see the top of this docstring - is named for; fun
 shader-golf there, not a requirement here.)
 
-Interactivity (see __main__, NOT build_scene() -- picking/ImGui are viewer-level concerns, kept
+Interactivity (see __main__, NOT build_scene() - picking/ImGui are viewer-level concerns, kept
 out of the same build_scene(w, h) contract pyosg-cli/pyside6-glsl.py rely on, exactly like
 pyosg-hover.py/pyosg-picking.py keep their own create_scene() free of them): continuous 1x1
 sub-frustum hover picking (same shape as pyosg-hover.py) tints whichever panel the mouse is
 over; clicking selects it. An osgx.imgui.Widget panel, docked left, carries one CollapsingHeader
 section per noise type (name matches LEGEND) plus a pinned "Overview" section holding the
 button that clears the selection. Selecting/deselecting a panel opens/closes its section via
-osgx::imgui::Panel::setSectionOpen() -- a small addition to ~/dev/osgx (this build's real
+osgx::imgui::Panel::setSectionOpen() - a small addition to ~/dev/osgx (this build's real
 PYOSG_OSGX_SOURCE_DIR, not the etc/osgx submodule pin; see CLAUDE.md) needed because
 SectionOptions.defaultOpen only ever seeds ImGui's per-label open state the FIRST time that
-label is drawn, with no existing way to force it again afterward -- see that file's own comment
+label is drawn, with no existing way to force it again afterward - see that file's own comment
 on setSectionOpen() for the full rationale. Requires a rebuild before it takes effect. Each
-section's own content is a placeholder for now -- real per-noise controls are next session's
+section's own content is a placeholder for now - real per-noise controls are next session's
 work, not this one's.
 
 Run standalone:
@@ -130,17 +130,17 @@ GRID_ROWS = 4
 HALF_W = GRID_COLS / 2.0
 HALF_H = GRID_ROWS / 2.0
 
-# Gap between adjacent panels, in the same world units -- real geometry now, replacing the
+# Gap between adjacent panels, in the same world units - real geometry now, replacing the
 # shader-side `margin`/`inMargin` fraction the SECOND REVISION used (see docstring above).
 PANEL_GAP = 0.03
 
-# Pixel width of the docked ImGui panel (see configure_viewer()) -- carved OUT of whatever window
+# Pixel width of the docked ImGui panel (see configure_viewer()) - carved OUT of whatever window
 # width the viewer actually has, not added on top of it, so this works identically whether the
 # window came from this file's own __main__ or the shared runner's --width/--height (which knows
 # nothing about this file's ImGui panel and can't be asked to grow the window for it).
 PANEL_WIDTH = 280
 
-# Full 1x1 world-space cell for a given noiseID, WITHOUT the PANEL_GAP inset -- build_scene()
+# Full 1x1 world-space cell for a given noiseID, WITHOUT the PANEL_GAP inset - build_scene()
 # insets this itself for the quad's actual vertices; inspect mode (see __main__) uses the
 # un-inset cell directly so the zoomed-in view fills the frame edge-to-edge instead of showing
 # the gap border meant for the overview grid.
@@ -188,10 +188,10 @@ in vec4 osg_Vertex;
 uniform mat4 osg_ModelViewProjectionMatrix;
 
 // World-space position (no per-object model matrix here, so object space IS world space --
-// see build_scene()) -- FRAGMENT_SHADER_NOISE's noise domain is keyed on this, NOT gl_FragCoord.
+// see build_scene()) - FRAGMENT_SHADER_NOISE's noise domain is keyed on this, NOT gl_FragCoord.
 // Globally continuous across the whole grid exactly like gl_FragCoord was (each quad occupies
 // its own non-overlapping world-space slice, never independently renormalized), so it avoids
-// the SECOND REVISION's seam bug the same way -- but unlike gl_FragCoord, it's derived from
+// the SECOND REVISION's seam bug the same way - but unlike gl_FragCoord, it's derived from
 // object data instead of the window/viewport, so the noise genuinely doesn't depend on the view.
 out vec2 vPos;
 
@@ -209,7 +209,7 @@ uniform int noiseID;
 uniform float tint;
 out vec4 fragColor;
 
-// Global panel -- one set of uniforms, all read at a single choke point (main(), before
+// Global panel - one set of uniforms, all read at a single choke point (main(), before
 // noiseID picks a function, and the fbm12 macro below) so every panel reacts identically
 // without touching 24 separate noiseID branches. Defaults live in build_scene() (see its own
 // comment) so this shader still renders correctly standalone, with no ImGui panel attached.
@@ -318,7 +318,7 @@ float simplex12(vec2 p) {
 
 // jitter=1.0 is the standard/original behavior (cell points fully randomized within their cell);
 // jitter=0.0 puts every point exactly at its cell corner, degenerating to a perfectly regular
-// square grid -- a real signature change (unlike Wavelet's scale/phase, which were already real
+// square grid - a real signature change (unlike Wavelet's scale/phase, which were already real
 // arguments), since the original had no notion of a tunable jitter at all. See worley12_helper()
 // below for why this doesn't just take a uniform directly.
 float worley12(vec2 p, float jitter) {
@@ -727,7 +727,7 @@ vec4 worley13d(vec3 p) {
 
 /////////// Visualization Helpers ///////////
 // Octaves/lacunarity/gain read the Global uniforms directly (in scope from the shader's own
-// top-level declarations, not macro parameters) -- every noiseID branch below that goes
+// top-level declarations, not macro parameters) - every noiseID branch below that goes
 // through this ONE macro (value/perlin/simplex/worley/crater/gabor/wavelet fbm) gets Global's
 // octaves/lacunarity/gain for free, with no per-noise-family plumbing.
 #define fbm12(uv, noise_fn) do {\
@@ -780,27 +780,27 @@ float worley12_helper(vec2 p) {
 }
 
 // NOISE_SCALE became the Global u_scale uniform (see build_scene() for its default). LATTICE_SCALE
-// stays a fixed const on purpose -- blue/Hilbert-blue/IGN are canonically PIXEL-grid dither
+// stays a fixed const on purpose - blue/Hilbert-blue/IGN are canonically PIXEL-grid dither
 // patterns needing a fine integer lattice regardless of whatever "world zoom" u_scale is set to,
-// not the same coarse scale as everything else -- so it deliberately does NOT read u_scale.
+// not the same coarse scale as everything else - so it deliberately does NOT read u_scale.
 const float LATTICE_SCALE = 100.0;
 
 void main() {
 	vec3 c = vec3(0);
 
 	// vPos is world-space and globally continuous across the whole grid (see VERTEX_SHADER's
-	// own comment) -- this is what actually avoids the SECOND REVISION's seam bug, not
+	// own comment) - this is what actually avoids the SECOND REVISION's seam bug, not
 	// gl_FragCoord specifically. The noise no longer depends on the window, viewport, or
 	// resolution at all.
 	vec2 p = vPos * u_scale;
 	vec2 lattice = vPos * LATTICE_SCALE;
 
-	// Global animate/warp -- same one-choke-point shape as u_scale above: every panel (not just
+	// Global animate/warp - same one-choke-point shape as u_scale above: every panel (not just
 	// the fbm ones) reacts identically, because this runs before noiseID picks a function.
 	// animSpeed scrolls the domain; warp reuses curl22() (already defined above, itself built on
 	// perlin12) as a generic, noise-agnostic distortion field. Both default to 0 in build_scene()
 	// (no motion/warp), so this is a no-op contribution until the Global ImGui section changes
-	// them -- no separate enable toggle needed.
+	// them - no separate enable toggle needed.
 	p += u_time * u_animSpeed;
 	p += curl22(p) * u_warp;
 
@@ -829,14 +829,14 @@ void main() {
 	else if (noiseID == 22) { c.rgb += wool12(p); }
 	else if (noiseID == 23) { c.rgb += golden_ign12(floor(lattice)); }
 
-	// Hover feedback (see __main__'s onEnter/onLeave) -- a flat red tint, nothing fancier.
+	// Hover feedback (see __main__'s onEnter/onLeave) - a flat red tint, nothing fancier.
 	c = mix(c, vec3(1.0, 0.15, 0.15), tint * 0.35);
 
 	fragColor = vec4(c, 1);
 }
 """
 
-# Global/per-noise uniform defaults -- kept as dicts, not inline literals, so build_scene()'s
+# Global/per-noise uniform defaults - kept as dicts, not inline literals, so build_scene()'s
 # initial values and the Reset buttons (see __main__) share exactly one source of truth instead
 # of two copies of the same magic numbers drifting apart. Values match the ORIGINAL hardcoded
 # shader constants (NOISE_SCALE=3.0, fbm12's old octaves=6/gain=0.5/lacunarity=2.0,
@@ -850,11 +850,11 @@ GLOBAL_DEFAULTS = {
 	"u_animSpeed": 0.0,
 }
 
-# Per-family DEFAULTS + PARAMS live together -- DEFAULTS feeds both build_scene()'s initial
+# Per-family DEFAULTS + PARAMS live together - DEFAULTS feeds both build_scene()'s initial
 # uniform values and __main__'s Reset buttons; PARAMS (uniform name, ImGui label, lo, hi) is the
 # ImGui-only half, consumed by make_param_section() in __main__ to build the whole slider-block+
 # Reset draw function from data instead of a hand-written function per family. Labels carry their
-# own `##scope` suffix (see feedback_osgx_imgui_python_api in memory -- no automatic per-section
+# own `##scope` suffix (see feedback_osgx_imgui_python_api in memory - no automatic per-section
 # ID scoping) so a future family reusing a common word like "Scale" can't collide with this one.
 WAVELET_DEFAULTS = {
 	"u_waveletScale": 1.24,
@@ -872,14 +872,14 @@ WORLEY_PARAMS = [
 	("u_worleyJitter", "Jitter##worley", 0.0, 1.0),
 ]
 
-# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+# The real pipeline-assembly entrypoint - returns the root Node, no viewer/window side effects.
 # See examples/pyosg-blur.py's own build_scene() for the convention; ../pyosg-cli and
-# etc/pyside6-glsl.py both import and call this directly, always as build_scene(w, h) -- w/h are
+# etc/pyside6-glsl.py both import and call this directly, always as build_scene(w, h) - w/h are
 # kept as parameters to match that contract even though the body no longer uses them (the noise
 # domain is world-space now, not screen-resolution-dependent; see FRAGMENT_SHADER_NOISE/
 # VERTEX_SHADER). Picking is set up here too (see below), but ImGui/camera/manipulator are
 # viewer-level concerns and live only in configure_viewer() (see this file's own "ARCHITECTURE,
-# THIRD REVISION" docstring section) -- same build_scene()/configure_viewer() split as
+# THIRD REVISION" docstring section) - same build_scene()/configure_viewer() split as
 # pyosg-picking.py. Returns a Group of [pick_cam, grid]; grid is 24 plain Geodes (children[i] ==
 # noiseID i, pickID i + 1), each carrying its own noiseID/tint/pickID uniforms on top of the ONE
 # shared Program.
@@ -894,10 +894,10 @@ def build_scene(w, h):
 	grid.stateSet.attributes.append(program)
 	grid.stateSet.uniforms["u_time"] = 0.0
 
-	# Global/per-noise panel defaults -- set here, not just in configure_viewer()'s ImGui wiring,
+	# Global/per-noise panel defaults - set here, not just in configure_viewer()'s ImGui wiring,
 	# so this shader renders correctly standalone (../pyosg-cli, etc/pyside6-glsl.py both call
 	# build_scene(w, h) directly with no ImGui panel attached at all). See GLOBAL_DEFAULTS/
-	# WAVELET_DEFAULTS above -- shared with the Reset buttons in configure_viewer().
+	# WAVELET_DEFAULTS above - shared with the Reset buttons in configure_viewer().
 	for _name, _value in GLOBAL_DEFAULTS.items():
 		grid.stateSet.uniforms[_name] = _value
 
@@ -942,11 +942,11 @@ def build_scene(w, h):
 	# Picking: same 1x1 continuous sub-frustum shape as pyosg-hover.py, so hover tinting is
 	# always-on at zero per-frame GPU cost; PickHandler(rb, True) (configure_viewer()) additionally
 	# lets a left-click resolve against whatever's currently hovered (see osgx/Picking.hpp's
-	# PickHandler doc). w/h here are the pixel dimensions of the 3D viewport specifically -- the
+	# PickHandler doc). w/h here are the pixel dimensions of the 3D viewport specifically - the
 	# PANEL_WIDTH-wide ImGui dock is carved OUT of whatever window size the caller passes (see
 	# PANEL_WIDTH above), so it's excluded here too, matching the viewport configure_viewer()
 	# actually sets up. rb is stashed as pick_cam's updateCallback purely so configure_viewer()
-	# can recover it back out of the returned root -- build_scene()'s contract is "return a Node",
+	# can recover it back out of the returned root - build_scene()'s contract is "return a Node",
 	# no second channel to hand back a plain Python object it also needs later (same convention as
 	# pyosg-picking.py's build_scene()).
 	pick_w = max(w - PANEL_WIDTH, 1)
@@ -976,7 +976,7 @@ def build_scene(w, h):
 
 # Everything above is buildable without a Viewer. Picking's live half (PickCameraSync, which
 # needs viewer.camera), the fixed ortho camera/manipulator, ImGui, and the per-frame u_time/
-# inspect-camera update are all viewer-level concerns and configure_viewer()'s job -- same
+# inspect-camera update are all viewer-level concerns and configure_viewer()'s job - same
 # build_scene()/configure_viewer() split as pyosg-picking.py. rb is recovered from pick_cam's
 # updateCallback, which build_scene() stashed it in purely to hand it back out through the
 # returned root (build_scene()'s contract is "return a Node", no second channel).
@@ -986,21 +986,21 @@ def configure_viewer(viewer, root):
 	quads = list(grid.children)
 	selected = [0]
 
-	# Master animation toggle -- freezes u_time itself (see the update callback below) instead of
+	# Master animation toggle - freezes u_time itself (see the update callback below) instead of
 	# gating individual shader effects, so it silences EVERY time-based source at once: the
 	# Global "Animate Speed" domain scroll AND Wavelet's own phase animation (wavelet12_helper
-	# reads u_time directly, independent of Global's u_animSpeed -- freezing u_time is the only
+	# reads u_time directly, independent of Global's u_animSpeed - freezing u_time is the only
 	# single point that covers both without threading a second uniform through wavelet12_helper).
 	# Starts OFF: time-based motion makes it hard to tell whether a slider actually changed
 	# anything else while live-tuning.
 	animate_enabled = [False]
 
 	# --- Inspect mode: two states, "grid" (pick_id 0, full 6x4 framing) and "inspect" (a single
-	# panel's cell filling the frame) -- toggled by select() below. No new geometry/camera/shader:
+	# panel's cell filling the frame) - toggled by select() below. No new geometry/camera/shader:
 	# since the master camera's viewMatrix looks straight down -z with no x/y rotation (see
 	# lookAt() below), an asymmetric ortho(l, r, b, t) directly reframes whatever world-space rect
 	# we want, and FRAGMENT_SHADER_NOISE's vPos domain just shows more/less of itself as the
-	# bounds shrink/grow -- same reasoning as this file's own "stay flat" design notes. -- #
+	# bounds shrink/grow - same reasoning as this file's own "stay flat" design notes. - #
 	INSPECT_MARGIN = 0.08
 	INSPECT_SECONDS = 0.3
 	FULL_BOUNDS = (-HALF_W, HALF_W, -HALF_H, HALF_H)
@@ -1024,13 +1024,13 @@ def configure_viewer(viewer, root):
 		return tuple(a + (b - a) * t for a, b in zip(view_state["from"], view_state["to"]))
 
 	# Aspect-corrects a world-space (l, r, b, top) rect against the 3D viewport's actual pixel
-	# aspect (vp_aspect, set up below) before it becomes an ortho() matrix -- otherwise every
+	# aspect (vp_aspect, set up below) before it becomes an ortho() matrix - otherwise every
 	# panel/cell renders stretched by however far the viewport's aspect happens to differ from
 	# the content's (see PANEL_WIDTH's own comment: the viewport is whatever's left after the
 	# ImGui dock, essentially never a clean 1.5:1 or 1:1 match). `cover=False` (grid/overview,
 	# FULL_BOUNDS) grows the shorter axis to add a touch of letterbox margin rather than crop a
 	# column/row off-screen; `cover=True` (a single zoomed-in panel) shrinks the longer axis
-	# instead, cropping a sliver of the panel rather than adding a margin -- see this file's own
+	# instead, cropping a sliver of the panel rather than adding a margin - see this file's own
 	# aspect-ratio fix history for why: a letterboxed single panel looked worse than a lightly
 	# cropped one, but cropping whole grid columns/rows would be a real regression.
 	def fit_bounds(l, r, b, top, cover):
@@ -1056,38 +1056,38 @@ def configure_viewer(viewer, root):
 	rb.onEnter = on_enter
 	rb.onLeave = on_leave
 
-	# Realize BEFORE setting the camera's own view/projection, not after -- confirmed live
+	# Realize BEFORE setting the camera's own view/projection, not after - confirmed live
 	# (aipython REPL, 2026-08-22) that OSG's Camera::ProjectionResizePolicy machinery latches
 	# its "reference" viewport size the first time realize() establishes a real one. Setting a
 	# custom projection matrix before that point (the mistake this file had) gets its horizontal
 	# extent silently zeroed out on the very next frame() (vertical extent, set via the same
-	# ortho() call, is untouched -- HORIZONTAL is the resize policy's default). Setting it after
+	# ortho() call, is untouched - HORIZONTAL is the resize policy's default). Setting it after
 	# realize() is completely stable. Safe to call again here even under the shared runner, which
 	# already realized the window via setUpViewInWindow() before calling build_scene()/
-	# configure_viewer() -- same pattern pyosg-info.py's configure_viewer() uses. projectionMatrix
-	# itself is no longer set here -- inspect mode (see view_bounds()/current_bounds() below) owns
+	# configure_viewer() - same pattern pyosg-info.py's configure_viewer() uses. projectionMatrix
+	# itself is no longer set here - inspect mode (see view_bounds()/current_bounds() below) owns
 	# it every frame from here on, and the first frame() call still happens after this point, so
 	# the ordering constraint above still holds.
 	viewer.realize()
 
-	# No osgGA manipulator -- there's nothing 3D here to orbit around, and a manipulator would
+	# No osgGA manipulator - there's nothing 3D here to orbit around, and a manipulator would
 	# fight the fixed lookAt/ortho camera below. The shared runner (OpenSceneGraph/examples/
 	# __main__.py) unconditionally installs a TrackballManipulator before calling build_scene()/
 	# configure_viewer(), so this MUST be cleared here, not just left unset, or it silently
-	# overwrites viewMatrix every frame -- same fix as pyosg-khronos-viewer.py's --camera handling.
+	# overwrites viewMatrix every frame - same fix as pyosg-khronos-viewer.py's --camera handling.
 	viewer.cameraManipulator = None
 
 	viewer.camera.viewMatrix = osg.Matrix.lookAt(osg.Vec3(0, 0, 10), osg.Vec3(0, 0, 0), osg.Vec3(0, 1, 0))
 	viewer.camera.clearColor = osg.Vec4(0, 0, 0, 1)
 
-	# Confine the 3D camera to the strip right of the panel, instead of the whole window -- the
+	# Confine the 3D camera to the strip right of the panel, instead of the whole window - the
 	# panel's own dock sits in the untouched strip to its left, so the two no longer fight over
 	# the same pixels. Derived from the REAL post-realize window size (not a hardcoded literal),
 	# so this works whether the window came from this file's own __main__ or the shared runner's
 	# --width/--height, neither of which know about PANEL_WIDTH (see PANEL_WIDTH's own comment
-	# above) -- must agree with build_scene()'s own pick_w computation, which assumes its w/h
+	# above) - must agree with build_scene()'s own pick_w computation, which assumes its w/h
 	# argument IS this window's real eventual size. The noise domain is world-space now (see
-	# VERTEX_SHADER/FRAGMENT_SHADER_NOISE), so it doesn't care where the viewport sits -- but
+	# VERTEX_SHADER/FRAGMENT_SHADER_NOISE), so it doesn't care where the viewport sits - but
 	# picking still does: PickHandler's mouse coordinates are window-absolute while
 	# PickCameraSync's sub-frustum math (both set up below) treats them as viewport-local, so
 	# hover/click targeting is currently off by PANEL_WIDTH pixels in X. Not yet fixed.
@@ -1103,7 +1103,7 @@ def configure_viewer(viewer, root):
 
 	viewer.camera.viewport = osg.Viewport(PANEL_WIDTH, 0, pick_w, pick_h)
 
-	# All 24 quads sit exactly at z=0 -- a perfectly flat, zero-depth scene. OSG's default
+	# All 24 quads sit exactly at z=0 - a perfectly flat, zero-depth scene. OSG's default
 	# COMPUTE_NEAR_FAR_USING_BOUNDING_VOLUME recomputes near/far from the scene bounds every
 	# frame during cull; harmless for this exact flat layout (the computed range still contains
 	# the geometry) but fragile in general for a zero-thickness bounding volume, and needless
@@ -1142,10 +1142,10 @@ def configure_viewer(viewer, root):
 	rb.onPick = on_pick
 
 	# Right-click anywhere in the 3D viewport is a shortcut for the "Overview##select" button
-	# (select(0)) -- osgx's PickHandler only ever reacts to LEFT_MOUSE_BUTTON (see its
+	# (select(0)) - osgx's PickHandler only ever reacts to LEFT_MOUSE_BUTTON (see its
 	# own handle()), so this doesn't touch/compete with it at all; plain right-click detection is
 	# all a standalone osgGA.GUIEventHandler needs. `ea.handled` is checked for the same reason
-	# every other handler in this file's chain checks it now (see aipython/09-picking.md) -- a
+	# every other handler in this file's chain checks it now (see aipython/09-picking.md) - a
 	# right-click meant for an ImGui widget shouldn't ALSO trigger this.
 	class OverviewShortcut(osgGA.GUIEventHandler):
 		def handle(self, ea, aa):
@@ -1162,13 +1162,13 @@ def configure_viewer(viewer, root):
 
 	# --- ImGui panel: docked left, one CollapsingHeader section per noise type plus a pinned
 	# "Overview" section holding the button that clears the selection. Selecting/deselecting a
-	# panel forces its section open/closed via setSectionOpen() -- see this file's own docstring
-	# for why that needed a small osgx addition rather than SectionOptions.default_open alone. -- #
+	# panel forces its section open/closed via setSectionOpen() - see this file's own docstring
+	# for why that needed a small osgx addition rather than SectionOptions.default_open alone. - #
 	gui_opts = osgx.imgui.Options()
 	gui_opts.dock = osgx.imgui.Dock.LEFT
 	gui_opts.dock_width = float(PANEL_WIDTH)
 
-	# No explicit draw_camera -- unlike 11-sketchfab.py, pick_cam renders into its own 1x1 FBO,
+	# No explicit draw_camera - unlike 11-sketchfab.py, pick_cam renders into its own 1x1 FBO,
 	# never the default framebuffer, so there's no downstream POST_RENDER camera to conflict
 	# with ImGui's own PostDrawCallback on the master camera; the default guess is enough here.
 	gui = osgx.imgui.Widget(viewer, options=gui_opts)
@@ -1181,10 +1181,10 @@ def configure_viewer(viewer, root):
 
 		# ##select is load-bearing, not decoration: this section's own CollapsingHeader is ALSO
 		# labeled "Overview" (see gui.addSection() below), and a plain (non-expand) section's fn()
-		# runs with zero ImGui::PushID scoping (osgx's own Widget::render) -- a control reusing
+		# runs with zero ImGui::PushID scoping (osgx's own Widget::render) - a control reusing
 		# the section's exact label text hashes to the SAME ImGui ID as the header and fights it
 		# for click state (see feedback_imgui_section_label_collision in memory; this is that bug,
-		# not a hypothetical one -- it's why this button wasn't reliably returning to grid view).
+		# not a hypothetical one - it's why this button wasn't reliably returning to grid view).
 		if osgx.imgui.button("Overview##select"):
 			select(0)
 
@@ -1192,15 +1192,15 @@ def configure_viewer(viewer, root):
 			for name, value in GLOBAL_DEFAULTS.items():
 				grid.stateSet.uniforms[name] = value
 
-	# Forced open every frame (never toggled off) -- this section IS the "Overview" button, so
+	# Forced open every frame (never toggled off) - this section IS the "Overview" button, so
 	# it has no reason to ever collapse.
 	gui.addSection("Overview", draw_overview, osgx.imgui.SectionOptions(default_open=True))
 	gui.setSectionOpen("Overview", True)
 
-	# Global panel -- one set of uniforms every noiseID branch reads from a single choke point
+	# Global panel - one set of uniforms every noiseID branch reads from a single choke point
 	# in FRAGMENT_SHADER_NOISE (scale/octaves/lacunarity/gain feed the fbm12 macro; warp/animate
 	# apply to the domain before noiseID even picks a function), so this section stays pinned
-	# open like Overview instead of being tied to panel selection -- it's relevant regardless of
+	# open like Overview instead of being tied to panel selection - it's relevant regardless of
 	# what's selected. `##global` suffixes avoid label collisions with future per-noise sections
 	# that might want their own "Scale"-named control (see osgx.imgui's own section/label
 	# collision gotcha).
@@ -1230,7 +1230,7 @@ def configure_viewer(viewer, root):
 
 		osgx.imgui.separator()
 
-		# Master toggle -- freezes u_time in the update callback below (see animate_enabled's own
+		# Master toggle - freezes u_time in the update callback below (see animate_enabled's own
 		# comment above); distinct label from "Animate Speed" below on purpose, not just an ID
 		# suffix, since a checkbox and a slider both meaning slightly different things but both
 		# named bare "Animate" would be genuinely confusing, not just an ID collision risk.
@@ -1245,9 +1245,9 @@ def configure_viewer(viewer, root):
 	gui.addSection("Global", draw_global_knobs, osgx.imgui.SectionOptions(default_open=True))
 	gui.setSectionOpen("Global", True)
 
-	# Per-noise sections -- still placeholders except the families with real PARAMS/DEFAULTS
+	# Per-noise sections - still placeholders except the families with real PARAMS/DEFAULTS
 	# above (Wavelet, Worley). make_param_section() builds a whole slider-block+Reset draw
-	# function from a family's PARAMS/DEFAULTS alone -- adding the next family's controls (e.g.
+	# function from a family's PARAMS/DEFAULTS alone - adding the next family's controls (e.g.
 	# Scratches) is a PARAMS list + a CUSTOM_SECTIONS entry, not a new hand-written function.
 	def make_noise_section(name):
 		def draw(ri):
@@ -1273,7 +1273,7 @@ def configure_viewer(viewer, root):
 	worley_knobs = make_param_section(WORLEY_DEFAULTS, WORLEY_PARAMS, "worley")
 	wavelet_knobs = make_param_section(WAVELET_DEFAULTS, WAVELET_PARAMS, "wavelet")
 
-	# Dict, not an if/elif chain -- scales cleanly as more noise families get real sections
+	# Dict, not an if/elif chain - scales cleanly as more noise families get real sections
 	# instead of the placeholder. Both entries per family share the SAME draw function (one
 	# make_param_section() call, not two) since raw/fbm read the exact same uniform(s) and
 	# should look identical either way.
@@ -1289,14 +1289,14 @@ def configure_viewer(viewer, root):
 
 		gui.addSection(name, draw, osgx.imgui.SectionOptions(default_open=False))
 
-	# u_time/inspect-camera per-frame update -- an update callback instead of a Python-side loop
+	# u_time/inspect-camera per-frame update - an update callback instead of a Python-side loop
 	# of its own, so this runs correctly under ANY frame-loop driver (the shared runner's generic
 	# `while not viewer.done: viewer.frame()`, this file's own __main__ below, or a future
-	# Qt-embedded host) instead of depending on one of its own -- same "OSG already provides a
+	# Qt-embedded host) instead of depending on one of its own - same "OSG already provides a
 	# per-frame hook" idea as pyosg-fragcoordxyz.py's TimeUpdateCallback. Attached to the master
 	# camera itself (not the scene graph) purely so `node` below IS viewer.camera, letting this
 	# set projectionMatrix directly with no extra viewer reference to close over. elapsed/
-	# last_time is a running accumulator, not a plain `now - t` epoch delta -- accumulating only
+	# last_time is a running accumulator, not a plain `now - t` epoch delta - accumulating only
 	# while animate_enabled[0] is true means u_time genuinely freezes in place while paused and
 	# resumes from exactly where it left off, instead of jumping forward by however long the
 	# pause lasted the moment it's re-enabled.

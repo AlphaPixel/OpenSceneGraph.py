@@ -8,7 +8,7 @@
 #   2. Accumulate those samples into a persistent history texture.
 #   3. Reset history when the user moves the camera.
 #
-# A still view therefore converges over 16 frames to a smoother image -- though at the
+# A still view therefore converges over 16 frames to a smoother image - though at the
 # default 1px jitter that smoothing is genuinely sub-pixel and easy to miss by eye at
 # normal viewing distance; see modes 3/4 below to make it obvious. During camera
 # interaction it starts over; it does NOT drag stale pixels across the screen and call
@@ -16,12 +16,12 @@
 #
 # Two possible later layers are intentionally out of scope here:
 #
-#   Layer 2 -- camera-motion reprojection
+#   Layer 2 - camera-motion reprojection
 #     Reconstruct each current pixel from depth, project it through last frame's
 #     view/projection matrix, and sample history at that previous screen position.
 #     Add neighborhood clamping/depth rejection to limit ghosting and disocclusion.
 #
-#   Layer 3 -- independently moving/deforming objects
+#   Layer 3 - independently moving/deforming objects
 #     Add a velocity MRT and retain previous model (and, for skinned meshes, bone)
 #     transforms. This makes temporal state part of the scene/animation system,
 #     rather than merely a fullscreen post-process.
@@ -35,14 +35,14 @@
 # Keys:
 #   0 = accumulated TAA (default)
 #   1 = current jittered frame (no accumulation)
-#   2 = current jittered frame, 12x jitter -- shows the raw per-frame sampling pattern
-#   3 = accumulated TAA, 12x jitter -- exaggerates the blend itself, since the real 1px
+#   2 = current jittered frame, 12x jitter - shows the raw per-frame sampling pattern
+#   3 = accumulated TAA, 12x jitter - exaggerates the blend itself, since the real 1px
 #       jitter's smoothing is too subtle at normal viewing distance to eyeball directly
-#   4 = |current - history| x20, at the REAL 1px jitter -- proves the unexaggerated
+#   4 = |current - history| x20, at the REAL 1px jitter - proves the unexaggerated
 #       algorithm is doing something and shows exactly which pixels (edges) it touches
 #   R = reset history
 #
-# An optional model path (argv[1]) replaces the default primitives -- see create_scene(). The
+# An optional model path (argv[1]) replaces the default primitives - see create_scene(). The
 # G-buffer shader only reads osg_Color though (same limitation as pyosg-mrt.py), so a textured
 # model (most glTF assets) will render flat/untextured; fine for judging edges, not looks.
 
@@ -50,7 +50,7 @@ import sys
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import label, window_size
 
 from OpenSceneGraph import *
@@ -141,7 +141,7 @@ void main() { fragColor = texture(displayTex, uv); }
 """
 
 # Diagnostic only: |current - history|, scaled way up. Unlike mode 2's 12x jitter, this
-# uses the REAL default 1px jitter -- it exaggerates the OUTPUT instead of the input, to
+# uses the REAL default 1px jitter - it exaggerates the OUTPUT instead of the input, to
 # prove the unexaggerated algorithm is doing something and show exactly which pixels
 # (edges) it's touching.
 DIFF_FRAGMENT = """
@@ -310,7 +310,7 @@ def halton(index, base):
 class Controls(osgGA.GUIEventHandler):
 	"""Drives the whole TAA state machine (jitter/history-swap/weight-ramp) off the
 	FRAME event, which osgGA dispatches to every registered handler once per
-	viewer.frame() call -- this is what lets a plain `while not viewer.done:
+	viewer.frame() call - this is what lets a plain `while not viewer.done:
 	viewer.frame()` loop (runner-driven or standalone) work here at all, instead of
 	requiring pyosg_repl.repl() to drive the loop itself and call back in
 	(the original shape this file had, before build_scene()/configure_viewer())."""
@@ -349,12 +349,12 @@ class Controls(osgGA.GUIEventHandler):
 		}
 
 		# The FIRST FRAME event must render with THIS prepared state, not an already-advanced
-		# one -- see the FRAME branch in handle() below.
+		# one - see the FRAME branch in handle() below.
 		self._primed = False
 
 		# Safety net for TrackballManipulator's inertial "throw": once released with velocity,
 		# StandardManipulator::handleFrame() keeps calling performMovement() every FRAME purely
-		# internally (_thrown), with NO further PUSH/DRAG/RELEASE/SCROLL events -- so the discrete
+		# internally (_thrown), with NO further PUSH/DRAG/RELEASE/SCROLL events - so the discrete
 		# event listeners in handle() below literally cannot see that motion. Diffing the live
 		# manipulator matrix each frame catches it (and anything else event-based detection misses).
 		self._last_matrix = manipulator.matrix
@@ -386,7 +386,7 @@ class Controls(osgGA.GUIEventHandler):
 		# This camera is RELATIVE_RF: its projection matrix is composed (child first) with the
 		# viewer camera's real projection during cull traversal, i.e. v_clip = v_eye * J * P_real.
 		# A plain translate() here (the original, WRONG version of this) puts the offset in the
-		# translation row, shifting v_eye in EYE SPACE -- after the perspective divide that turns
+		# translation row, shifting v_eye in EYE SPACE - after the perspective divide that turns
 		# into an NDC shift of translate/(-z_eye), i.e. DEPTH-DEPENDENT: it grows the closer a
 		# vertex is to the camera, which is exactly why zooming in close made mode 0 visibly swim.
 		# Placing the offset in row 2 (the row that scales z_eye) instead exploits clip.w = -z_eye
@@ -454,7 +454,7 @@ class Controls(osgGA.GUIEventHandler):
 				self.state["reset_reason"] = "camera motion (untracked)"
 			self._last_matrix = current_matrix
 
-			# __init__ already prepared frame 0 -- only ADVANCE (bump sample, swap
+			# __init__ already prepared frame 0 - only ADVANCE (bump sample, swap
 			# history buffers) for every frame after that.
 			if self._primed:
 				self.advance()
@@ -508,7 +508,7 @@ class Controls(osgGA.GUIEventHandler):
 		return True
 
 
-# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+# The real pipeline-assembly entrypoint - returns the root Node, no viewer/window side effects.
 # The nine RTT/display cameras are appended to root.children in a fixed order (gbuffer, shade,
 # resolve_ab, resolve_ba, display_current, display_a, display_b, diff_a, diff_b); configure_viewer()
 # unpacks them back out in that same order, the same "recover state from the graph instead of a

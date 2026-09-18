@@ -1,39 +1,39 @@
 #!/usr/bin/env python3
 
-# Step 11 -- Sketchfab-parity capstone: deferred G-buffer + SSAO/bloom/tonemap post-fx chain
+# Step 11 - Sketchfab-parity capstone: deferred G-buffer + SSAO/bloom/tonemap post-fx chain
 #
 # This step used to hand-build its OWN deferred G-buffer + composite lighting pass (the same PBR/
-# IBL/shadow math 09-ibl.py's single-pass shader had, just split across two passes) -- osgx's
+# IBL/shadow math 09-ibl.py's single-pass shader had, just split across two passes) - osgx's
 # header for PBRIBLGBuffer.create()/PBRIBLLightingScene.create() says outright that split was
 # "hand-built and validated pixel-for-pixel against Sketchfab's own renderer" against THIS file,
 # so re-deriving it by hand a second time here would just be re-teaching a solved problem. This
 # step pivots the G-buffer + lighting-pass math to those two calls, exactly like 09/10 pivoted the
-# single-pass shader to PBRIBLScene.create() -- everything downstream of the lighting pass (bloom,
+# single-pass shader to PBRIBLScene.create() - everything downstream of the lighting pass (bloom,
 # the tonemap-comparison/post-fx final pass) stays 100% hand-rolled Python, since osgx deliberately
 # does NOT standardize bloom generation (too taste-dependent) and this step's whole teaching point
 # is comparing tonemap curves live, which doesn't fit the (link-time-only) osgx_Tonemap() hook. SSAO
 # itself is a SECOND, smaller pivot (2026-08-21, after osgx.SSAO shipped, ported straight
-# from this file's own proven-live hand-rolled version) -- no longer hand-rolled Python either, see
+# from this file's own proven-live hand-rolled version) - no longer hand-rolled Python either, see
 # the "--- SSAO ---" section below and PBRIBLLightingPassOptions.aoTexture's own doc comment.
 #
 # Real, human-visible tradeoffs from this pivot, called out up front rather than discovered later:
 # - The 0-9 raw-channel/lighting-term debug views are gone, replaced by a smaller 0-6 set (see
 #   "Visualize Mode" below). PBRIBLLightingScene.create()'s own diagnostics option exists but isn't
 #   wired up to anything in its shader yet (a real osgx gap, not something this file works around
-#   by hand-rolling a second lighting shader) -- direct-only/IBL-only/shadow-only isolation would
+#   by hand-rolling a second lighting shader) - direct-only/IBL-only/shadow-only isolation would
 #   need that ported first. What's left (albedo/normal/material/emissive/depth/AO) is exactly what
 #   a raw texture blit CAN show without any new shader math.
-# - --msaa and the "Debug Tint (red)" shadow-strength aid are both gone -- PBRIBLGBuffer.create()
+# - --msaa and the "Debug Tint (red)" shadow-strength aid are both gone - PBRIBLGBuffer.create()
 #   doesn't expose a G-buffer MSAA knob, and there's no hook to tint the shared lighting shader's
 #   output. The room/grid backdrop is a much clearer way to judge shadow softness/strength anyway.
 # - The light rig is a single directional key light via osgx.LightSet (unchanged from what
-#   this file already simplified to on 2026-07-11 -- fill lights were dropped THEN, not by this
+#   this file already simplified to on 2026-07-11 - fill lights were dropped THEN, not by this
 #   pivot). It's now interactively draggable via the SAME ShadowMap.reposition()
 #   this session's osgx-shadow.cpp/osgx-gbuffer.cpp proofs already validated live.
 #
 # Pipeline shape:
 # shadow_map.camera -> gbuffer.camera (MRT: albedo+ao/normal/material/emissive/position) ->
-# ssao.rawCamera -> ssao.blurCamera (osgx.SSAO -- generic hemisphere-kernel SSAO, not
+# ssao.rawCamera -> ssao.blurCamera (osgx.SSAO - generic hemisphere-kernel SSAO, not
 # hand-rolled here anymore, see the "--- SSAO ---" section below) -> lighting.node (re-targeted to
 # PRE_RENDER, writes LINEAR HDR, no tonemap) -> bloom_threshold_cam -> bloom_blur_h_cam ->
 # bloom_blur_v_cam -> final_cam (bloom add, tonemap, gamma, vignette/grain/CA/sharpen/color-balance
@@ -53,7 +53,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size, resolve_model, resolve_asset
 
 from OpenSceneGraph import *
@@ -61,7 +61,7 @@ from OpenSceneGraph.GL import *
 
 import osgx
 
-# Initial light direction only -- interactively draggable from here via the "Light Direction"
+# Initial light direction only - interactively draggable from here via the "Light Direction"
 # ImGui section (LightOrbit below), unlike 08/09/10's fixed key light.
 KEY_LIGHT_DIR = osg.Vec3(0.6, 0.4, -0.6).normalized()
 KEY_LIGHT_COLOR = osg.Vec3(1.0, 0.95, 0.85)
@@ -94,8 +94,8 @@ void main() {
 """
 
 # The grid room writes a complete G-buffer record (NOT PBRIBLGBuffer.create()'s glTF-material
-# shader -- a procedural grid has none of that data) so it shares the model's real depth buffer
-# and receives its shadow, added as an extra child of the geometry pass's own camera -- same
+# shader - a procedural grid has none of that data) so it shares the model's real depth buffer
+# and receives its shadow, added as an extra child of the geometry pass's own camera - same
 # pattern osgx-gbuffer.cpp's own floor addition already proved out. Channel layout matches
 # PBRIBLGBuffer exactly (see PBRIBL.cpp's GBUFFER_FRAGMENT_SHADER_SRC): gAlbedo.a = ambient
 # occlusion (1.0 = none baked in), gMaterial = (roughness, metallic, unused, unused).
@@ -167,7 +167,7 @@ layout(location = 3) out vec4 gEmissive;
 layout(location = 4) out vec4 gPosition;
 
 void main() {
-	gAlbedo = vec4(0.0, 0.0, 0.0, 1.0); // black, unoccluded -- all its color is emissive below
+	gAlbedo = vec4(0.0, 0.0, 0.0, 1.0); // black, unoccluded - all its color is emissive below
 	gNormal = vec4(normalize(vNormal), 0.0);
 	gMaterial = vec4(1.0, 0.0, 0.0, 0.0);
 	gEmissive = vec4(frameColor, 1.0);
@@ -175,7 +175,7 @@ void main() {
 }
 """
 
-# Bloom bright-pass extract -- soft-knee smoothstep rather than a hard cutoff, so bloom doesn't
+# Bloom bright-pass extract - soft-knee smoothstep rather than a hard cutoff, so bloom doesn't
 # flicker as luminance crosses the threshold frame to frame.
 BLOOM_THRESHOLD_FRAGMENT_SHADER = """
 #version 460 core
@@ -195,9 +195,9 @@ void main() {
 }
 """
 
-# Generic separable-Gaussian blur pass -- same 9-tap weights as examples/pyosg-blur.py, duplicated
+# Generic separable-Gaussian blur pass - same 9-tap weights as examples/pyosg-blur.py, duplicated
 # here rather than imported (every examples/pyosg-lighting/*.py file is self-contained). Used
-# twice for bloom (horizontal then vertical, each into its own texture -- not ping-ponged).
+# twice for bloom (horizontal then vertical, each into its own texture - not ping-ponged).
 BLUR_FRAGMENT_SHADER = """
 #version 460 core
 
@@ -226,7 +226,7 @@ void main() {
 """
 
 # Debug blit: samples one raw G-buffer/AO texture into a fullscreen quad, with a small per-channel
-# remap. NOT part of osgx -- purely an example-level diagnostic aid, same role pyosg-mrt.py's own
+# remap. NOT part of osgx - purely an example-level diagnostic aid, same role pyosg-mrt.py's own
 # visualizeMode branches and osgx-gbuffer.cpp's DEBUG_BLIT_FRAGMENT_SHADER play. See the module
 # docstring for why this is a smaller mode set than the old hand-rolled composite shader's 0-9.
 DEBUG_BLIT_FRAGMENT_SHADER = """
@@ -274,9 +274,9 @@ void main() {
 """
 
 # Final LDR pass: additively composites bloom into the HDR color, tonemaps, gamma-encodes, then
-# applies vignette/grain/chromatic-aberration/sharpening/color-balance -- all cheap single-pass
+# applies vignette/grain/chromatic-aberration/sharpening/color-balance - all cheap single-pass
 # color-only effects, so they share one shader rather than a pass each. No visualizeMode branch
-# here anymore -- debug views bypass this whole chain via debug_cam's own nodeMask toggle instead
+# here anymore - debug views bypass this whole chain via debug_cam's own nodeMask toggle instead
 # (see select_visualize_mode() below), the same mechanism osgx-gbuffer.cpp's VisualizeModeHandler
 # already proved out, rather than this pass having to know about debug modes at all.
 FINAL_FRAGMENT_SHADER = """
@@ -325,7 +325,7 @@ vec3 tonemapPBRNeutral(vec3 color) {
 	return clamp(color, 0.0, 1.0);
 }
 
-// Narkowicz 2015 fit to the ACES reference rendering transform -- the common "ACES-style" filmic
+// Narkowicz 2015 fit to the ACES reference rendering transform - the common "ACES-style" filmic
 // curve most game engines actually ship (the real ACES RRT+ODT is a 3D LUT, not a closed-form
 // curve). More contrast/saturation falloff in the highlights than PBR Neutral, which is the point
 // of comparing them side by side.
@@ -339,7 +339,7 @@ vec3 tonemapACES(vec3 x) {
 	return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
 }
 
-// Simple Reinhard (x / (1+x)) -- the baseline every other curve gets judged against.
+// Simple Reinhard (x / (1+x)) - the baseline every other curve gets judged against.
 vec3 tonemapReinhard(vec3 x) {
 	return x / (1.0 + x);
 }
@@ -348,7 +348,7 @@ void main() {
 	vec3 hdr;
 
 	if (postEnabled) {
-		// Chromatic aberration has to happen WHILE assembling color, not after -- you can't
+		// Chromatic aberration has to happen WHILE assembling color, not after - you can't
 		// offset one channel of an already-combined vec3. Each offset sample includes its own
 		// bloom contribution so CA and bloom don't visibly separate.
 		vec2 caDir = (vUV - 0.5) * caStrength;
@@ -375,7 +375,7 @@ void main() {
 		hdr = texture(hdrColorTex, vUV).rgb;
 	}
 
-	// Exposure applies regardless of postEnabled -- core linear-HDR-to-tonemap step, not a
+	// Exposure applies regardless of postEnabled - core linear-HDR-to-tonemap step, not a
 	// stylistic extra like CA/sharpen/vignette/grain below.
 	hdr *= exp2(exposure);
 
@@ -465,7 +465,7 @@ def make_fullscreen_rtt_pass(textures, output_tex, frag_shader, w, h, name="Post
 	return cam
 
 # Bloom: threshold-extract -> horizontal blur -> vertical blur. Single-scale two-pass blur, not a
-# downsample/upsample mip pyramid -- the sanctioned simplification for a teaching example.
+# downsample/upsample mip pyramid - the sanctioned simplification for a teaching example.
 def create_bloom_cameras(hdr_color_tex, w, h):
 	bright_tex = osg.Texture2D(
 		size=(w, h),
@@ -520,7 +520,7 @@ def create_bloom_cameras(hdr_color_tex, w, h):
 
 	return threshold_cam, blur_h_cam, blur_v_cam, blur_b_tex
 
-# Final LDR pass -- draws straight to the window (no renderTargetImplementation set).
+# Final LDR pass - draws straight to the window (no renderTargetImplementation set).
 def create_final_camera(hdr_color_tex, bloom_tex, ssao_tex, w, h):
 	cam = osg.Camera(
 		referenceFrame=osg.Transform.ABSOLUTE_RF,
@@ -559,7 +559,7 @@ def create_final_camera(hdr_color_tex, bloom_tex, ssao_tex, w, h):
 
 	return cam
 
-# Debug blit camera -- only visible when Visualize Mode != 0 (see select_visualize_mode()).
+# Debug blit camera - only visible when Visualize Mode != 0 (see select_visualize_mode()).
 def create_debug_camera(depth_scale, w, h):
 	cam = osg.Camera(
 		name="DebugBlit",
@@ -723,7 +723,7 @@ def create_grid_room(bound_center, bound_radius, floor_z, room_size):
 	return room, (floor, back_wall, right_wall)
 
 # --------------------------------------------------------------------------- #
-# Light orbit -- drives BOTH osgx.LightSet and the shadow map now (was a
+# Light orbit - drives BOTH osgx.LightSet and the shadow map now (was a
 # raw uniform + a per-frame shadow_cam.viewMatrix recompute in update_uniforms())
 # --------------------------------------------------------------------------- #
 
@@ -731,7 +731,7 @@ class LightOrbit:
 	"""The key light's DIRECTION, as the two angles a direction actually has.
 
 	Azimuth (around Z) and elevation (up from the XY plane), both in radians here and shown in
-	degrees by the ImGui section. A directional light has no position and no distance -- osgx
+	degrees by the ImGui section. A directional light has no position and no distance - osgx
 	discards magnitude at both consumers (PBR.hpp's osgx_DirectionalLightRadiance() does
 	`L = -normalize(direction)`, and Shadow.cpp's ShadowMap::reposition() normalizes
 	before building its frustum), so only the direction's ORIENTATION can ever have an effect.
@@ -739,7 +739,7 @@ class LightOrbit:
 	This deliberately replaces an earlier cylindrical (azimuth / orbit-radius / height)
 	parameterization inherited from when this file drove a positional light. Those three knobs
 	fed the same normalized direction, which made them a genuinely misleading set of controls:
-	"Orbit Radius" and "Height" were not a radius and a height at all -- only their RATIO did
+	"Orbit Radius" and "Height" were not a radius and a height at all - only their RATIO did
 	anything (it set elevation), and scaling both together did nothing whatsoever. Two sliders
 	encoding one degree of freedom, plus a third direction that was a no-op. See
 	[[feedback_linear_interactive_controls]]: interactive state should be the real DOFs, so that
@@ -747,7 +747,7 @@ class LightOrbit:
 
 	Every _sync() call pushes the new direction into BOTH the live LightSet (so direct lighting
 	updates immediately) and ShadowMap.reposition() (so the shadow tracks
-	it) -- the same two-call pattern this session's osgx-shadow.cpp/osgx-gbuffer.cpp proofs
+	it) - the same two-call pattern this session's osgx-shadow.cpp/osgx-gbuffer.cpp proofs
 	already validated live, just driven by ImGui sliders here instead of SliderFloat3.
 	"""
 
@@ -781,7 +781,7 @@ class LightOrbit:
 			direction, self.bound_center, self.bound_radius, self.shadow_options
 		)
 
-# Set by build_scene(), read by configure_viewer() -- args and everything the ImGui panel /
+# Set by build_scene(), read by configure_viewer() - args and everything the ImGui panel /
 # per-frame update callback close over (lighting, ssao, shadow_map, ...) aren't retrievable from
 # the returned root, and build_scene() never receives the live viewer (see the placeholder_camera
 # comment below for why one call in the middle of scene construction needs special handling
@@ -819,7 +819,7 @@ def build_scene(w, h):
 		default=False,
 		help="Run the viewer alongside an embedded IPython REPL (see pyosg_repl.py) so "
 			"uniforms/lights/SSAO params can be tweaked live while watching the render window. "
-			"Only honored by this file's own standalone __main__ block -- the pyosg-cli/"
+			"Only honored by this file's own standalone __main__ block - the pyosg-cli/"
 			"OpenSceneGraph.examples runners always own the frame loop themselves."
 	)
 	ap.add_argument(
@@ -835,14 +835,14 @@ def build_scene(w, h):
 	args = ap.parse_args()
 
 	# --env, not --hdr: only pre-baked manifests are ever bundled in the openscenegraph-
-	# examples wheel (see resolve_asset()'s own comment in pyosg_example.py) -- a bare
+	# examples wheel (see resolve_asset()'s own comment in pyosg_example.py) - a bare
 	# invocation with neither flag must work out of the box against a plain `pip install`,
 	# not require OSG_FILE_PATH pointed at a real glTF-Sample-Environments checkout.
 	if not args.hdr and not args.env:
 		args.env = "papermill"
 
 	# Preserve the existing opt-in floor flags as a room whose omitted dimension(s) scale with the
-	# actual asset -- a bounding sphere gives a conservative floor height even for models with
+	# actual asset - a bounding sphere gives a conservative floor height even for models with
 	# unusual local origins.
 	args.floor = args.floor_z is not None or args.floor_size is not None
 
@@ -853,12 +853,12 @@ def build_scene(w, h):
 	path = resolve_model(args.path or "BoomBox")
 
 	if not path:
-		sys.exit("Cannot find model -- clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
+		sys.exit("Cannot find model - clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
 
 	model = osgDB.readNodeFile(path)
 
 	# PBRIBLLightingScene.create() needs a real osg.Camera* to seed its initial view-matrix
-	# uniforms from -- but build_scene() never receives the live viewer (the runner constructs it
+	# uniforms from - but build_scene() never receives the live viewer (the runner constructs it
 	# AFTER calling this), unlike the standalone __main__ block's old shape, which built `v` this
 	# early specifically to have one. A throwaway placeholder is enough: PBRIBLLightingScene::create()
 	# (PBRIBL.cpp) only ever READS it, once, via its own update() at the end of construction --
@@ -869,7 +869,7 @@ def build_scene(w, h):
 
 	bound = model.bound
 	bound_center = bound.center
-	# 1.7 matches 09/10's own REFERENCE_RADIUS fallback -- guards against a degenerate (empty or
+	# 1.7 matches 09/10's own REFERENCE_RADIUS fallback - guards against a degenerate (empty or
 	# single-point) model bound, which would otherwise zero out ssao_radius and the shadow extent
 	# below.
 	bound_radius = bound.radius if bound.radius > 1e-6 else 1.7
@@ -893,7 +893,7 @@ def build_scene(w, h):
 		hdr_path = resolve_asset(args.hdr, "hdr")
 
 		if not hdr_path:
-			sys.exit(f"Cannot find HDR {args.hdr!r} -- check OSG_FILE_PATH")
+			sys.exit(f"Cannot find HDR {args.hdr!r} - check OSG_FILE_PATH")
 
 		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepare(hdr_path, lutSize=1024)
 
@@ -914,7 +914,7 @@ def build_scene(w, h):
 	if not gbuffer.valid():
 		sys.exit("Failed to build the G-buffer geometry pass")
 
-	# --- Grid room (optional) -- added as an extra child of the geometry pass's own
+	# --- Grid room (optional) - added as an extra child of the geometry pass's own
 	# camera, same pattern osgx-gbuffer.cpp's floor addition already proved out. ---- #
 	grid_panels = ()
 
@@ -941,13 +941,13 @@ def build_scene(w, h):
 
 	# --- SSAO ---------------------------------------------------------------------------- #
 	# Built BEFORE lighting_options/PBRIBLLightingScene.create() specifically so aoTexture can be
-	# set on lighting_options normally below -- osgx.SSAO replaces the hand-rolled kernel/
+	# set on lighting_options normally below - osgx.SSAO replaces the hand-rolled kernel/
 	# noise/RTT-pass code this step used to carry (generate_ssao_kernel()/make_ssao_noise_texture()/
 	# create_ssao_camera()/create_ssao_blur_camera(), all removed). Reads gbuffer's normal/position
-	# directly -- both already exist once the geometry pass above is built.
+	# directly - both already exist once the geometry pass above is built.
 	#
 	# ssao_projection_u is a real osg.Uniform (not a bare matrix) so it can be kept and refreshed
-	# every frame by configure_viewer()'s update_per_frame() below -- the real viewer.camera's
+	# every frame by configure_viewer()'s update_per_frame() below - the real viewer.camera's
 	# projectionMatrix isn't meaningfully established until the window is actually realized/sized,
 	# well after this call (and before the real viewer even exists, at this point in build_scene()
 	# itself), and can change every frame besides (see osgx.SSAO.create()'s own doc comment).
@@ -975,7 +975,7 @@ def build_scene(w, h):
 		sys.exit("Failed to build the lighting pass")
 
 	# PBRIBLLightingScene.create() returns a POST_RENDER camera drawing straight to the backbuffer
-	# by default (the "pipeline ends here" shape options.tonemap=True implies) -- re-target it to
+	# by default (the "pipeline ends here" shape options.tonemap=True implies) - re-target it to
 	# an offscreen texture ourselves so bloom/final can chain after it, exactly as its own doc
 	# comment in PBRIBL.hpp says to.
 	lighting_cam = lighting.node
@@ -994,7 +994,7 @@ def build_scene(w, h):
 	lighting_cam.attach(osg.Camera.COLOR_BUFFER0, hdr_color_tex)
 
 	# --- Lights: single directional key light via osgx.LightSet, live on the lighting
-	# pass camera's own StateSet -- that's where osgx_DirectLighting() actually runs; the
+	# pass camera's own StateSet - that's where osgx_DirectLighting() actually runs; the
 	# geometry pass has no lighting math to feed it to. ---------------------------------- #
 	lights = osgx.LightSet()
 	lighting_cam.stateSet.attributes.append(lights)
@@ -1014,13 +1014,13 @@ def build_scene(w, h):
 
 	# --- Final LDR pass ---------------------------------------------------------------------- #
 	# ssao.aoTexture is ALREADY the aoTex the lighting pass reads (wired via lighting_options.aoTexture
-	# above, at real PBRIBLLightingScene.create() call time -- no hand-wiring workaround needed
-	# anymore) -- sampled a second time here purely for this pass's own grainAOBoost effect, unrelated
+	# above, at real PBRIBLLightingScene.create() call time - no hand-wiring workaround needed
+	# anymore) - sampled a second time here purely for this pass's own grainAOBoost effect, unrelated
 	# to the lighting pass's own use of it.
 	final_cam = create_final_camera(hdr_color_tex, bloom_blur_b_tex, ssao.aoTexture, w, h)
 
 	fc_ss = final_cam.stateSet
-	fc_ss.uniforms["tonemapMode"] = 1 # ACES (Narkowicz) -- preferred over PBR Neutral by eye
+	fc_ss.uniforms["tonemapMode"] = 1 # ACES (Narkowicz) - preferred over PBR Neutral by eye
 	fc_ss.uniforms["exposure"] = 0.0
 	fc_ss.uniforms["bloomStrength"] = 0.5
 	fc_ss.uniforms["caStrength"] = 0.003
@@ -1064,9 +1064,9 @@ def build_scene(w, h):
 		("6: SSAO", ssao.aoTexture, 2),
 	)
 
-	# A single-element list, not a bare variable -- select_visualize_mode() lives in build_scene(),
+	# A single-element list, not a bare variable - select_visualize_mode() lives in build_scene(),
 	# but draw_visualize_mode() (which reads visualize_mode[0] to render the radio group) lives in
-	# configure_viewer(), a separate top-level function -- `nonlocal` only reaches an ENCLOSING
+	# configure_viewer(), a separate top-level function - `nonlocal` only reaches an ENCLOSING
 	# function's scope, not a sibling's, so a plain int stashed in _state couldn't be reassigned
 	# from configure_viewer() and have build_scene()'s own select_visualize_mode() closure see the
 	# change; a shared mutable container sidesteps that.
@@ -1077,7 +1077,7 @@ def build_scene(w, h):
 		label, tex, channel_mode = DEBUG_MODES[mode]
 		composite = tex is None
 
-		# ONLY the backbuffer-drawing cameras get toggled -- final_cam (POST_RENDER, the composite)
+		# ONLY the backbuffer-drawing cameras get toggled - final_cam (POST_RENDER, the composite)
 		# vs debug_cam (POST_RENDER, order 1). Every PRE_RENDER->FBO stage keeps running in every
 		# mode, deliberately: a debug mode that samples an RTT texture must leave the camera that
 		# WRITES that texture enabled, or it blits an attachment nothing rendered into this frame --
@@ -1095,12 +1095,12 @@ def build_scene(w, h):
 
 		print(f"[sketchfab] visualize mode: {label}", flush=True)
 
-	# --- Light gizmo (osgx.LightGizmos -- ports what this file used to hand-roll) ------------- #
+	# --- Light gizmo (osgx.LightGizmos - ports what this file used to hand-roll) ------------- #
 	gizmos = osgx.LightGizmos(lights, model) if args.lights else None
 
 	if gizmos is not None:
-		# Order 2 -- after both lighting_cam's re-target (order 4, PRE_RENDER, doesn't compete)
-		# and debug_cam (POST_RENDER, order 1) -- the gizmo overlay is never nodeMask-toggled by
+		# Order 2 - after both lighting_cam's re-target (order 4, PRE_RENDER, doesn't compete)
+		# and debug_cam (POST_RENDER, order 1) - the gizmo overlay is never nodeMask-toggled by
 		# select_visualize_mode(), so it needs to be the one thing guaranteed to draw last
 		# regardless of view mode. Same fix this session's osgx-gbuffer.cpp needed.
 		gizmos.overlay.renderOrder = (osg.Camera.POST_RENDER, 2)
@@ -1176,7 +1176,7 @@ def build_scene(w, h):
 
 # The live viewer.camera (for update_per_frame()'s per-frame matrix refresh, and the
 # cameraManipulator/ImGui setup below) doesn't exist until the runner constructs it AFTER
-# build_scene() returns -- everything here needs it directly, unlike build_scene()'s own
+# build_scene() returns - everything here needs it directly, unlike build_scene()'s own
 # placeholder_camera workaround for PBRIBLLightingScene.create().
 def configure_viewer(viewer, root):
 	args = _args
@@ -1212,10 +1212,10 @@ def configure_viewer(viewer, root):
 	post_enabled_u = state["post_enabled_u"]
 
 	# Combined per-frame update: the lighting pass's view-matrix uniforms (PBRIBLLightingScene.update())
-	# plus SSAO's own forward projection matrix (see ssao_projection_u's own comment -- neither is
+	# plus SSAO's own forward projection matrix (see ssao_projection_u's own comment - neither is
 	# meaningfully established until well after the cameras that need them are built). Installed on
 	# whichever camera is the FIRST PRE_RENDER camera in this scene graph (add-order breaks the tie
-	# between shadow_map.camera and gbuffer.gbuffer.camera, both default order 0) -- see
+	# between shadow_map.camera and gbuffer.gbuffer.camera, both default order 0) - see
 	# PBRIBLLightingScene.update()'s own comment for why it must NOT be viewer.camera's own
 	# preDrawCallback or application code after viewer.frame() returns, both of which hand the
 	# lighting pass a one-frame-stale matrix relative to what the geometry pass just rendered with.
@@ -1228,13 +1228,13 @@ def configure_viewer(viewer, root):
 		shadow_map.camera.preDrawCallback = update_per_frame
 
 	else:
-		# No shadow camera to pin to -- gbuffer.gbuffer.camera becomes the first PRE_RENDER
+		# No shadow camera to pin to - gbuffer.gbuffer.camera becomes the first PRE_RENDER
 		# camera instead (--no-lights).
 		gbuffer.gbuffer.camera.preDrawCallback = update_per_frame
 
 	viewer.cameraManipulator = osgGA.TrackballManipulator()
 
-	# See osgx-gbuffer.cpp's own comment on View.setCameraManipulator() -- it unconditionally
+	# See osgx-gbuffer.cpp's own comment on View.setCameraManipulator() - it unconditionally
 	# resets manip.node to getSceneData() before computing the initial home position, so retarget
 	# AFTER attaching the manipulator, not before, or the orbiting RTT/gizmo cameras inflate the
 	# computed home distance.
@@ -1242,7 +1242,7 @@ def configure_viewer(viewer, root):
 	viewer.cameraManipulator.home(0.0)
 	viewer.camera.clearColor = osg.Vec4(48.0 / 255.0, 53.0 / 255.0, 66.0 / 255.0, 1.0)
 
-	# --- ImGui panel: all interactive controls live here -- no keyboard shortcuts. ------------ #
+	# --- ImGui panel: all interactive controls live here - no keyboard shortcuts. ------------ #
 	if args.gui:
 		gui_opts = osgx.imgui.Options()
 		gui_opts.dock = osgx.imgui.Dock.LEFT
@@ -1280,7 +1280,7 @@ def configure_viewer(viewer, root):
 
 		gui.addSection("IBL", draw_ibl_knobs, closed_section)
 
-		# ssao.radius/ssao.bias are real live osg.Uniforms (osgx.SSAO.create()) -- no pass
+		# ssao.radius/ssao.bias are real live osg.Uniforms (osgx.SSAO.create()) - no pass
 		# rebuild needed, same shape every other slider here already uses.
 		def draw_ssao_knobs(ri):
 			changed, value = osgx.imgui.slider_float("Radius", ssao.radius.value, 0.01, 2.0)
@@ -1357,7 +1357,7 @@ def configure_viewer(viewer, root):
 					h.elevation = math.radians(value)
 					h._sync()
 
-			# "Direction", not "Position" -- a directional light has no position; see LightOrbit.
+			# "Direction", not "Position" - a directional light has no position; see LightOrbit.
 			gui.addSection("Light Direction", draw_light_direction_knobs, closed_section)
 
 		if shadow_map is not None:
@@ -1377,7 +1377,7 @@ def configure_viewer(viewer, root):
 			gui.addSection("Shadow", draw_shadow_knobs, closed_section)
 
 		def draw_post_fx_knobs(ri):
-			# Sketchfab's own "No Post-Processing" toggle -- gates CA/sharpen/vignette/grain/
+			# Sketchfab's own "No Post-Processing" toggle - gates CA/sharpen/vignette/grain/
 			# color-balance in FINAL_FRAGMENT_SHADER (exposure and tonemap stay on regardless).
 			changed, value = osgx.imgui.checkbox("Post Processing", bool(post_enabled_u.value))
 
@@ -1445,7 +1445,7 @@ if __name__ == "__main__":
 	configure_viewer(viewer, root)
 
 	# --- --repl: hand the render loop to pyosg_repl.py's IPython/asyncio bridge -------------- #
-	# Only reachable here, in the standalone entry point -- the pyosg-cli/OpenSceneGraph.examples
+	# Only reachable here, in the standalone entry point - the pyosg-cli/OpenSceneGraph.examples
 	# runners always own the frame loop themselves (run_module()'s own `while not viewer.done:
 	# viewer.frame()`, after calling configure_viewer()), with no hook for handing it off to
 	# something else instead. build_scene()/configure_viewer() stay pure setup either way; only

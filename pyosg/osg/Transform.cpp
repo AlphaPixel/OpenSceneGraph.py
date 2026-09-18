@@ -20,7 +20,7 @@ namespace pybind11x {
 	template<>
 	void kwargs_init_own(osg::PositionAttitudeTransform& self, const py::kwargs& kwargs) {
 		// `setPosition`/`setScale`/`setPivotPoint` all take `const osg::Vec3d&` explicitly (not
-		// the generic `osg::Vec3` = `Vec3f` alias) -- matching that here, not just what happens
+		// the generic `osg::Vec3` = `Vec3f` alias) - matching that here, not just what happens
 		// to compile, since `.position`/`.scale`/`.pivotPoint` getters return `Vec3d` too and a
 		// `Vec3f` cast silently truncates precision instead of matching them.
 		if(kwargs.contains("position")) self.setPosition(kwargs["position"].cast<osg::Vec3d>());
@@ -180,7 +180,7 @@ void bind_Transform(py::module_& m) {
 		osg::ref_ptr<osg::AutoTransform>
 	>(m, "AutoTransform",
 		"A Transform that automatically scales and/or rotates each frame to keep its children "
-		"aligned with screen coordinates -- e.g. billboards, or text/HUD geometry that should "
+		"aligned with screen coordinates - e.g. billboards, or text/HUD geometry that should "
 		"stay a constant pixel size regardless of camera distance."
 	)
 		.def(py::init<>(), "Create an AutoTransform at the identity, with auto-scale/rotate off.")

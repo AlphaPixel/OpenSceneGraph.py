@@ -444,24 +444,24 @@ examples, we transition to a single directional light to keep things simple.
 
 Linux-native windowing utilities that OSG's cross-platform API doesn't offer on its own --
 `alwaysOnTop()`, `listMonitors()`, `moveWindow()`, plus the experimental `createEGLWindow()`/
-`createGBMWindow()` GraphicsWindow factories -- used to live here as an `OpenSceneGraph.linux`
+`createGBMWindow()` GraphicsWindow factories - used to live here as an `OpenSceneGraph.linux`
 submodule. They were never actually OSG.py-specific, so they moved to the separate
 [`osgx`](https://github.com/cubicool/osgx) project's `osgx.platform` submodule instead; see
 `examples/pyosg-linux.py` for the Python-side usage and osgx's own README for the full API
 (it has also since grown mouse-capture helpers, `osgx.platform.PointerCapture`). `import osgx`
-alongside `OpenSceneGraph` to use it -- it has been tested on real Nvidia hardware, including
+alongside `OpenSceneGraph` to use it - it has been tested on real Nvidia hardware, including
 direct DRM/KMS scanout with no X server running at all.
 
 # Building
 
 **TODO**: Detailed CMake compilation guide (but honestly, it's NOT hard).
 
-Most users never need any of this -- `pip install OpenSceneGraph` grabs a prebuilt wheel
+Most users never need any of this - `pip install OpenSceneGraph` grabs a prebuilt wheel
 (Linux x86-64/aarch64 `manylinux_2_28`, Windows x86-64; CPython 3.12 currently) with OSG already
 compiled in. The notes below are for anyone on a platform/Python version without a matching
 wheel, or who wants to build against a local checkout.
 
-**From a git checkout.** `git clone --recurse-submodules` is required -- `etc/osgx` (the
+**From a git checkout.** `git clone --recurse-submodules` is required - `etc/osgx` (the
 companion utility layer) is a submodule, and `pip install .`/CMake will fail without it:
 
 ```
@@ -478,16 +478,16 @@ cmake --build build
 ```
 
 `PYOSG_FETCH_OSG=ON` (the default via `pyproject.toml`) fetches and builds the pinned
-OpenSceneGraph revision itself via `FetchContent` -- there's no separate "install OSG first"
+OpenSceneGraph revision itself via `FetchContent` - there's no separate "install OSG first"
 step, but expect the first build to take a while, since it's compiling OSG too, not just the
 bindings. On Linux you'll need the usual X11/GL/image-format dev headers (`libXrandr`,
 `libjpeg-turbo`, `libpng`, `libtiff`, GL/GLU); see `.github/workflows/wheels.yml`'s
 `CIBW_BEFORE_ALL` steps for the exact package lists used in CI (Linux and Windows/vcpkg).
 
 **Forcing a source build without a fresh clone.** If you have a source distribution (`sdist`)
-tarball already -- built locally with `python -m build --sdist`, downloaded from a
+tarball already - built locally with `python -m build --sdist`, downloaded from a
 [GitHub Actions run artifact](https://github.com/AlphaPixel/OpenSceneGraph.py/actions), or
-pulled from [PyPI](https://pypi.org/project/openscenegraph/#files) -- point pip straight at the
+pulled from [PyPI](https://pypi.org/project/openscenegraph/#files) - point pip straight at the
 file to build it, bypassing wheel resolution entirely:
 
 ```
@@ -502,7 +502,7 @@ pip install --no-binary OpenSceneGraph OpenSceneGraph
 ```
 
 (`--no-binary :all:` applies that to every package in the resolve, not just this one.) There's
-no dedicated "build from source" flag beyond `--no-binary` -- pip's `--src` flag is unrelated,
+no dedicated "build from source" flag beyond `--no-binary` - pip's `--src` flag is unrelated,
 it only controls where editable/VCS checkouts land, not whether a build happens.
 
 # The Elephant in the Room
@@ -538,7 +538,7 @@ library, cover more specialized functionality:
 
 - **[osgx](https://github.com/cubicool/osgx)** - modernized C++20 OpenSceneGraph
   utility layer, plus various opt-in subsystems: `osgx::debug` (GL
-  debug-extension integration -- driver message callbacks, KHR debug groups, GPU
+  debug-extension integration - driver message callbacks, KHR debug groups, GPU
   timestamp profiling for tools like Nsight/APITrace) and `osgx::imgui` (the
   ImGui-based live-tuning widget system used for on-screen controls throughout
   the Lighting Series examples). `osgx::gltf` exposes glTF 2.0 mesh/texture

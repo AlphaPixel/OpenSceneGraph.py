@@ -7,11 +7,11 @@
 #
 # Deliberately GPU-only: every instance's position/size/life is a pure function of
 # osg_SimulationTime (auto-provided by OSG every frame) and a per-instance seed
-# derived from gl_InstanceID via an in-shader hash -- no SSBO, no per-frame Python.
+# derived from gl_InstanceID via an in-shader hash - no SSBO, no per-frame Python.
 # An earlier version of this file DID use an SSBO (mirroring pyosg-instanced-ssbo.py),
 # but the per-instance data it carried (angle/radius/phase/life-offset seeds) never
 # changes after upload, so a hash of gl_InstanceID produces the identical result with
-# no buffer object at all -- see pyosg-instanced.py's per-instance color hash for the
+# no buffer object at all - see pyosg-instanced.py's per-instance color hash for the
 # same idiom. An SSBO earns its keep once something actually WRITES per-instance state
 # over time (a compute-shader velocity sim, multiple independently-triggered bursts
 # with distinct origins); it's not needed just to read constants.
@@ -32,7 +32,7 @@ import time
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size
 
 from OpenSceneGraph import *
@@ -90,7 +90,7 @@ VERTEX_SHADER = """
 		vec2 corner = base[gl_VertexID % 4];
 		vec4 seed = hash14(float(gl_InstanceID));
 
-		// Not fract()'d -- t runs 0->1 exactly once per trigger, then the size
+		// Not fract()'d - t runs 0->1 exactly once per trigger, then the size
 		// envelope below clamps to zero and stays there until re-triggered.
 		float t = (osg_SimulationTime - triggerTime) / duration;
 
@@ -112,11 +112,11 @@ VERTEX_SHADER = """
 		float sizeVariance = mix(0.7, 1.3, seed.z);
 		float size = baseSize * sizeEnvelope * sizeVariance;
 
-		// Billboard entirely in view space -- always faces the camera without needing
+		// Billboard entirely in view space - always faces the camera without needing
 		// to extract camera right/up axes by hand.
 		vec4 centerView = gl_ModelViewMatrix * vec4(pos, 1.0);
 
-		// Per-instance quad rotation (seed.w, otherwise unused by hash14 here) -- without
+		// Per-instance quad rotation (seed.w, otherwise unused by hash14 here) - without
 		// this, every one of the ~500 quads shares the same screen-space orientation,
 		// which reads as a subtle grid/uniformity once you know to look for it. vUV below
 		// stays keyed to the UNROTATED corner on purpose: the noise/fireRamp pattern lives
@@ -150,7 +150,7 @@ FRAGMENT_SHADER = """
 	uniform float noiseScale = 3.0;
 	uniform float scrollSpeed = 0.8;
 	uniform float warpStrength = 0.4;
-	// The ramp's two most visible stops, tunable from Python/ImGui -- everything
+	// The ramp's two most visible stops, tunable from Python/ImGui - everything
 	// between c0 (near-black) and midColor, and between midColor's neighbor c3 and
 	// coreColor, still interpolates below, so retinting these two alone reshapes the
 	// whole flame's hue without needing all five stops exposed.
@@ -228,7 +228,7 @@ FRAGMENT_SHADER = """
 		float n = fbm(warped + scroll * 1.5);
 		float heightBias = 1.0 - clamp(vUV.y, 0.0, 1.0);
 
-		// heightBias is a light nudge, not the dominant term -- weighting it any
+		// heightBias is a light nudge, not the dominant term - weighting it any
 		// higher than this washes the noise detail out into a flat white blob once
 		// a few dozen additively-blended quads stack on the same pixels.
 		float t = clamp(n * 1.0 + heightBias * 0.15, 0.0, 1.0) * vIntensity;
@@ -265,7 +265,7 @@ SHOCKWAVE_VERTEX_SHADER = """
 
 		vLocalPos = corner;
 
-		// Flat on the ground (z=0) -- fire's z is "up" in this scene, so the shockwave
+		// Flat on the ground (z=0) - fire's z is "up" in this scene, so the shockwave
 		// ring's plane is spanned by x/y, not billboarded like the fire quads.
 		gl_Position = gl_ModelViewProjectionMatrix * vec4(corner.x, corner.y, 0.0, 1.0);
 	}
@@ -309,7 +309,7 @@ SHOCKWAVE_FRAGMENT_SHADER = """
 def build_shockwave(max_radius=4.0, duration=0.6, ring_width=0.3):
 	"""Return a Geode: a single flat expanding ring on the ground plane (z=0).
 
-	Same one-shot `triggerTime`-uniform design as build_fire() -- trigger(node,
+	Same one-shot `triggerTime`-uniform design as build_fire() - trigger(node,
 	viewer) fires this exactly the same way.
 	"""
 
@@ -392,14 +392,14 @@ SMOKE_VERTEX_SHADER = """
 		vec2 corner = base[gl_VertexID % 4];
 		vec4 seed = hash14(float(gl_InstanceID) + 1000.0); // offset from fire's own hash domain
 
-		// Smoke starts a beat after the fire (startDelay), then runs much longer -- this
+		// Smoke starts a beat after the fire (startDelay), then runs much longer - this
 		// is what makes it read as lingering AFTER the fire quads have already faded.
 		float t = (osg_SimulationTime - triggerTime - startDelay) / duration;
 		float tc = clamp(t, 0.0, 1.0);
 
 		// Mostly-vertical cone, but wide enough that individual puffs actually separate
 		// from each other as they rise instead of coasting up as one overlapping mass
-		// (0.55 was too narrow -- every puff traveled nearly straight up together).
+		// (0.55 was too narrow - every puff traveled nearly straight up together).
 		float theta = seed.x * TWO_PI;
 		float phiCos = mix(0.15, 1.0, seed.y);
 		float phiSin = sqrt(max(0.0, 1.0 - phiCos * phiCos));
@@ -408,14 +408,14 @@ SMOKE_VERTEX_SHADER = """
 		float expand = 1.0 - (1.0 - tc) * (1.0 - tc);
 		vec3 pos = dir * expand * spreadRadius;
 
-		// Continued climb for the whole lifetime, not just the initial punch -- smoke
+		// Continued climb for the whole lifetime, not just the initial punch - smoke
 		// keeps rising as it dissipates instead of coasting like the fire's rise term.
 		pos.z += riseHeight * tc;
 
-		// Puffs GROW over their lifetime instead of shrinking -- opposite envelope shape
+		// Puffs GROW over their lifetime instead of shrinking - opposite envelope shape
 		// from build_fire()'s baseSize * sizeEnvelope, since real smoke expands as it
 		// dissipates rather than shrinking away. The smoothstep factor grows puffs in
-		// from zero at spawn instead of popping in at full baseSize immediately -- without
+		// from zero at spawn instead of popping in at full baseSize immediately - without
 		// it, every puff starts stacked at the same origin point at its eventual minimum
 		// size, which reads as one solid overlapping blob for the first instant.
 		float sizeVariance = mix(0.7, 1.3, seed.z);
@@ -437,7 +437,7 @@ SMOKE_VERTEX_SHADER = """
 
 		vUV = corner + 0.5;
 		// Fades in quickly after startDelay, then fades out slowly over the rest of the
-		// (much longer) duration -- this is the "lingers" part of the effect.
+		// (much longer) duration - this is the "lingers" part of the effect.
 		vIntensity = smoothstep(0.0, 0.1, t) * (1.0 - tc);
 		vSeed = seed.xyz;
 	}
@@ -508,7 +508,7 @@ SMOKE_FRAGMENT_SHADER = """
 		float density = fbm(warped + scroll * 0.5);
 		float edgeMask = smoothstep(1.0, 0.3, radial);
 
-		// Grey ramp, near-black core to a pale highlight -- explicitly NOT the fire's
+		// Grey ramp, near-black core to a pale highlight - explicitly NOT the fire's
 		// warm ramp, so the two layers read as physically distinct materials even
 		// though they share the same instanced-quad/fbm-turbulence machinery.
 		vec3 c0 = vec3(0.03, 0.03, 0.035);
@@ -531,11 +531,11 @@ def build_smoke(
 	base_size=0.7,
 	grow_amount=3.0,
 ):
-	"""Return a Geode of instanced smoke puffs -- same GPU-only one-shot design as
+	"""Return a Geode of instanced smoke puffs - same GPU-only one-shot design as
 	build_fire(), meant to be triggered alongside it (same triggerTime) so it starts
 	a beat later and lingers after the fire quads have already faded out.
 
-	Normal alpha blending (not additive like the fire/shockwave) -- smoke should read
+	Normal alpha blending (not additive like the fire/shockwave) - smoke should read
 	as translucent grey mass, not glow, which is also what visually separates it from
 	everything else in this file at a glance.
 	"""
@@ -576,11 +576,11 @@ def build_smoke(
 	return r
 
 # --------------------------------------------------------------------------- #
-# Embers/sparks: real GL_POINTS, not billboarded quads -- per pyosg-points.py, a
+# Embers/sparks: real GL_POINTS, not billboarded quads - per pyosg-points.py, a
 # point sprite's footprint (gl_PointCoord in the fragment shader) is far cheaper per-
 # particle than a quad when the particle never needs to face-camera via explicit
 # corner geometry, which is exactly the case for small fast debris like this. No
-# vertex array is bound (same as build_fire()/build_smoke()) -- gl_VertexID alone
+# vertex array is bound (same as build_fire()/build_smoke()) - gl_VertexID alone
 # seeds every point's trajectory.
 # --------------------------------------------------------------------------- #
 
@@ -626,7 +626,7 @@ EMBER_VERTEX_SHADER = """
 		float tc = clamp(t, 0.0, 1.0);
 
 		// Full hemisphere spray (phiCos down to -0.1, unlike the fire's tighter dome) with
-		// per-instance speed variance -- sparks launch chaotically, not as a smooth front.
+		// per-instance speed variance - sparks launch chaotically, not as a smooth front.
 		float theta = seed.x * TWO_PI;
 		float phiCos = mix(-0.1, 1.0, seed.y);
 		float phiSin = sqrt(max(0.0, 1.0 - phiCos * phiCos));
@@ -634,7 +634,7 @@ EMBER_VERTEX_SHADER = """
 		float speed = launchSpeed * mix(0.5, 1.5, seed.z);
 
 		// Ballistic arc: launched at `speed` along `dir`, then gravity pulls straight down
-		// -- a genuinely different trajectory shape from the fire's ease-out punch and the
+		// - a genuinely different trajectory shape from the fire's ease-out punch and the
 		// smoke's continuous buoyant climb, which is most of why this layer reads as
 		// distinct debris rather than more fire.
 		vec3 pos = dir * speed * tc;
@@ -648,15 +648,15 @@ EMBER_VERTEX_SHADER = """
 		// Shrinks to nothing as the ember dies (tc -> 1); before the first trigger,
 		// triggerTime's -1000 default puts t (and therefore tc) permanently at 1, so
 		// gl_PointSize/vIntensity are already zero with no separate visibility toggle
-		// needed -- same trick build_fire()'s sizeEnvelope uses.
+		// needed - same trick build_fire()'s sizeEnvelope uses.
 		float sizeEnvelope = 1.0 - tc;
 
-		// Cheap stepped sparkle -- distinct per point (gl_VertexID) and re-rolled roughly
+		// Cheap stepped sparkle - distinct per point (gl_VertexID) and re-rolled roughly
 		// 24 times/sec (floor(time * 24)), not a smooth flicker. Good enough at this scale;
 		// not worth a smoother curve for something this small on screen.
 		float flicker = 0.6 + 0.4 * hash11(float(gl_VertexID) * 17.0 + floor(osg_SimulationTime * 24.0));
 
-		// No distance falloff -- confirmed live that this scene's auto-fit camera distance
+		// No distance falloff - confirmed live that this scene's auto-fit camera distance
 		// (trackball sizes home position off the WHOLE scene bound, and the smoke/ember
 		// layers pushed that bound out considerably) made a `basePointSize / dist` term
 		// collapse to sub-pixel. Flat size, same convention pyosg-points.py itself uses.
@@ -689,9 +689,9 @@ EMBER_FRAGMENT_SHADER = """
 		float glow = max(dotGlow, ring * 0.6);
 
 		// Cools from white-hot to a dull red ember as vCool (the spark's own age, 0->1)
-		// increases -- distinct from build_fire()'s fireRamp(), which ramps on turbulence
+		// increases - distinct from build_fire()'s fireRamp(), which ramps on turbulence
 		// density rather than a single spark's elapsed lifetime.
-		// Deliberately over-1.0 -- with additive blending this blows out toward a
+		// Deliberately over-1.0 - with additive blending this blows out toward a
 		// white-hot core instead of just capping at plain white, which reads as much
 		// hotter than a literal (1,1,1) would.
 		vec3 hot = vec3(1.6, 1.55, 1.4);
@@ -708,10 +708,10 @@ EMBER_FRAGMENT_SHADER = """
 """
 
 def build_embers(num_points=220, duration=1.6, launch_speed=4.0, gravity=6.0, base_point_size=14.0):
-	"""Return a Geode of `num_points` GL_POINTS embers -- same one-shot `triggerTime`
+	"""Return a Geode of `num_points` GL_POINTS embers - same one-shot `triggerTime`
 	design as build_fire()/build_smoke(), fired the same way via trigger(node, viewer).
 
-	Real point sprites, not billboarded quads (see the module comment above) -- cheaper
+	Real point sprites, not billboarded quads (see the module comment above) - cheaper
 	per-particle, and the ballistic-arc trajectory (launch + gravity) reads as flying
 	debris rather than more fire, which is the point of this layer existing at all.
 	"""
@@ -759,13 +759,13 @@ def build_fire(
 ):
 	"""Return a Geode of `num_instances` GPU-simulated fire quads, centered at the origin.
 
-	Everything after this call is driven by osg_SimulationTime alone -- there's no
+	Everything after this call is driven by osg_SimulationTime alone - there's no
 	per-frame Python work, so it's safe to build once and drop straight into a live
 	REPL scene: `viewer.sceneData = build_fire()`. The burst is one-shot; call
 	trigger(node, viewer) to fire it (or re-fire it).
 
 	`mid_color`/`core_color` retint fireRamp()'s two most visible stops (default:
-	orange ember / pale-hot core) -- pass any RGB triple to get flame colors besides
+	orange ember / pale-hot core) - pass any RGB triple to get flame colors besides
 	fire's own, e.g. for build_multiburst()'s per-burst hue variation.
 	"""
 
@@ -825,21 +825,21 @@ def build_explosion(include_smoke=False, include_embers=False):
 
 def build_multiburst(num_bursts=4, spread_radius=9.0, include_smoke=True, include_embers=True):
 	"""Return a Group of `num_bursts` full explosions, each in its own MatrixTransform
-	offset around a ring of `spread_radius` -- several distinct, non-identical blasts
+	offset around a ring of `spread_radius` - several distinct, non-identical blasts
 	firing together, rather than one bigger one.
 
 	Unlike build_explosion(), each burst's fire/shockwave/smoke/ember parameters are
 	independently randomized (duration, radius, size, etc, each jittered within a sane
 	range of build_*()'s own defaults) so the bursts read as genuinely different
-	explosions side by side, not identical copies at different positions -- including
+	explosions side by side, not identical copies at different positions - including
 	a randomized flame hue (build_fire()'s mid_color/core_color), so some bursts read
 	as ordinary fire and others as blue/green/violet "sci-fi" flame. Plain
-	`random.uniform()`/`colorsys.hsv_to_rgb()` -- no numpy (see
+	`random.uniform()`/`colorsys.hsv_to_rgb()` - no numpy (see
 	[[feedback_avoid_numpy_crutch]]).
 
 	Each burst gets its own Program/Geometry (same build_fire()/build_shockwave()/etc.
 	as everywhere else in this file) instead of sharing one draw call via a
-	per-instance origin uniform array -- explosions are inherently few-at-a-time here,
+	per-instance origin uniform array - explosions are inherently few-at-a-time here,
 	so the extra draw calls cost nothing, and this reuses every already-tested shader
 	completely unchanged. See ai/context-todo-particles.md's "Open questions" for the
 	uniform-array/SSBO alternative that was considered and set aside in favor of this.
@@ -904,11 +904,11 @@ def build_multiburst(num_bursts=4, spread_radius=9.0, include_smoke=True, includ
 # as pyosg-blur.py's make_composite_hud()) plus a brief eye-space shake, now via
 # osgx.CameraManipulator/osgx.ShakeCallback (osgx/CameraIntents.hpp) instead of
 # the EffectManipulator Python decorator this file carried as a documented dead
-# end for a while -- see aipython/06-camera-effects.md for that investigation.
+# end for a while - see aipython/06-camera-effects.md for that investigation.
 # osgx.CameraManipulator<TrackballManipulator> genuinely IS a TrackballManipulator
 # (real C++ CRTP inheritance, not a Python-side wrapper forwarding events through
 # pybind11), so the GUIActionAdapter-casting crash that made EffectManipulator
-# unusable for real interaction simply doesn't exist here -- normal orbiting/
+# unusable for real interaction simply doesn't exist here - normal orbiting/
 # panning keeps working underneath a shake because there's no decorator layer
 # left to break in the first place.
 # --------------------------------------------------------------------------- #
@@ -942,7 +942,7 @@ FLASH_FRAGMENT_SHADER = """
 
 		if (t < 0.0 || t > 1.0) discard;
 
-		// Squared falloff -- most of the brightness is gone within the first third
+		// Squared falloff - most of the brightness is gone within the first third
 		// of `duration`, reading as a sharp punch rather than a slow fade.
 		float alpha = (1.0 - t) * (1.0 - t) * 0.8;
 
@@ -959,7 +959,7 @@ def build_flash_camera(width, height, duration=0.25):
 
 	cam.name = "pyosg-explosion flash HUD"
 	cam.renderOrder = osg.Camera.POST_RENDER
-	cam.clearMask = 0  # overlay only -- don't clear the already-rendered scene
+	cam.clearMask = 0  # overlay only - don't clear the already-rendered scene
 	cam.viewport = osg.Viewport(0, 0, width, height)
 	cam.projectionMatrix = osg.Matrix.identity()
 	cam.viewMatrix = osg.Matrix.identity()
@@ -991,7 +991,7 @@ def build_flash_camera(width, height, duration=0.25):
 
 # The dead-end EffectManipulator decorator + make_shake_effect() that used to live here
 # (a Python CameraManipulator subclass wrapping an `inner` manipulator, confirmed to
-# crash the moment the user dragged the mouse -- forwarding handle()'s live
+# crash the moment the user dragged the mouse - forwarding handle()'s live
 # GUIActionAdapter through to another bound method requires an osgViewer::View ->
 # GUIActionAdapter upcast pybind11 can't do) are gone. osgx.CameraManipulator<Base>
 # solves the actual problem this was working around: real C++ CRTP inheritance means
@@ -1001,17 +1001,17 @@ def build_flash_camera(width, height, duration=0.25):
 def camera_kick(viewer, flash_cam, shake_magnitude=3.0, shake_duration=0.3):
 	"""Fire the screen flash and a brief camera shake, both starting right now.
 
-	`shake_magnitude` is degrees (osgx.ShakeCallback's own units -- max jitter
+	`shake_magnitude` is degrees (osgx.ShakeCallback's own units - max jitter
 	angle, not a translation offset like the old make_shake_effect() used).
 	Requires `viewer.cameraManipulator` to be an osgx.CameraManipulator (see
-	__main__ below) -- .shake() is only bound on that subclass.
+	__main__ below) - .shake() is only bound on that subclass.
 	"""
 
 	flash_cam.stateSet.uniforms["triggerTime"] = float(viewer.frameStamp.simulationTime)
 	viewer.cameraManipulator.shake(shake_magnitude, shake_duration)
 
 def trigger(node, viewer):
-	"""(Re-)fire every burst under `node` -- a single Geode, or an arbitrarily nested
+	"""(Re-)fire every burst under `node` - a single Geode, or an arbitrarily nested
 	tree of Groups/MatrixTransforms containing them (e.g. build_multiburst()'s
 	per-burst MatrixTransform wrappers). Recurses through every Group level and sets
 	triggerTime on the first non-Group node found down each branch.
@@ -1025,7 +1025,7 @@ def trigger(node, viewer):
 				walk(child)
 
 		else:
-			# No existence check needed -- uniforms[key] = value creates-or-updates on
+			# No existence check needed - uniforms[key] = value creates-or-updates on
 			# its own (see UniformsTag::apply() in pyosg/osg/State.hpp). An earlier
 			# version guarded this on "if already present," which meant a node's very
 			# FIRST trigger() call silently did nothing (build_fire() never pre-creates
@@ -1041,7 +1041,7 @@ class ExplosionKeyHandler(osgGA.GUIEventHandler):
 
 	`bindings` maps ord(<digit>) -> either a node (Geode or Group), fired via
 	trigger(), or a zero-arg callable (e.g. camera_kick partially applied),
-	called directly -- camera effects act on the viewer/camera, not a scene
+	called directly - camera effects act on the viewer/camera, not a scene
 	node, so they don't fit trigger()'s node-walking shape. Numeric keys rather
 	than a single key so each preset gets its own key without redesigning the
 	handler.
@@ -1079,16 +1079,16 @@ def parse_arg(argv, flag, default):
 
 	return type(default)(argv[argv.index(flag) + 1])
 
-# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+# The real pipeline-assembly entrypoint - returns the root Node, no viewer/window side effects.
 # `--samples N` used to ride OSG's own osg.ArgumentParser-consuming Viewer(argParser)
-# constructor -- neither runner constructs its Viewer that way (both use plain osgViewer.Viewer()
+# constructor - neither runner constructs its Viewer that way (both use plain osgViewer.Viewer()
 # and pass w/h straight into build_scene()/setUpViewInWindow() instead), so it's reproduced here
 # via osg.DisplaySettings.instance.numMultiSamples, the same MSAA mechanism
 # pyosg-khronos-viewer.py/pyosg-praxis.py already use. (`--clear-color`, mentioned in this file's
-# own `#vimrun!` line, was never actually read anywhere before this conversion either -- a
+# own `#vimrun!` line, was never actually read anywhere before this conversion either - a
 # pre-existing gap, left alone rather than scope-creeped into a fix.) flash_cam's size now comes
 # straight from (w, h) instead of `v.camera.viewport` (which was typically still None at the
-# point the original code read it, before any GraphicsContext existed -- hence its own
+# point the original code read it, before any GraphicsContext existed - hence its own
 # `if viewport else 800` fallback; build_scene()'s (w, h) args are simply the real thing).
 def build_scene(w, h):
 	samples = parse_arg(sys.argv, "--samples", 0)
@@ -1122,7 +1122,7 @@ def configure_viewer(viewer, root):
 	fire_only, explosion, explosion_smoke, explosion_smoke_embers, multiburst, flash_cam = root.children
 
 	# osgx.CameraManipulator<TrackballManipulator> genuinely IS a TrackballManipulator
-	# (see the module comment above camera_kick()) -- normal orbit/pan/zoom works exactly
+	# (see the module comment above camera_kick()) - normal orbit/pan/zoom works exactly
 	# like plain osgGA.TrackballManipulator(), and camera_kick()'s shake composes on top.
 	viewer.cameraManipulator = osgx.CameraManipulator()
 
@@ -1147,16 +1147,16 @@ def configure_viewer(viewer, root):
 
 	v.eventHandlers.append(ExplosionKeyHandler(bindings))
 
-	# --- Docked ImGui panel: enabled by default; --no-gui removes it. The -- #
-	# --- panel exposes every build_fire()/build_shockwave()/build_smoke()/ -- #
-	# --- build_embers() kwarg as a live slider, written to -- #
-	# --- every key (1-5) that carries that layer at once, so tuning a -- #
-	# --- knob and pressing plain "1" shows that layer alone with no -- #
-	# --- shockwave/smoke/ember "noise" mixed in. Key 6 (multiburst) is -- #
-	# --- deliberately excluded -- it randomizes each burst's params for -- #
-	# --- variety (see build_multiburst()'s docstring), and forcing the -- #
-	# --- shared sliders onto it would erase that. Buttons still fire the -- #
-	# --- exact same bindings as the number keys (osgx.imgui -- "knobs, -- #
+	# --- Docked ImGui panel: enabled by default; --no-gui removes it. The - #
+	# --- panel exposes every build_fire()/build_shockwave()/build_smoke()/ - #
+	# --- build_embers() kwarg as a live slider, written to - #
+	# --- every key (1-5) that carries that layer at once, so tuning a - #
+	# --- knob and pressing plain "1" shows that layer alone with no - #
+	# --- shockwave/smoke/ember "noise" mixed in. Key 6 (multiburst) is - #
+	# --- deliberately excluded - it randomizes each burst's params for - #
+	# --- variety (see build_multiburst()'s docstring), and forcing the - #
+	# --- shared sliders onto it would erase that. Buttons still fire the - #
+	# --- exact same bindings as the number keys (osgx.imgui - "knobs, - #
 	# --- not frameworks", see aipython/17-particles.md). --------------- #
 	if "--no-gui" not in sys.argv:
 		# No deferred/compositing pipeline in this file (unlike 11-sketchfab.py) --
@@ -1172,7 +1172,7 @@ def configure_viewer(viewer, root):
 		gui = osgx.imgui.Widget(v, v.camera, gui_opts)
 
 		# Each key binding below (1/2/3/4/5) holds its OWN build_fire()/build_shockwave()/
-		# etc. instances -- they can't share a single node across keys, since every preset
+		# etc. instances - they can't share a single node across keys, since every preset
 		# sits permanently in the scene graph and OSG draws a multi-parented node once per
 		# parent path, which would double/triple/quadruple-render the same particles the
 		# instant one got triggered. So instead these lists collect every same-layer node
@@ -1203,7 +1203,7 @@ def configure_viewer(viewer, root):
 			of this layer in lockstep with the panel instead of only key 5's.
 
 			Every uniform is (re-)seeded to its listed default right here, once,
-			before the section is added -- covers the fragment-shader-only uniforms
+			before the section is added - covers the fragment-shader-only uniforms
 			(noiseScale/scrollSpeed/warpStrength/maxAlpha) that build_fire()/
 			build_smoke() never explicitly set, which would otherwise raise on the
 			first `.value` read. Labels are prefixed per layer ("Fire Duration", not
@@ -1287,10 +1287,10 @@ def configure_viewer(viewer, root):
 		])
 
 		def draw_triggers(ri):
-			# Same bindings dict ExplosionKeyHandler uses -- a button fires the exact
+			# Same bindings dict ExplosionKeyHandler uses - a button fires the exact
 			# preset its number key does, never a parallel/divergent copy. bindings'
 			# values are already either a node (needs trigger()) or a zero-arg
-			# callable (with_kick()'s closures, called directly) -- ExplosionKeyHandler
+			# callable (with_kick()'s closures, called directly) - ExplosionKeyHandler
 			# .handle() branches on callable() the same way.
 			for key, label in (
 				("1", "1: Fire"),

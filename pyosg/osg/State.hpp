@@ -95,7 +95,7 @@ struct pyx::MappingTraits<osg::StateSet, pyosg::detail::UniformsTag> {
 			return;
 		}
 
-		// CASE 2: Tuple/list handling -- list accepted alongside tuple (not any py::sequence: osg's
+		// CASE 2: Tuple/list handling - list accepted alongside tuple (not any py::sequence: osg's
 		// own Vec2/Vec3/Vec4 bindings implement __len__/__getitem__ too, so a bare structural
 		// sequence check would wrongly treat `uniforms["x"] = osg.Vec3(...)` as an array-of-floats
 		// assignment instead of a scalar Vec3 uniform) so `uniforms["iblAxis"] = [v0, v1, v2]` works
@@ -382,13 +382,13 @@ struct pyx::ValueMappingTraits<osg::StateSet, pyosg::detail::ModesTag> {
 	}
 };
 
-// The shader-define list -- e.g. `stateSet.defines["OSGX_PBRIBL_AO"] = osg.StateAttribute.ON`
-// (matches osg::StateSet::setDefine(name, value)'s single-arg overload -- sets the define's own
+// The shader-define list - e.g. `stateSet.defines["OSGX_PBRIBL_AO"] = osg.StateAttribute.ON`
+// (matches osg::StateSet::setDefine(name, value)'s single-arg overload - sets the define's own
 // value string to "", i.e. a flag-style #ifdef-tested define, not a `#define NAME value`
 // substitution; OSG's OTHER setDefine(name, valueString, mode) overload for a real value string
 // has no Python-facing shorthand yet). Same ValueMappingTraits shape as ModesTag above (a named
 // flag toggle, not an object with real identity, so no MappingTraits/element-pointer caching
-// needed) -- `contains()`/`get()` go through getDefineList() directly, matching ModesTag's own
+// needed) - `contains()`/`get()` go through getDefineList() directly, matching ModesTag's own
 // style, rather than getDefinePair()'s pointer-returning overload.
 template<>
 struct pyx::ValueMappingTraits<osg::StateSet, pyosg::detail::DefinesTag> {

@@ -621,7 +621,7 @@ struct PYOBJECT_INTERNAL SequenceProxy: public SlotCache<VectorSlotStorage<size_
 		return base_type::get(i, ptr);
 	}
 
-	// list[start:stop:step] -- a second __getitem__ overload (see bind() below), disjoint from
+	// list[start:stop:step] - a second __getitem__ overload (see bind() below), disjoint from
 	// the ssize_t one above: a Python `slice` never satisfies an ssize_t parameter and vice
 	// versa, so both coexist with no ambiguity, same as the two pop() overloads already do.
 	// py::slice::compute() is pybind11's own standard clamping/negative-index/step-direction

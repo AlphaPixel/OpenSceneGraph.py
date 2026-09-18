@@ -33,7 +33,7 @@ def test_construction():
 
 def test_children_extend_call_shapes():
 	# .extend() accepts an iterable (tested elsewhere), the items given directly as separate
-	# positional arguments, or a single bare (non-iterable) item -- all 3 shapes must work.
+	# positional arguments, or a single bare (non-iterable) item - all 3 shapes must work.
 	g = Group(name="g")
 	n0 = Node(name="n0")
 	n1 = Node(name="n1")
@@ -69,7 +69,7 @@ def test_children_getitem_slice():
 	assert g.children[1:1] == []
 	assert g.children[100:] == []
 
-	# Same wrapper objects get()/iteration would return, not copies -- identity, not equality.
+	# Same wrapper objects get()/iteration would return, not copies - identity, not equality.
 	sliced = g.children[1:3]
 
 	assert sliced[0] is n1
@@ -167,7 +167,7 @@ def test_children_pop_and_clear():
 
 def test_children_pop_and_clear_release_when_no_other_ref():
 	# len() dropping to 0 proves the C++ container emptied, but not that the objects were
-	# actually destroyed rather than kept alive by a leaked SlotCache slot -- the exact bug
+	# actually destroyed rather than kept alive by a leaked SlotCache slot - the exact bug
 	# class del()'s own "invalidate up to old_size" comment exists to prevent. No local
 	# variables are kept beyond `popped` on purpose, so `deleted` is the only proof.
 	deleted = []

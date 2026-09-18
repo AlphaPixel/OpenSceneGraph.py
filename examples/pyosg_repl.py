@@ -31,7 +31,7 @@
 import os
 import sys
 
-# setdefault(), not update() -- this module is imported by other examples
+# setdefault(), not update() - this module is imported by other examples
 # (11-sketchfab.py, 99-repl.py, etc.) that configure their own OSG_WINDOW/
 # OSG_THREADING before importing pyosg_repl for its repl() helper. update()
 # here would silently clobber whatever the caller already set, since this
@@ -64,33 +64,33 @@ class DebugHandler(osgGA.GUIEventHandler):
 
 class AgentInputLock(osgGA.GUIEventHandler):
 	"""Swallows user input (mouse/keyboard) while locked, so an agent driving a live viewer
-	from the REPL can do deterministic work -- read/write uniforms, pose the camera, queue a
-	capture -- without racing the user's own mouse/keyboard on the same window.
+	from the REPL can do deterministic work - read/write uniforms, pose the camera, queue a
+	capture - without racing the user's own mouse/keyboard on the same window.
 
 	The race this exists for: a user keypress handled by some other GUIEventHandler (e.g. a
 	"retrigger the effect" key) landing on the same frame as the agent independently reading
-	or writing state through the REPL -- two uncoordinated control sources on one live viewer,
+	or writing state through the REPL - two uncoordinated control sources on one live viewer,
 	each individually correct, racing each other.
 
 	FRAME/RESIZE/CLOSE_WINDOW/etc. always pass through even while locked, so continuous
-	rendering and any handler that steps its own animation off FRAME keep working -- only
+	rendering and any handler that steps its own animation off FRAME keep working - only
 	events a human could have generated at the keyboard/mouse are swallowed.
 
-	IMPORTANT: this is COOPERATIVE, not enforced -- OSG's own eventHandlers dispatch loop
+	IMPORTANT: this is COOPERATIVE, not enforced - OSG's own eventHandlers dispatch loop
 	(Viewer::eventTraversal()) calls every handler for every event regardless of what
 	earlier handlers returned; there is no "stop propagation" mechanism at that level.
 	What actually gates things is `osgGA::Event.handled`: `GUIEventHandler::handle()`'s C++
 	wrapper (the one OSG's loop actually calls) sets `ea.handled = True` whenever your
 	Python `handle(ea, aa)` override returns `True`, and every WELL-BEHAVED handler after
 	it is expected to check `ea.handled` at the top of its own `handle()` and bail out if
-	it's already set -- exactly how OSG's own `StandardManipulator` (the base of
+	it's already set - exactly how OSG's own `StandardManipulator` (the base of
 	`TrackballManipulator` and friends) already does it, which is why camera-manipulator
 	input is blocked automatically with zero extra code. A handler that doesn't check
 	`ea.handled` (an old example script's own custom handler, say) will keep firing
-	regardless of this lock -- there's no way to force it from here, only to follow the
+	regardless of this lock - there's no way to force it from here, only to follow the
 	same convention it should already be following. `insert()`-installed at
 	`eventHandlers[0]` only guarantees this handler runs, and therefore sets `ea.handled`,
-	BEFORE any other handler in the list sees the event -- it doesn't make later handlers
+	BEFORE any other handler in the list sees the event - it doesn't make later handlers
 	respect that flag if they were never written to check it.
 
 	`ViewerREPLController` installs one of these at `eventHandlers[0]` (first refusal, ahead
@@ -141,12 +141,12 @@ class CinematicOrbitManipulator(osgGA.CameraManipulator):
 	Unlike REPLCameraManipulator above (a passive matrix box you pose by hand),
 	this one poses itself: getMatrix()/getInverseMatrix() are computed on every
 	call from wall-clock time, so there's nothing to step or drive from the REPL
-	loop -- just assign it and watch.
+	loop - just assign it and watch.
 
 	Two out-of-phase sinusoids drive azimuth (constant spin) and elevation (bob
 	above/below a base pitch); a third drives a zoom "breathe" whose far point is
 	clamped, every frame, to whatever distance keeps the model's bounding sphere
-	at *least* `min_screen_fraction` of the smaller screen dimension -- so it can
+	at *least* `min_screen_fraction` of the smaller screen dimension - so it can
 	never drift out to a speck regardless of model size or window shape. The
 	look-at point is always the model's own bounding-sphere center: it never
 	drifts, so the model stays framed dead-center throughout. Assumes a Z-up
@@ -158,7 +158,7 @@ class CinematicOrbitManipulator(osgGA.CameraManipulator):
 	has to track that.
 
 	Overrides setNode()/getNode() to store the scene node into self._node, and
-	home() to (re)compute the bounding sphere from it -- both of these used to
+	home() to (re)compute the bounding sphere from it - both of these used to
 	be broken in the pybind11 bindings (CameraManipulator's trampoline didn't
 	intercept setNode()/getNode() at all, so a Python override of either was
 	silently never called; and home()'s two-argument overload crashed trying
@@ -166,7 +166,7 @@ class CinematicOrbitManipulator(osgGA.CameraManipulator):
 	override). Both are fixed now, so this no longer needs the
 	node-as-constructor-argument workaround an earlier version of this class
 	used. Note the trampoline fix only makes overriding setNode()/getNode()
-	*possible* -- it doesn't give a subclass free storage for free; a
+	*possible* - it doesn't give a subclass free storage for free; a
 	subclass that doesn't override them still gets the C++ base class's
 	no-op defaults, same as any plain C++ CameraManipulator subclass would.
 
@@ -209,8 +209,8 @@ class CinematicOrbitManipulator(osgGA.CameraManipulator):
 		return self._node
 
 	def home(self, *args):
-		# Called by View.setCameraManipulator(..., resetPosition=True) -- i.e. as
-		# soon as `viewer.cameraManipulator = self` runs -- with self._node
+		# Called by View.setCameraManipulator(..., resetPosition=True) - i.e. as
+		# soon as `viewer.cameraManipulator = self` runs - with self._node
 		# already populated (setNode() always runs first), so the model's real
 		# size/position is available here rather than needing to be guessed at
 		# construction time.
@@ -677,7 +677,7 @@ class ViewerREPLController(MainLoopController):
 		self._capture_callback = CaptureQueueCallback(self)
 		self.viewer.camera.finalDrawCallback = self._capture_callback
 
-		# insert(0, ...), not append() -- first refusal ahead of whatever handlers the caller
+		# insert(0, ...), not append() - first refusal ahead of whatever handlers the caller
 		# already appended (e.g. pyosg-praxis.py's PraxisKeyHandler) before calling repl().
 		self.input_lock = AgentInputLock()
 		self.viewer.eventHandlers.insert(0, self.input_lock)
@@ -691,7 +691,7 @@ class ViewerREPLController(MainLoopController):
 		return self.input_lock.locked
 
 	def lock_input(self, title="LockedByAgent"):
-		"""Start swallowing user mouse/keyboard input -- call before deterministic work
+		"""Start swallowing user mouse/keyboard input - call before deterministic work
 		(uniform reads/writes, camera posing, queued captures) that shouldn't race the user
 		touching the same live window. See AgentInputLock above for exactly what's swallowed.
 		"""
@@ -700,14 +700,14 @@ class ViewerREPLController(MainLoopController):
 		self._set_window_title(title)
 
 	def unlock_input(self, title="Ready"):
-		"""Stop swallowing user input -- call once the deterministic work is done."""
+		"""Stop swallowing user input - call once the deterministic work is done."""
 
 		self.input_lock.locked = False
 		self._set_window_title(title)
 
 	@contextlib.contextmanager
 	def locked_input(self, locked_title="LockedByAgent", ready_title="Ready"):
-		"""`with controller.locked_input(): ...` -- lock, run the block, always unlock after,
+		"""`with controller.locked_input(): ...` - lock, run the block, always unlock after,
 		even on exception. A plain (non-async) context manager is enough here: locking itself
 		is synchronous, and `with` around `await`-ing code inside is already valid Python, so
 		REPL blocks needing both (e.g. `with controller.locked_input(): await
@@ -724,7 +724,7 @@ class ViewerREPLController(MainLoopController):
 
 	def _set_window_title(self, title):
 		# osgx is a sibling project (not every environment running this module has it built),
-		# and window retitling is cosmetic status, not core lock behavior -- so this is soft,
+		# and window retitling is cosmetic status, not core lock behavior - so this is soft,
 		# best-effort: a missing osgx, a non-X11 backend, or any other failure here must never
 		# prevent lock_input()/unlock_input() from doing the part that actually matters.
 		try:

@@ -14,7 +14,7 @@ def test_construction_defaults():
 
 def test_construction_kwargs():
 	# One instance exercising every plain (non-callback) `kwargs_init_own<osg::Camera>()`
-	# argument at once -- `viewport`/`renderOrder`/`renderTargetImplementation` share the exact
+	# argument at once - `viewport`/`renderOrder`/`renderTargetImplementation` share the exact
 	# setter functors used by the identically-named properties below, so this also confirms that
 	# wiring, not just the parsing logic in isolation.
 	c = Camera(
@@ -69,7 +69,7 @@ def test_rendertargetimplementation_property_both_forms():
 	c.renderTargetImplementation = Camera.RenderTargetImplementation.PIXEL_BUFFER_RTT
 
 	# The single-value form calls OSG's own one-arg `setRenderTargetImplementation(impl)`
-	# overload, which picks its own fallback -- only the primary target is ours to assert on.
+	# overload, which picks its own fallback - only the primary target is ours to assert on.
 	assert c.renderTargetImplementation[0] == Camera.RenderTargetImplementation.PIXEL_BUFFER_RTT
 
 	c.renderTargetImplementation = (

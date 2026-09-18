@@ -5,6 +5,7 @@ helpers, utilities, and examples without changing the public import surface.
 """
 
 import os as _os
+
 from pathlib import Path as _Path
 
 # The core extension's directory contains the project-built OSG DLLs and ktx.
@@ -14,13 +15,15 @@ _dll_directory = None
 _plugin_dll_directory = None
 _package_directory = _Path(__file__).parent
 _plugin_directory = _package_directory / "osgPlugins-3.6.5"
+
 if _os.name == "nt":
 	# osgDB loads plugins through legacy LoadLibrary(), which does not honor
-	# Python's add_dll_directory() entries.  Keep both directories on PATH for
+	# Python's add_dll_directory() entries. Keep both directories on PATH for
 	# their transitive DLL dependencies as well.
 	_os.environ["PATH"] = _os.pathsep.join(
 		(str(_package_directory), str(_plugin_directory), _os.environ.get("PATH", ""))
 	)
+
 	if hasattr(_os, "add_dll_directory"):
 		_dll_directory = _os.add_dll_directory(str(_package_directory))
 		_plugin_dll_directory = _os.add_dll_directory(str(_plugin_directory))

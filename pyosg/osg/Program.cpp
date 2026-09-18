@@ -35,7 +35,7 @@ void bind_Program(py::module_& m) {
 		)
 	;
 
-	// Shaders can be added via `.shaders.append(shader)` (SequenceProxy, below) -- no need for a
+	// Shaders can be added via `.shaders.append(shader)` (SequenceProxy, below) - no need for a
 	// dedicated addShader() method.
 	pyx::bind_proxy_property<detail::ShadersProxy, osg::Program, detail::ProgramStorage>(
 		program,

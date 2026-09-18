@@ -1,38 +1,38 @@
 #!/usr/bin/env python3
 
-# Step 10 -- Dynamic Probes
+# Step 10 - Dynamic Probes
 #
 # Step 9 (09-ibl.py) bakes its whole environment (diffuse + specular + BRDF LUT) ONCE at startup
 # via osgx.gltf.pbribl.PBRIBLEnvironment.prepare(). This step demonstrates that the specular half
 # of that environment can be REBAKED LIVE: press 'r' to replace the entire reflection environment
-# with a synthetic one -- each of the 6 cube faces filled with a fresh checkerboard of random/
-# palette colors (see paint_random_faces()) -- and rebake the specular cubemap from it on the fly,
+# with a synthetic one - each of the 6 cube faces filled with a fresh checkerboard of random/
+# palette colors (see paint_random_faces()) - and rebake the specular cubemap from it on the fly,
 # swapping the result onto texture unit 5. There's no photographic content left at all after a
 # repaint, so there's zero ambiguity about what's changing frame-to-frame: the whole reflection
 # environment.
 #
-# Since specular here is ALWAYS procedural (the very first frame already fires a repaint -- see
+# Since specular here is ALWAYS procedural (the very first frame already fires a repaint - see
 # ProbeRebaker below), baking a real GGX-prefiltered specular cubemap from --hdr at startup would
 # be pure waste: real work thrown away before a single frame ever samples it. So this step is the
 # one caller of osgx.gltf.pbribl.PBRIBLEnvironment.prepareDiffuseOnly() (added alongside this
-# file's conversion) -- diffuse irradiance and the BRDF LUT still bake for real, specular starts
+# file's conversion) - diffuse irradiance and the BRDF LUT still bake for real, specular starts
 # as an unbaked placeholder and is immediately replaced by the first procedural repaint. --env
-# (a fully pre-baked manifest) has no such waste to avoid -- its specular is a cheap KTX2 load,
-# not a GPU bake -- but the first repaint replaces it too, for the same reason: this step is about
+# (a fully pre-baked manifest) has no such waste to avoid - its specular is a cheap KTX2 load,
+# not a GPU bake - but the first repaint replaces it too, for the same reason: this step is about
 # proving the environment CAN change live, not about which bytes it starts with.
 #
 # The procedural repaint's own template image (paint_random_faces()'s size/format source) is a
-# blank synthetic equirect (see make_probe_template_image()), not a loaded --hdr file -- every
+# blank synthetic equirect (see make_probe_template_image()), not a loaded --hdr file - every
 # pixel it produces gets fully overwritten by the checkerboard anyway, so there's nothing for a
 # real HDR to contribute there either. This is what lets --env work stand alone, with no local
 # .hdr file needed at all.
 #
 # This is sync/stalling (GGXPrefilterOptions.syncReadback, still the only mode implemented), not
-# an async capture-from-live-scene mode -- per the user, "it's enough to show that it CAN change
+# an async capture-from-live-scene mode - per the user, "it's enough to show that it CAN change
 # dynamically, even if it's not perfect or async."
 #
 # Diffuse (SH/Lambertian) irradiance and the BRDF LUT are intentionally left static, baked once at
-# startup by PBRIBLEnvironment.prepareDiffuseOnly()/load() -- only the specular prefiltered
+# startup by PBRIBLEnvironment.prepareDiffuseOnly()/load() - only the specular prefiltered
 # cubemap rebakes live.
 
 import sys
@@ -49,7 +49,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size, resolve_model, resolve_asset
 
 import numpy as np
@@ -59,7 +59,7 @@ from OpenSceneGraph.GL import *
 
 import osgx
 
-# Same light positions as Steps 7/8/9 -- no animation.
+# Same light positions as Steps 7/8/9 - no animation.
 KEY_LIGHT_POS = osg.Vec3( 0.1, 0.1, 1.0) # front-center key (shadow caster)
 FILL_LIGHT_POS_0 = osg.Vec3(-0.8, 0.3, 0.5) # cool fill, left
 FILL_LIGHT_POS_1 = osg.Vec3( 0.0, -0.6, 0.2) # warm back/rim
@@ -69,18 +69,18 @@ FILL_LIGHT_POS_1 = osg.Vec3( 0.0, -0.6, 0.2) # warm back/rim
 # --------------------------------------------------------------------------- #
 
 # Order matches GGXPrefilter.cpp's faceIndex convention exactly (+X, -X, +Y, -Y,
-# +Z, -Z) -- see _equirect_face_uv() below.
+# +Z, -Z) - see _equirect_face_uv() below.
 FACE_NAMES = ("+X", "-X", "+Y", "-Y", "+Z", "-Z")
 
 # HDR magnitude for a fully-saturated (1.0) color channel. NOTE: PBRIBLScene.create()'s specular
-# term samples envMap directly and is NOT scaled by --ibl-diffuse -- only --ibl-specular affects
-# it -- so this has to sit near a real HDR's own peak magnitude (photographed HDRs like
-# papermill.hdr are typically ~0.5-3), not just "however bright looks fun" -- too high and every
+# term samples envMap directly and is NOT scaled by --ibl-diffuse - only --ibl-specular affects
+# it - so this has to sit near a real HDR's own peak magnitude (photographed HDRs like
+# papermill.hdr are typically ~0.5-3), not just "however bright looks fun" - too high and every
 # face desaturates to the same white under the PBR Neutral tonemapper's highlight rolloff.
 FACE_INTENSITY = 2.5
 FACE_GRID_SIZE = 6 # checkerboard cells per side, per face
 
-# Fixed size for make_probe_template_image() -- a plausible equirect resolution (2:1), matching
+# Fixed size for make_probe_template_image() - a plausible equirect resolution (2:1), matching
 # what a real HDR probe would typically use. Purely a size/format template (see that function's
 # own docstring), so this has no bearing on the baked specular cubemap's own resolution
 # (--prefilter-size).
@@ -92,7 +92,7 @@ def _equirect_face_uv(w, h):
 	faces (matching GGXPrefilter.cpp's faceIndex convention) the corresponding
 	view direction belongs to, by inverting GGXPrefilter.cpp's
 	equirect_uv(dir_gl_to_zup(L)) mapping and then classifying by dominant
-	axis -- the same "biggest axis wins" test any cubemap face lookup uses.
+	axis - the same "biggest axis wins" test any cubemap face lookup uses.
 	Also returns face-local (s, t) in roughly [-1, 1], the standard gnomonic
 	(gnomonic = straight-line-preserving) projection onto that face's plane
 	-- the same projection a real cubemap face uses, so a checkerboard drawn
@@ -122,7 +122,7 @@ def _equirect_face_uv(w, h):
 	)
 
 	# np.select evaluates every branch for every pixel even though each ratio
-	# is only actually used where its own dominance mask picks it -- e.g.
+	# is only actually used where its own dominance mask picks it - e.g.
 	# dx/dy is computed everywhere, including pixels where dy happens to be
 	# ~0, even though those pixels are always x_dom or z_dom and that value
 	# gets discarded. Harmless but noisy; silence rather than chase it.
@@ -133,7 +133,7 @@ def _equirect_face_uv(w, h):
 	return face_id, s, t
 
 def _random_vivid_rgb():
-	"""A fully-saturated, full-value random hue -- as unlike a natural HDR color as possible."""
+	"""A fully-saturated, full-value random hue - as unlike a natural HDR color as possible."""
 	return colorsys.hsv_to_rgb(random.random(), 1.0, 1.0)
 
 def _hex_to_rgb(hex_color):
@@ -142,7 +142,7 @@ def _hex_to_rgb(hex_color):
 	return tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
 
 # Named color-scheme presets for --mode: each a list/tuple of hex strings. Add
-# more here -- any key becomes a valid --mode value automatically (see
+# more here - any key becomes a valid --mode value automatically (see
 # MODE_CHOICES below). "random" (fully random hues, not a fixed palette) is
 # handled separately in _make_color_source() and isn't a key in this dict.
 PRESET_PALETTES = {
@@ -170,7 +170,7 @@ def _make_color_source(mode):
 def make_probe_template_image(size=PROBE_TEMPLATE_SIZE):
 	"""
 	A blank equirectangular osg.Image (GL_RGB/GL_FLOAT) used only as a size/format template for
-	paint_random_faces() -- every pixel it produces gets fully overwritten by the checkerboard
+	paint_random_faces() - every pixel it produces gets fully overwritten by the checkerboard
 	repaint (see paint_random_faces()'s own docstring), so there's no need to load or bake a real
 	HDR just to seed this. This is what decouples the procedural specular probe from --hdr/--env
 	entirely: an --env-only invocation (a fully pre-baked environment, no local .hdr file at all)
@@ -188,7 +188,7 @@ def paint_random_faces(base_image, color_source):
 	Return a NEW osg.Image, same size/format as base_image, with each of the
 	6 cube faces filled with a FACE_GRID_SIZE x FACE_GRID_SIZE checkerboard
 	of two fresh colors drawn from `color_source` (see _make_color_source()).
-	Unlike an additive stamp, this replaces the ENTIRE environment -- no
+	Unlike an additive stamp, this replaces the ENTIRE environment - no
 	photographic content survives the repaint, so there's no mistaking it
 	for anything but synthetic.
 	"""
@@ -217,17 +217,17 @@ def paint_random_faces(base_image, color_source):
 class ProbeRebaker(osgGA.GUIEventHandler):
 	"""
 	Owns the live dynamic-probe specular rebake. 'r' starts one (see start()); each subsequent
-	FRAME event -- dispatched to every registered eventHandler once per viewer.frame() call, the
+	FRAME event - dispatched to every registered eventHandler once per viewer.frame() call, the
 	same mechanism pyosg-taa.py's Controls and pyosg-match4.py's StepAdvancer use for their own
-	per-frame state machines -- advances it by exactly one real frame, until
+	per-frame state machines - advances it by exactly one real frame, until
 	GGXPrefilterReadback reports done.
 
 	This used to be one blocking call (do_rebake()) that drove viewer.frame() itself in a tight
-	inner loop to force the bake to finish before returning -- safe only while this file's own
+	inner loop to force the bake to finish before returning - safe only while this file's own
 	__main__ block owned the outer frame loop directly (do_rebake()'s own old docstring already
 	warned it was NOT safe to call from inside a callback, for exactly this re-entrancy reason).
 	Now that the runner (pyosg-cli/OpenSceneGraph.examples) owns that loop, this class never
-	calls viewer.frame() itself -- it just advances its own state by one step per real FRAME
+	calls viewer.frame() itself - it just advances its own state by one step per real FRAME
 	event, and the bake visibly trickles in over a handful of frames instead of appearing to
 	complete instantly.
 	"""
@@ -286,7 +286,7 @@ class ProbeRebaker(osgGA.GUIEventHandler):
 		else:
 			cubemap = self.scene.readback.finish()
 
-			# GPU-baked mips are already embedded per-face (see GGXPrefilter.hpp) -- don't let OSG
+			# GPU-baked mips are already embedded per-face (see GGXPrefilter.hpp) - don't let OSG
 			# regenerate them, same as the static-environment path in 09-ibl.py.
 			cubemap.useHardwareMipMapGeneration = False
 
@@ -335,8 +335,8 @@ void main() {
 }
 """
 
-# Flat albedo, no textures, no IBL term (the glTF model is this step's IBL demonstration -- the
-# floor is just a plausible shadow receiver) -- identical to Step 9's floor.
+# Flat albedo, no textures, no IBL term (the glTF model is this step's IBL demonstration - the
+# floor is just a plausible shadow receiver) - identical to Step 9's floor.
 FLOOR_FRAGMENT = """
 #version 460 core
 
@@ -370,7 +370,7 @@ void main() {
 }
 """
 
-# Set by build_scene(), read by configure_viewer() -- ProbeRebaker needs the live viewer.camera
+# Set by build_scene(), read by configure_viewer() - ProbeRebaker needs the live viewer.camera
 # (for its postDrawCallback), which build_scene() never receives. Same "no other channel exists"
 # reasoning as pyosg-khronos-viewer.py's own _args/_pbr stash.
 _args = None
@@ -386,13 +386,13 @@ def build_scene(w, h):
 	env_group.add_argument(
 		"--hdr",
 		default=None,
-		help="Equirectangular HDR -- baked once for diffuse/BRDF LUT only; "
+		help="Equirectangular HDR - baked once for diffuse/BRDF LUT only; "
 			"specular is always procedural (see --mode), never baked from this"
 	)
 	env_group.add_argument(
 		"--env",
 		default=None,
-		help="Pre-baked osgx_pbribl environment manifest (default: papermill) -- its specular "
+		help="Pre-baked osgx_pbribl environment manifest (default: papermill) - its specular "
 			"bake is immediately replaced by the first procedural repaint, same as --hdr's"
 	)
 	ap.add_argument(
@@ -418,7 +418,7 @@ def build_scene(w, h):
 	args = ap.parse_args()
 
 	# --env, not --hdr: only pre-baked manifests are ever bundled in the openscenegraph-
-	# examples wheel (see resolve_asset()'s own comment in pyosg_example.py) -- a bare
+	# examples wheel (see resolve_asset()'s own comment in pyosg_example.py) - a bare
 	# invocation with neither flag must work out of the box against a plain `pip install`,
 	# not require OSG_FILE_PATH pointed at a real glTF-Sample-Environments checkout.
 	if not args.hdr and not args.env:
@@ -435,11 +435,11 @@ def build_scene(w, h):
 	path = resolve_model(args.path or "BoomBox")
 
 	if not path:
-		sys.exit("Cannot find model -- clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
+		sys.exit("Cannot find model - clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
 
 	model = osgDB.readNodeFile(path)
 
-	# --- IBL environment: diffuse/BRDF LUT are the only real bake either path performs -- specular
+	# --- IBL environment: diffuse/BRDF LUT are the only real bake either path performs - specular
 	# is ALWAYS procedural (ProbeRebaker above), so --hdr uses prepareDiffuseOnly() rather than
 	# prepare(), which would GGX-prefilter a real specular cubemap only to discard it before a
 	# single frame ever samples it. --env still loads a real specular bake off disk (a cheap KTX2
@@ -448,7 +448,7 @@ def build_scene(w, h):
 		hdr_path = resolve_asset(args.hdr, "hdr")
 
 		if not hdr_path:
-			sys.exit(f"Cannot find HDR {args.hdr!r} -- check OSG_FILE_PATH")
+			sys.exit(f"Cannot find HDR {args.hdr!r} - check OSG_FILE_PATH")
 
 		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepareDiffuseOnly(hdr_path, lutSize=1024)
 
@@ -468,7 +468,7 @@ def build_scene(w, h):
 	mg_ss = main_group.stateSet
 
 	# LightSet must live on the SAME StateSet as the Program that actually calls
-	# osgx_DirectLighting() (model's own StateSet, wired by PBRIBLScene.create() below -- not
+	# osgx_DirectLighting() (model's own StateSet, wired by PBRIBLScene.create() below - not
 	# main_group, an ancestor). See [[project_osgx_lightset_maxlights_fix]] for the full root
 	# cause; the floor's Program gets the same shared `lights` object attached to ITS OWN
 	# StateSet below.
@@ -531,7 +531,7 @@ def build_scene(w, h):
 
 	# --- Scene graph ------------------------------------------------------------ #
 	# Shadow uniforms/texture live on main_group's StateSet so the hand-rolled floor shader sees
-	# them by inheritance -- PBRIBLScene.create() already wired them directly onto model's own
+	# them by inheritance - PBRIBLScene.create() already wired them directly onto model's own
 	# StateSet above, so this is redundant (but harmless) for the model itself.
 	if shadow_map is not None:
 		mg_ss.textureAttributes[4] = shadow_map.depthTexture
@@ -579,9 +579,9 @@ def configure_viewer(viewer, root):
 
 	viewer.eventHandlers.append(rebaker)
 
-	print(f"[dynamicprobes] mode={_args.mode!r} -- press 'r' to repaint the 6 cube faces", flush=True)
+	print(f"[dynamicprobes] mode={_args.mode!r} - press 'r' to repaint the 6 cube faces", flush=True)
 
-	# Trigger the very first bake immediately -- no GL context is needed yet, just like every
+	# Trigger the very first bake immediately - no GL context is needed yet, just like every
 	# other node/texture build_scene() already constructs without one; the actual GPU work only
 	# happens once ProbeRebaker's FRAME polling drives real render traversals.
 	rebaker.start()

@@ -31,7 +31,7 @@ def test_uniforms_extend(uniform_init):
 
 def test_uniforms_extend_bare_args():
 	# uniforms.extend() takes an iterable (test_uniforms_extend above, via a generator) OR the
-	# Uniforms given as separate positional arguments, or a single bare Uniform -- both of the
+	# Uniforms given as separate positional arguments, or a single bare Uniform - both of the
 	# latter 2 shapes are new, exercised here.
 	ss = StateSet()
 	u0 = Uniform(Uniform.FLOAT, "a")
@@ -53,7 +53,7 @@ def test_uniforms_extend_bare_args():
 def test_attributes_extend_bare_args():
 	# Same new call shapes as test_uniforms_extend_bare_args, for the attributes MappingProxy
 	# (keyed by StateAttribute.type instead of Uniform.name). Texture2D is deliberately NOT used
-	# here -- real OSG's setAttributeAndModes() detects a Texture and silently redirects it to
+	# here - real OSG's setAttributeAndModes() detects a Texture and silently redirects it to
 	# setTextureAttributeAndModes(unit=0, ...) instead, so it would never land in .attributes.
 	ss = StateSet()
 	p = Program(name="p")
@@ -166,10 +166,10 @@ def test_uniforms_setdefault():
 
 	ss.uniforms["a"] = 1.0
 
-	# already present -- returns the existing value, unchanged
+	# already present - returns the existing value, unchanged
 	assert ss.uniforms.setdefault("a", 99.0).value == pytest.approx(1.0)
 
-	# absent -- sets it, then returns the (now-existing) value
+	# absent - sets it, then returns the (now-existing) value
 	created = ss.uniforms.setdefault("b", 2.0)
 
 	assert created.value == pytest.approx(2.0)
@@ -180,7 +180,7 @@ def test_uniforms_pop_and_clear_release_when_no_other_ref():
 	# Same reasoning as Group's version of this test: len() dropping to 0 doesn't prove the
 	# Uniform objects were actually destroyed rather than kept alive by a leaked MapSlotCache
 	# entry. No local variables are kept beyond `popped` on purpose. (Uniform's constructor
-	# used to bypass kwargs_init entirely -- debug= failed here until that was fixed, see
+	# used to bypass kwargs_init entirely - debug= failed here until that was fixed, see
 	# test_kwargs_init_debug_and_name in test/osg_Uniform.py.)
 	deleted = []
 	dbg = lambda addr, cls, name: deleted.append(name)
@@ -205,7 +205,7 @@ def test_uniforms_pop_and_clear_release_when_no_other_ref():
 
 def test_texture_attributes_pop_and_clear_release_when_no_other_ref():
 	# Same reasoning, but through the textureAttributes MappingProxy specialization instead of
-	# uniforms -- proxy pop()/clear() are the same shared code across every MappingProxy, so
+	# uniforms - proxy pop()/clear() are the same shared code across every MappingProxy, so
 	# this is complementary coverage via a second owner, not redundant.
 	deleted = []
 	dbg = lambda addr, cls, name: deleted.append(name)
@@ -275,7 +275,7 @@ def test_attributes_mapping():
 	ss = StateSet()
 	p = Program(name="p")
 
-	# The subscript key is the attribute's OWN `StateAttribute::Type` -- it's not inferred, so
+	# The subscript key is the attribute's OWN `StateAttribute::Type` - it's not inferred, so
 	# it must be repeated even though `p` already knows its own type.
 	ss.attributes[StateAttribute.PROGRAM] = p
 
@@ -302,7 +302,7 @@ def test_attributes_append_infers_key():
 	ss = StateSet()
 	p = Program(name="p")
 
-	# append()/extend() read the key from `p.type` -- this is the syntax that sidesteps having
+	# append()/extend() read the key from `p.type` - this is the syntax that sidesteps having
 	# to name `StateAttribute.PROGRAM` a second time.
 	ss.attributes.append(p)
 
@@ -364,15 +364,15 @@ def test_modes_setdefault():
 
 	ss.modes[GL_DEPTH_TEST] = StateAttribute.OFF
 
-	# already present -- returns the existing value, unchanged
+	# already present - returns the existing value, unchanged
 	assert ss.modes.setdefault(GL_DEPTH_TEST, StateAttribute.ON) == StateAttribute.OFF
 
-	# absent -- sets it, then returns the (now-existing) value
+	# absent - sets it, then returns the (now-existing) value
 	assert ss.modes.setdefault(GL_BLEND, StateAttribute.ON) == StateAttribute.ON
 	assert ss.modes[GL_BLEND] == StateAttribute.ON
 	assert len(ss.modes) == 2
 
-# Same ValueMappingProxy shape as .modes[] above (see State.hpp's DefinesTag) -- string keys
+# Same ValueMappingProxy shape as .modes[] above (see State.hpp's DefinesTag) - string keys
 # instead of GL enum keys, but otherwise identical get/set/del/keys/contains/pop/setdefault
 # behavior, so these mirror the .modes[] tests directly rather than inventing new coverage shapes.
 def test_defines_mapping():
@@ -423,19 +423,19 @@ def test_defines_setdefault():
 
 	ss.defines["FOO"] = StateAttribute.OFF
 
-	# already present -- returns the existing value, unchanged
+	# already present - returns the existing value, unchanged
 	assert ss.defines.setdefault("FOO", StateAttribute.ON) == StateAttribute.OFF
 
-	# absent -- sets it, then returns the (now-existing) value
+	# absent - sets it, then returns the (now-existing) value
 	assert ss.defines.setdefault("BAR", StateAttribute.ON) == StateAttribute.ON
 	assert ss.defines["BAR"] == StateAttribute.ON
 	assert len(ss.defines) == 2
 
 # The actual real-world call shape this binding was added FOR (see 11-sketchfab.py's
-# OSGX_PBRIBL_AO wiring) -- setDefine()'s single-arg overload sets the define's own value string
+# OSGX_PBRIBL_AO wiring) - setDefine()'s single-arg overload sets the define's own value string
 # to "" (a flag-style, #ifdef-tested define, not a `#define NAME value` substitution). There's no
 # Python-facing way to read that value string back yet (only the OverrideValue half of the
-# DefinePair is exposed -- see DefinesTag's own comment in State.hpp), so this only asserts the
+# DefinePair is exposed - see DefinesTag's own comment in State.hpp), so this only asserts the
 # round-trip on the half that IS exposed; it does not prove the value string landed correctly.
 def test_defines_set_matches_setDefine_single_arg_overload():
 	ss = StateSet()

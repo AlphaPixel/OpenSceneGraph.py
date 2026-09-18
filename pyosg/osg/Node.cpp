@@ -29,7 +29,7 @@ void bind_Node(py::module_& m) {
 	auto node = py::class_<osg::Node, osg::Object, osg::ref_ptr<osg::Node>>(
 		m,
 		"Node",
-		"Base class for every element of the scene graph -- leaf Drawables and the Group "
+		"Base class for every element of the scene graph - leaf Drawables and the Group "
 		"nodes that hold them alike. .updateCallback/.eventCallback each accept either a "
 		"NodeCallback subclass instance or a plain Python callable, in place of OSG's "
 		"traditional set*Callback()/get*Callback() methods."
@@ -108,8 +108,8 @@ void bind_Node(py::module_& m) {
 	node.attr("NodeMask") = detail::builtin_int();
 
 	// Deliberately NOT a `Node` method/property, unlike `.stateSet` (which is the common,
-	// get-or-create path). This is the rare, non-creating variant -- returns `None` rather than
-	// forcing a `StateSet` into existence -- kept off `node.<TAB>` and matched to the
+	// get-or-create path). This is the rare, non-creating variant - returns `None` rather than
+	// forcing a `StateSet` into existence - kept off `node.<TAB>` and matched to the
 	// `osg.computeLocalToWorld(nodePath)`-style module-function precedent for "advanced, reach
 	// for it deliberately" operations.
 	m.def("getStateSet", [](osg::Node& self) -> osg::StateSet* {

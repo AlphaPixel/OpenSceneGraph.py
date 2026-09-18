@@ -5,29 +5,29 @@ a field of points where a diagram of cells sweeps into existence left-to-right,
 each cell popping in with a little red/pink flourish right as the front passes
 it, while everything ahead of the front is still just bare dots.
 
-No vector-line library involved -- one fullscreen quad, one fragment shader.
+No vector-line library involved - one fullscreen quad, one fragment shader.
 Points are uploaded once as a flat uniform array; the shader does a brute-force
 nearest/second-nearest search per pixel (this is the classic "Worley noise"
 cell-boundary trick: d2 - d1 goes to zero exactly on a Voronoi edge). The only
 non-obvious bit is how "reveal" is decided: a cell is drawn (edges + fat seed
 dot) once ITS SEED's x coordinate falls behind the sweeping frontierX, so the
-boundary between a revealed and an unrevealed cell -- which is just wherever
-two neighboring cells disagree on being revealed -- automatically traces the
+boundary between a revealed and an unrevealed cell - which is just wherever
+two neighboring cells disagree on being revealed - automatically traces the
 real Voronoi edge between them. That's what makes the front wavy/organic
 instead of a plain vertical wipe, with no extra geometry work required.
 
 `--vband N` switches to a second mode: instead of revealing-and-keeping cells
 as a frontier sweeps by, only cells whose SEED currently falls within an N-pixel-
-wide vertical band are drawn at all -- nothing outside that band renders, not
-even the "not yet revealed" dots -- and the band itself just travels left-to-
+wide vertical band are drawn at all - nothing outside that band renders, not
+even the "not yet revealed" dots - and the band itself just travels left-to-
 right on a loop (no ping-pong). Same nearest/second-nearest search, same
 per-cell membership test, just windowed instead of accumulating. The leading
 (right) edge of the band is a hard clip on the FRAGMENT's own position (the
-shockwave's outer rim -- straight, not wavy); the trailing (left) edge stays a
+shockwave's outer rim - straight, not wavy); the trailing (left) edge stays a
 seed-position test, which is what gives it its natural wavy cell-boundary look.
 
 Two more --vband-mode-only options: `--density N` sets the cell count (default
-90) -- point generation and the shader's array size both key off this, so it's
+90) - point generation and the shader's array size both key off this, so it's
 threaded through at build time rather than baked in at import. `--fill` paints
 each cell's whole interior instead of just its edges+seed dot, for a solid
 "energy goo clinging to the rim" mass instead of a wireframe diagram.
@@ -42,7 +42,7 @@ os.environ.setdefault("OSG_WINDOW", "50 50 900 650")
 # Import side effect: fills in OSG_THREADING/OSG_GL_* env var defaults (see pyosg_example.py).
 # Deliberately after the OSG_WINDOW override above (setdefault() means order between these
 # doesn't actually matter, but matching pyosg-khronos-viewer.py's style) and before
-# `from OpenSceneGraph import *` -- these need to land before OSG's DisplaySettings reads them.
+# `from OpenSceneGraph import *` - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size
 
 from OpenSceneGraph import *
@@ -66,7 +66,7 @@ void main() {
 """
 
 # __POINT_COUNT__ is substituted in build_voronoi_hud() with the actual point count
-# (so --density threads through) -- GLSL needs a compile-time array size, and the
+# (so --density threads through) - GLSL needs a compile-time array size, and the
 # shader has no other reason to be a template.
 VORONOI_FRAG = """
 #version 330 core
@@ -121,14 +121,14 @@ void main() {
 
 	if (bandMode != 0) {
 		// Single left->right sweep (no ping-pong) of a fixed-width window, membership
-		// decided purely by seed x -- nothing persists once the band moves past it.
+		// decided purely by seed x - nothing persists once the band moves past it.
 		float halfBand = bandWidth * 0.5;
 		float travelStart = -sweepMargin - halfBand;
 		float travelEnd = aspect + sweepMargin + halfBand;
 		float bandCenterX = mix(travelStart, travelEnd, fract(osg_SimulationTime / sweepPeriod));
 
 		// Seed-based test gives the trailing (left) edge its natural wavy cell-
-		// boundary look -- but it's ONE-SIDED: it only asks "has this cell's seed
+		// boundary look - but it's ONE-SIDED: it only asks "has this cell's seed
 		// not yet been left behind", with no upper bound. An upper bound (excluding
 		// any cell whose seed is still ahead of the rim) sounds right but isn't --
 		// a cell just past the rim can still own a sliver of territory dipping back
@@ -141,7 +141,7 @@ void main() {
 		if (seedPastTrail && !pastRim) {
 			if (fillMode != 0) {
 				// Solid mass instead of a wireframe: every pixel in-cell gets painted,
-				// not just the edge/dot -- a per-cell hash gives each patch a slightly
+				// not just the edge/dot - a per-cell hash gives each patch a slightly
 				// different shade (mottled, organic) and a thin darker seam along
 				// d2-d1 still separates neighboring cells, like fused tissue.
 				float cellShade = hash21(points[i1]);
@@ -180,7 +180,7 @@ void main() {
 	bool revealedB = points[i2].x < frontierX;
 
 	if (revealedA) {
-		// How close this cell's seed is to the sweeping front -- 1 right at the
+		// How close this cell's seed is to the sweeping front - 1 right at the
 		// front, fading to 0 for cells that were revealed long ago.
 		float sinceReveal = frontierX - points[i1].x;
 		float revealT = clamp(1.0 - sinceReveal / 0.10, 0.0, 1.0);
@@ -234,7 +234,7 @@ void main() {
 def generate_points(count, aspect, margin, max_attempts=50):
 	"""Rejection-sample `count` points, spaced apart just enough (relative to the
 	resulting typical cell size) to stop near-coincident points from forming
-	degenerate sliver cells thinner than the edge lines -- scaled to `count` so
+	degenerate sliver cells thinner than the edge lines - scaled to `count` so
 	--density still looks right whether that's 20 cells or 400.
 	"""
 
@@ -325,7 +325,7 @@ def build_voronoi_hud(points, w, h, vband_px=None, fill=False):
 
 	return cam
 
-# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+# The real pipeline-assembly entrypoint - returns the root Node, no viewer/window side effects.
 # Reads --density/--vband/--fill straight from sys.argv (matching parse_arg()/parse_vband()'s
 # existing shape) rather than switching to argparse, so both a standalone run and a runner-driven
 # one (which forwards `-- --density N ...` straight into sys.argv[1:], see pyosg-khronos-viewer.py)
@@ -346,7 +346,7 @@ def build_scene(w, h):
 	root = osg.Group()
 	root.children.append(hud)
 
-	# No interactive keys -- every option here is a startup CLI flag, so this reports them once
+	# No interactive keys - every option here is a startup CLI flag, so this reports them once
 	# instead of silently leaving them undiscoverable (unlike every keyboard-driven example in
 	# this repo, which prints/shows its live controls).
 	print(
@@ -358,7 +358,7 @@ def build_scene(w, h):
 
 	return root
 
-# The HUD camera clears white and covers the whole viewport every frame -- viewer-level, so it
+# The HUD camera clears white and covers the whole viewport every frame - viewer-level, so it
 # needs the live viewer build_scene() never receives.
 def configure_viewer(viewer, root):
 	viewer.camera.clearColor = osg.Vec4(1.0, 0.0, 1.0, 1.0)

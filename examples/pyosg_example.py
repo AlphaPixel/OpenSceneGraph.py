@@ -3,11 +3,11 @@
 import os
 import pathlib
 
-# setdefault(), not update() -- same reason as pyosg_visitor.py: an example that already set its
+# setdefault(), not update() - same reason as pyosg_visitor.py: an example that already set its
 # own OSG_WINDOW/OSG_THREADING/etc. (window size, a non-default GL version, ...) before importing
 # this keeps what it set; this only fills in whatever it didn't. Importing this is now the ONE
-# place "SingleThreaded is mandatory" (see feedback_viewer_close_threading_deadlock -- a live
-# non-SingleThreaded draw thread can deadlock a Viewer's destructor) is declared -- an example
+# place "SingleThreaded is mandatory" (see feedback_viewer_close_threading_deadlock - a live
+# non-SingleThreaded draw thread can deadlock a Viewer's destructor) is declared - an example
 # that imports this for window_size() gets it whether or not its own env block remembers to say
 # so, instead of a standing policy that only holds as well as 42 separate copy-pasted blocks do.
 os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
@@ -17,12 +17,12 @@ os.environ.setdefault("OSG_GL_VERSION", "4.6")
 os.environ.setdefault("OSG_GL_CONTEXT_VERSION", "4.6")
 
 # Derives (width, height) from OSG_WINDOW ("x y width height", e.g. "50 50 800 600") instead of a
-# second, separately-hardcoded W, H module constant -- one declared value per file instead of two
+# second, separately-hardcoded W, H module constant - one declared value per file instead of two
 # that can silently drift apart. Standalone __main__ blocks call this; the pyosg/
 # OpenSceneGraph.examples runners never do (they pass their own --width/--height straight into
 # build_scene() and viewer.setUpViewInWindow()). See build_scene()'s own contract comment in
 # pyosg-mrt.py: (w, h) stays an explicit argument on every build_scene(), never something it reads
-# from the environment itself -- this function is the caller-side counterpart of that rule, not an
+# from the environment itself - this function is the caller-side counterpart of that rule, not an
 # exception to it.
 def window_size(default=(800, 600)):
 	spec = os.environ.get("OSG_WINDOW")
@@ -34,7 +34,7 @@ def window_size(default=(800, 600)):
 
 	return int(w), int(h)
 
-# Deliberately here, not at module top -- osg must never be imported before the
+# Deliberately here, not at module top - osg must never be imported before the
 # os.environ.setdefault() block above runs (see that block's own comment), and this module gets
 # imported by every example specifically so those defaults land before ITS OWN internal osg
 # import, let alone the caller's later `from OpenSceneGraph import *`.
@@ -43,17 +43,17 @@ from OpenSceneGraph.GL import GL_DEPTH_TEST
 import osgx
 
 # This module installs at the top level of the wheel (OpenSceneGraph/examples/pyosg_example.py),
-# a sibling of both `assets/` and the `lighting/` subpackage -- so this is the one place a plain
+# a sibling of both `assets/` and the `lighting/` subpackage - so this is the one place a plain
 # `.parent` (not `.parent.parent`) correctly reaches the bundled asset tree regardless of which
 # depth the CALLING file installs at. Deliberately kept here rather than scoped to the Lighting
-# Series specifically (see [[project_lighting_series_package_asset_backport]]) -- the user wants
+# Series specifically (see [[project_lighting_series_package_asset_backport]]) - the user wants
 # this available as general infrastructure any future example (core or official tier) can rely on
 # to "find its assets" without reinventing this lookup. Real consequence: pyosg_example.py's
 # public surface is now something the examples wheel can depend on, same as any other cross-package
-# API -- a change here that examples/lighting/*.py relies on means bumping/republishing BOTH
+# API - a change here that examples/lighting/*.py relies on means bumping/republishing BOTH
 # wheels together, not just openscenegraph-examples alone.
 #
-# Formerly copy-pasted into every examples/lighting/*.py file (00-11) -- that duplication was in
+# Formerly copy-pasted into every examples/lighting/*.py file (00-11) - that duplication was in
 # keeping with the series' deliberate "self-contained, diffable" teaching design for its shader/
 # lighting-math code, but this is plain asset-resolution plumbing with no pedagogical value, and
 # the duplication cost a real bug: a package-asset fallback fixed once in pyosg-khronos-viewer.py
@@ -102,7 +102,7 @@ def resolve_asset(value, suffix):
 
 	return str(path) if path.is_file() else None
 
-# Same technique as pyosg_async.py's ProgressBar._build_label()/_position_label() -- a plain
+# Same technique as pyosg_async.py's ProgressBar._build_label()/_position_label() - a plain
 # child of an identity-view/projection POST_RENDER Camera, hand-composed translate*scale*translate
 # matrix folding pixel-space placement directly into clip space (osg's row-vector convention, so
 # written left-to-right IS the applied order: position in pixel space first, then map that whole
@@ -112,7 +112,7 @@ def resolve_asset(value, suffix):
 # pass the SAME (w, h) build_scene() itself received.
 def label(text, w, h, corner="bottom-left", scale=2.0, margin=12.0, ink=(1.0, 1.0, 1.0, 1.0)):
 	"""A small screen-space HUD text overlay any example can drop into its scene, e.g. for
-	"Press R to reroll"-style on-screen hints. Returns a ready-to-attach osg.Camera -- add it as a
+	"Press R to reroll"-style on-screen hints. Returns a ready-to-attach osg.Camera - add it as a
 	child anywhere in build_scene()'s returned graph:
 
 		root.children.append(pyosg_example.label("Press R to reroll", w, h))
@@ -128,9 +128,9 @@ def label(text, w, h, corner="bottom-left", scale=2.0, margin=12.0, ink=(1.0, 1.
 
 	# PixelText's own cellSize (and its default advance) is a SQUARE per-character cell sized
 	# off GLYPH_ROWS (see osgx::PixelText::createAtlas()'s own comment: "a glyph block is only
-	# GLYPH_COLS * pixelScale wide but GLYPH_ROWS * pixelScale tall" -- the glyph itself sits
+	# GLYPH_COLS * pixelScale wide but GLYPH_ROWS * pixelScale tall" - the glyph itself sits
 	# centered in that square with margin on the narrower axis). Leaving advance at its default
-	# spaces characters a full cellSize apart -- visibly wider than the glyph's own native
+	# spaces characters a full cellSize apart - visibly wider than the glyph's own native
 	# GLYPH_COLS-wide footprint. Tightening it to the glyph's real width gives ordinary,
 	# non-monospace-square-cell text spacing instead.
 	advance = osgx.PixelText.GLYPH_COLS * scale

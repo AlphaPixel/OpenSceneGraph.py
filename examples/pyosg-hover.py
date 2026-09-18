@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 
 """Continuous hover with onEnter/onLeave scene feedback, ported from osgx's
-examples/osgx-hover.cpp -- SYNC path only (osg.Image + osgx.PickReadbackSync,
+examples/osgx-hover.cpp - SYNC path only (osg.Image + osgx.PickReadbackSync,
 Mode.CONTINUOUS, 1x1 sub-frustum). No --async here; this is step two toward
 pyosg-match4.py's real interaction (see osgx's CLAUDE.md, "Planned/next steps for
-picking" item 5) -- confirming onEnter/onLeave scene-graph mutation works from
+picking" item 5) - confirming onEnter/onLeave scene-graph mutation works from
 Python before wiring it to Board.
 
 Same five-sphere scene as pyosg-picking.py, but instead of printing on click, hovering
 a sphere scales it up 1.35x (onEnter) and restores it (onLeave). PickHoverCallback
 polls PickReadbackSync.lastID() on the update thread and fires onEnter/onLeave on
-transitions -- always safe for scene graph mutation, regardless of readback mode.
+transitions - always safe for scene graph mutation, regardless of readback mode.
 """
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size
 
 from OpenSceneGraph import *
@@ -23,7 +23,7 @@ from OpenSceneGraph.GL import *
 
 import osgx
 
-# Same core-profile-safe minimal Lambertian shader as pyosg-picking.py -- the pick camera's
+# Same core-profile-safe minimal Lambertian shader as pyosg-picking.py - the pick camera's
 # own shader (osgx::makePickCamera) is separate and already core-profile safe.
 SCENE_VERTEX_SHADER = """
 #version 330 core
@@ -74,7 +74,7 @@ OBJECTS = (
 
 def create_scene():
 	"""Five colored spheres, each carrying a pickID uniform (1-5) and its own
-	MatrixTransform -- returns (root, {id: (transform, base_matrix, name)}).
+	MatrixTransform - returns (root, {id: (transform, base_matrix, name)}).
 	"""
 	root = osg.Group(name="scene")
 	entries = {}
@@ -107,11 +107,11 @@ def create_scene():
 
 	return root, entries
 
-# Set by build_scene(), read by configure_viewer() -- PickCameraSync's sub-frustum math (unlike
+# Set by build_scene(), read by configure_viewer() - PickCameraSync's sub-frustum math (unlike
 # pyosg-picking.py's, which passes pick1x1=False and doesn't use its w/h args at all) genuinely
 # needs the real viewport size, but configure_viewer(viewer, root) has no direct way to receive
 # it. Both runners and every __main__ block call build_scene() before configure_viewer(), so a
-# same-module variable is a safe, ordering-guaranteed channel -- simpler than round-tripping (w, h)
+# same-module variable is a safe, ordering-guaranteed channel - simpler than round-tripping (w, h)
 # through the returned Node graph the way rb gets recovered below.
 _viewport = (800, 600)
 
@@ -134,7 +134,7 @@ def build_scene(w, h):
 		osg.notice(f"[pyosg-hover] leave -> ID {pick_id} ({name})")
 		mt.matrix = base
 
-	# 1x1 FBO -- PickCameraSync(pick1x1=True) builds a sub-frustum centered on the cursor
+	# 1x1 FBO - PickCameraSync(pick1x1=True) builds a sub-frustum centered on the cursor
 	# each frame instead of rendering the full window, so hover is pixel-perfect at zero
 	# per-frame GPU cost regardless of scene density.
 	pick_image = osg.Image()
@@ -159,7 +159,7 @@ def build_scene(w, h):
 
 	# Stashed as pick_cam's updateCallback (a plain Callback, not the eventual
 	# NodeCallbacksGroup) purely so configure_viewer() can recover this SAME rb object back out
-	# of the returned root -- build_scene()'s contract is "return a Node", no second channel
+	# of the returned root - build_scene()'s contract is "return a Node", no second channel
 	# for handing back a plain Python object it also needs later. Same pattern as
 	# pyosg-picking.py.
 	pick_cam.updateCallback = rb

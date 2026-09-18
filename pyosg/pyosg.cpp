@@ -15,6 +15,7 @@
 #include "osg/NodeVisitor.hpp"
 #include "osg/NodeCallback.hpp"
 #include "osg/Object.hpp"
+#include "osg/Plane.hpp"
 #include "osg/Program.hpp"
 #include "osg/State.hpp"
 #include "osg/Texture.hpp"
@@ -31,6 +32,7 @@ void bind(py::module_& m) {
 	bind_Quat(m);
 	bind_Matrix(m);
 	bind_Bound(m);
+	bind_Plane(m);
 	bind_Object(m);
 	bind_Buffer(m);
 	bind_Array(m);

@@ -75,7 +75,7 @@ extern "C" PyObject* PyInit_OpenSceneGraph();
 	// #define PYOSG_INTERNAL [[gnu::visibility("hidden")]]
 #endif
 
-// Bare forward declarations -- just enough to name these types below, without dragging in their
+// Bare forward declarations - just enough to name these types below, without dragging in their
 // (heavy) real headers, which each binding .cpp includes on its own before this manifest matters.
 namespace osg {
 	class Object;
@@ -99,10 +99,10 @@ namespace osg {
 
 // Central manifest for `pybind11x::kwargs_init` (the constructor-kwargs chaining mechanism defined
 // in pybind11x.hpp): every participating type needs its REAL immediate C++ base named here via
-// `kwargs_base`, whether or not that base defines any kwargs of its own -- that's what lets the
+// `kwargs_base`, whether or not that base defines any kwargs of its own - that's what lets the
 // walk in `kwargs_init<T>` reach it automatically instead of every subclass having to manually
 // re-derive (and keep in sync) what its actual next base is. `kwargs_init_own<T>` is declared here
-// too (its real body lives next to that type's bind_X() in its own .cpp) -- this header is included
+// too (its real body lives next to that type's bind_X() in its own .cpp) - this header is included
 // by nearly every binding TU, which is what makes each specialization visible wherever the walk
 // might instantiate it; skipping an entry here doesn't fail to compile, it just silently falls back
 // to the no-op default in whichever TU forgot to declare it, so keep this list in sync with reality.
@@ -325,6 +325,7 @@ void bind(py::module_& m);
 void bind_Quat(py::module_& m);
 // void bind_Matrix(py::module_& m);
 // void bind_Bound(py::module_& m);
+// void bind_Plane(py::module_& m);
 // void bind_Object(py::module_& m);
 // void bind_Buffer(py::module_& m);
 // void bind_Array(py::module_& m);

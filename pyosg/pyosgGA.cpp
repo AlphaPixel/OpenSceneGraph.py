@@ -175,7 +175,7 @@ void bind(py::module_& m) {
 		.export_values()
 	;
 
-	// Was entirely unbound -- ea.button/ea.buttonMask (both already bound above) returned a raw
+	// Was entirely unbound - ea.button/ea.buttonMask (both already bound above) returned a raw
 	// int with no Python-side names to compare against, forcing callers to hardcode magic numbers
 	// (LEFT=1, MIDDLE=2, RIGHT=4) to check which button an event carries.
 	py::enum_<osgGA::GUIEventAdapter::MouseButtonMask>(gea, "MouseButtonMask",
@@ -334,7 +334,7 @@ void bind(py::module_& m) {
 		// Bound as a plain method (not just made overridable in the trampoline) for the same
 		// reason updateCamera() is: lets test code (and real callers) invoke it through a
 		// genuine C++ virtual call, which is the only way to actually prove a trampoline
-		// override fires -- a direct Python-side call on a Python subclass instance always
+		// override fires - a direct Python-side call on a Python subclass instance always
 		// finds the subclass's own method via ordinary attribute lookup regardless of whether
 		// the trampoline works at all (see test/osgGA_CameraManipulator.py's
 		// test_direct_python_call_is_not_proof_of_real_dispatch).
@@ -397,7 +397,7 @@ void bind(py::module_& m) {
 		)
 		// Bound as a plain method (not just made overridable in the trampoline above) so a
 		// Python decorator manipulator can delegate to an INNER manipulator's own updateCamera()
-		// before composing anything on top of it -- e.g. self.inner.updateCamera(camera) -- see
+		// before composing anything on top of it - e.g. self.inner.updateCamera(camera) - see
 		// aipython/06-camera-effects.md.
 		.def("updateCamera", &osgGA::CameraManipulator::updateCamera,
 			"Update camera from the manipulator's current state."

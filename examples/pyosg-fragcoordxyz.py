@@ -5,7 +5,7 @@ import random
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import label, window_size
 
 from OpenSceneGraph import *
@@ -447,7 +447,7 @@ class ProgramHandler(osgGA.GUIEventHandler):
 		return False
 
 class TimeUpdateCallback:
-	"""Refreshes u_time every update traversal -- runs under the standard
+	"""Refreshes u_time every update traversal - runs under the standard
 	`while not viewer.done: viewer.frame()` loop (runner-driven or standalone) instead of
 	depending on a Python-side loop of its own, the same "OSG already provides a per-frame hook"
 	idea as pyosg-taa.py's FRAME-event handler."""
@@ -461,7 +461,7 @@ class TimeUpdateCallback:
 
 		return True
 
-# The real pipeline-assembly entrypoint -- returns the root Node, no viewer/window side effects.
+# The real pipeline-assembly entrypoint - returns the root Node, no viewer/window side effects.
 def build_scene(w, h):
 	g = osg.Geometry()
 
@@ -489,7 +489,7 @@ def build_scene(w, h):
 	return root
 
 # ProgramHandler needs the live viewer to register as an event handler, which build_scene()
-# never receives -- the Program is recovered from the geode (root's first child -- see
+# never receives - the Program is recovered from the geode (root's first child - see
 # build_scene()'s own wrapping) straight back out of its StateSet, same as pyosg_visitor.py's
 # own GatherVisitor introspection.
 def configure_viewer(viewer, root):

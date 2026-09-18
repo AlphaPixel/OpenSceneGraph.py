@@ -71,7 +71,7 @@ def test_buffer_write_is_zero_copy():
 
 	np.asarray(img)[1, 2] = (1.0, 2.0, 3.0, 4.0)
 
-	# A fresh view over the SAME image must see the write -- proves the
+	# A fresh view over the SAME image must see the write - proves the
 	# buffer is a live view over osg::Image's own pixel storage, not a copy.
 	assert tuple(np.asarray(img)[1, 2]) == (1.0, 2.0, 3.0, 4.0)
 

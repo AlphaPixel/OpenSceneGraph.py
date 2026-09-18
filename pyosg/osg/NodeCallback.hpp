@@ -17,7 +17,7 @@ namespace pyosg::detail {
 }
 
 // osg::Callback::nestedCallback is a SINGLY-LINKED chain (Callback -> Callback -> ... ->
-// nullptr), not an array -- this traits specialization flattens it into a Python list-like
+// nullptr), not an array - this traits specialization flattens it into a Python list-like
 // view (`callback.nestedCallbacks`) instead of forcing manual getNestedCallback()/
 // setNestedCallback() walks from Python. get()/size() walk the chain; set()/del() splice
 // around the target node (clearing its own nestedCallback so a removed/replaced node doesn't

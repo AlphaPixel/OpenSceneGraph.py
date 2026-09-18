@@ -77,7 +77,7 @@ def test_updatecallback():
 	# NodeCallback::run() itself is built on top of (adapting it to the "old style" operator()).
 	# Deliberately no explicit return (implicit None): call_override<bool> treats that as "no
 	# opinion," falling through to the real osg::Callback::run() default (which calls traverse()),
-	# so children/nested callbacks still get visited normally -- an explicit True/False here would
+	# so children/nested callbacks still get visited normally - an explicit True/False here would
 	# instead REPLACE that default outcome outright, same as detail::NodeCallback::run()'s existing
 	# behavior for its own "run" override.
 	class UpdateCallback(Callback):

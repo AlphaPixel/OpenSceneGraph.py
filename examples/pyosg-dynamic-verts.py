@@ -3,20 +3,20 @@
 # Answers one question: "how do I change vertex data every frame, when there's
 # no way around it?" (procedural geometry, skinning, particles, ...) The
 # answer is to mutate an EXISTING osg.Array's elements in place (arr[i] =
-# value) and call arr.dirty() -- never reallocate a new Array/Geometry per
+# value) and call arr.dirty() - never reallocate a new Array/Geometry per
 # frame just to move a vertex; see make_point()/UpdateCallback below.
 #
 # Under a core-profile context, mutate-in-place alone isn't enough: it also
 # needs (1) an explicit vertex-attrib binding (geom.vertexAttrib[0] = arr +
 # Program.bindAttribLocation) instead of relying on OSG's implicit/legacy
 # vertex-array aliasing, and (2) geom.dataVariance = DYNAMIC on the Geometry
-# ITSELF, not just the array -- see the comment in make_point() for why.
+# ITSELF, not just the array - see the comment in make_point() for why.
 
 import math
 import time
 
 # Import side effect: fills in OSG_THREADING/OSG_GL_* env var defaults (see pyosg_example.py).
-# Deliberately before `from OpenSceneGraph import *`, matching every other example -- these need
+# Deliberately before `from OpenSceneGraph import *`, matching every other example - these need
 # to land before OSG's DisplaySettings reads them.
 import os
 
@@ -53,7 +53,7 @@ class DataVarianceToggleHandler(osgGA.GUIEventHandler):
 	"""Press D to flip the point's Geometry between DYNAMIC and STATIC live,
 	demonstrating the exact mechanism make_point() relies on: switching to
 	STATIC doesn't touch dirty()/vertexAttrib at all, it just tells
-	VertexArrayState to stop ever re-checking them -- so the point freezes in
+	VertexArrayState to stop ever re-checking them - so the point freezes in
 	place one frame later, at whatever position it happened to be at."""
 
 	def __init__(self, geom):
@@ -79,7 +79,7 @@ class DataVarianceToggleHandler(osgGA.GUIEventHandler):
 		return True
 
 class LiveUpdateCallback:
-	"""Mutates the existing Vec3Array in place + dirty() -- the recommended
+	"""Mutates the existing Vec3Array in place + dirty() - the recommended
 	pattern. Relies on make_point() having already bound this same array as
 	vertex-attrib 0 (not just .vertexArray); no dirtyBound() needed here since
 	make_point() sets a fixed, generous initialBound up front instead."""
@@ -111,18 +111,18 @@ def make_point():
 	# VertexArrayState::_requiresSetArrays = (this->getDataVariance()==DYNAMIC) right after every
 	# draw. If left STATIC (the default), frame 2 onward skips re-binding vertex-attrib arrays
 	# entirely (Geometry::drawVertexArraysImplementation() returns early before ever reaching
-	# setVertexAttribArray()) -- the point renders once at its initial position and freezes
+	# setVertexAttribArray()) - the point renders once at its initial position and freezes
 	# forever, no matter how many times arr.dirty() fires on the CPU side.
 	geom.dataVariance = osg.Object.DataVariance.DYNAMIC
 
 	# Under a core-profile context, feeding a mutated array to a shader's
-	# osg_Vertex input needs an explicit attrib binding -- OSG's implicit/
+	# osg_Vertex input needs an explicit attrib binding - OSG's implicit/
 	# legacy vertex-array aliasing doesn't reliably pick up in-place mutation
 	# otherwise. Binding the same array identity here means LiveUpdateCallback
-	# never has to re-bind it -- only mutate + dirty() every frame.
+	# never has to re-bind it - only mutate + dirty() every frame.
 	geom.vertexAttrib[0] = arr
 
-	# Fixed, generous bound covering the whole orbit -- rules out small-feature/
+	# Fixed, generous bound covering the whole orbit - rules out small-feature/
 	# frustum culling entirely as a variable. A single-vertex geometry's AUTO
 	# bound is always zero-radius (it's one point), which sits right at the edge
 	# of small-feature culling and can flicker frame to frame from float noise
@@ -156,7 +156,7 @@ def build_scene(w, h):
 
 # viewMatrix/projectionMatrix need viewer.camera, which build_scene() never receives.
 # DataVarianceToggleHandler needs the live viewer to register as an event handler, which
-# build_scene() never receives -- the Geometry itself is recovered straight back out of the
+# build_scene() never receives - the Geometry itself is recovered straight back out of the
 # returned root's scene graph, same as pyosg-fragcoordxyz.py's own Program recovery.
 def configure_viewer(viewer, root):
 	viewer.camera.viewMatrix = osg.Matrix.lookAt(osg.Vec3(0, -10, 0), osg.Vec3(0, 0, 0), osg.Vec3(0, 0, 1))

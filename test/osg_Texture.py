@@ -33,7 +33,7 @@ def test_properties():
 
 def test_wrap_property_arity():
 	# `wrap` accepts a single WrapMode (applied to S/T/R) or a 1-3 element sequence
-	# (S[, T[, R]]) -- same parsing the constructor kwarg below goes through.
+	# (S[, T[, R]]) - same parsing the constructor kwarg below goes through.
 	t = Texture2D()
 
 	t.wrap = Texture.REPEAT
@@ -52,7 +52,7 @@ def test_wrap_property_arity():
 		t.wrap = "bad"
 
 def test_filter_property_mag_strip():
-	# A single FilterMode sets MIN directly, but MAG only accepts LINEAR/NEAREST -- the
+	# A single FilterMode sets MIN directly, but MAG only accepts LINEAR/NEAREST - the
 	# mipmap component gets stripped off automatically.
 	t = Texture2D()
 
@@ -88,7 +88,7 @@ def test_image_property():
 
 def test_construction_kwargs():
 	# One instance exercising every `kwargs_init_own<osg::Texture>()`/`<osg::Texture2D>()`
-	# argument at once -- `wrap`/`filter`/`image` share the exact setter functors used by the
+	# argument at once - `wrap`/`filter`/`image` share the exact setter functors used by the
 	# properties above, so this is really testing that wiring, not the parsing logic again.
 	img = Image()
 

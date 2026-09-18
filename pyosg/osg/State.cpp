@@ -38,11 +38,11 @@ void bind_State(py::module_& m) {
 	;
 
 	// Per-context capability/version info, populated by OSG itself from the live driver once a
-	// GraphicsContext has been realized -- the answer to "what GL version/profile did this
+	// GraphicsContext has been realized - the answer to "what GL version/profile did this
 	// context actually negotiate", as opposed to what OSG was compiled to SUPPORT (a fixed,
 	// build-time property that doesn't vary per install of this project's own GL3/CORE-only
 	// wheels). Only the plain informational fields are bound here, not the ~300 raw GL function
-	// pointers GLExtensions also carries -- those aren't meaningfully callable from Python and
+	// pointers GLExtensions also carries - those aren't meaningfully callable from Python and
 	// are out of scope for what this binding is for.
 	py::class_<
 		osg::GLExtensions,

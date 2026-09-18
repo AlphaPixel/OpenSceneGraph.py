@@ -70,7 +70,7 @@ namespace detail {
 	// (the modern, unified callback entry point; NodeCallback::run() only exists to adapt IT to the
 	// "old style" operator()(Node*, NodeVisitor*) method, per NodeCallback's own doc comment in
 	// osg/Callback). Using osg::Callback here is a strict superset of the old NodeCallback-only
-	// check -- any NodeCallback instance still passes it (NodeCallback IS-A Callback) -- so this
+	// check - any NodeCallback instance still passes it (NodeCallback IS-A Callback) - so this
 	// doesn't change behavior for existing NodeCallback-based code, it just also accepts a plain
 	// Callback subclass overriding run() directly. UpdateCallbackWrapper is UNCHANGED (still
 	// NodeCallback-shaped): it's a separate concern, wrapping a bare Python callable for the

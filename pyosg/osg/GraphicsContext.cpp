@@ -43,7 +43,7 @@ void bind_GraphicsContext(py::module_& m) {
 		)
 		// The REQUESTED GL context (from OSG_GL_VERSION/OSG_GL_CONTEXT_VERSION and
 		// OSG_GL_CONTEXT_PROFILE_MASK, read automatically into these fields the moment this
-		// singleton is first constructed) -- compare against the ACTUALLY negotiated context
+		// singleton is first constructed) - compare against the ACTUALLY negotiated context
 		// via State.glExtensions.glVersion to confirm a request was honored, not just made.
 		.def_property(
 			"glContextVersion",
@@ -87,7 +87,7 @@ void bind_GraphicsContext(py::module_& m) {
 		// own non-zero "default" FBO: RenderStage rebinds framebuffer 0 by default after every
 		// FBO-camera pass (RenderStage.cpp reads getDefaultFboId(), which starts at 0), so a
 		// final pass with no renderTargetImplementation silently ends up drawing into the REAL
-		// GL default framebuffer -- invisible to a compositor that only reads its own FBO --
+		// GL default framebuffer - invisible to a compositor that only reads its own FBO --
 		// unless this is set to match e.g. QOpenGLWidget.defaultFramebufferObject().
 		.def_property("defaultFboId",
 			&osg::GraphicsContext::getDefaultFboId,
@@ -106,7 +106,7 @@ void bind_GraphicsContext(py::module_& m) {
 			"This context's osg::State; only valid (non-crashing to use for GL work) once the "
 			"context has been realized."
 		)
-		// The Traits this context was actually realized with -- e.g. traits.glContextVersion
+		// The Traits this context was actually realized with - e.g. traits.glContextVersion
 		// to confirm what a DisplaySettings request (see DisplaySettings.glContextVersion
 		// above) resolved to on THIS context specifically, independent of what
 		// State.glExtensions.glVersion later reports the driver actually granted.
@@ -132,7 +132,7 @@ void bind_GraphicsContext(py::module_& m) {
 	// struct OSG_EXPORT Traits : public osg::Referenced, public ScreenIdentifier
 	//
 	// Traits IS-A osg::Referenced, and GraphicsContext keeps its own ref_ptr<Traits> internally
-	// (_traits), so this MUST use the ref_ptr holder -- otherwise pybind11 defaults to
+	// (_traits), so this MUST use the ref_ptr holder - otherwise pybind11 defaults to
 	// unique_ptr<Traits>, giving the object two independent owners (Python's unique_ptr and OSG's
 	// internal ref_ptr) that both unconditionally delete it, causing a double-free.
 	py::class_<

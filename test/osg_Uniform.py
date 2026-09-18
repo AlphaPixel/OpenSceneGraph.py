@@ -7,7 +7,7 @@ from OpenSceneGraph.osg import StateSet, Uniform, Vec3f, Matrixf
 
 def test_kwargs_init_debug_and_name():
 	# Uniform's constructor used to bypass kwargs_init entirely (~20 raw py::init<...>
-	# overloads) -- debug=/name=/etc. failed with a pybind11 "incompatible constructor
+	# overloads) - debug=/name=/etc. failed with a pybind11 "incompatible constructor
 	# arguments" error on every overload. Fixed by routing them all through
 	# pyx::kwargs_ctor<osg::Uniform, ...>() (kwargs_base<osg::Uniform> -> osg::Object in
 	# pyosg.hpp), except the copy constructor, which deliberately stays kwargs-free (see
@@ -31,7 +31,7 @@ def test_kwargs_init_debug_and_name():
 
 def test_copy_constructor_rejects_kwargs():
 	# Deliberate: a copy already fully initializes every field from the source object, so
-	# debug=/name= on TOP of a copy would mean overriding specific post-copy fields -- a
+	# debug=/name= on TOP of a copy would mean overriding specific post-copy fields - a
 	# different feature from what kwargs_ctor provides, matching the same convention already
 	# established for MatrixTransform/PositionAttitudeTransform's copy constructors.
 	src = Uniform("x", 1)

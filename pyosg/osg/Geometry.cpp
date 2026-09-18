@@ -179,7 +179,7 @@ void bind_Geometry(py::module_& m) {
 		)
 
 		// Properties (new) alongside the old set*Array()/get*Array() method calls (kept for
-		// compatibility -- osgGLTF's loader still calls setVertexArray()/setColorArray()
+		// compatibility - osgGLTF's loader still calls setVertexArray()/setColorArray()
 		// directly). Both forms share the same PropertySlot per array, so whichever one runs
 		// last correctly evicts what the other cached.
 		.def_property(
@@ -218,13 +218,13 @@ void bind_Geometry(py::module_& m) {
 		)
 
 		// TODO: TexCoordArray should eventually be a pyx::MappingProxy (unit -> Array), like
-		// StateSet.textureAttributes -- deferred, no rush.
+		// StateSet.textureAttributes - deferred, no rush.
 
-		// No addPrimitiveSet() method binding -- use `.primitiveSets.append(...)` below (the old
+		// No addPrimitiveSet() method binding - use `.primitiveSets.append(...)` below (the old
 		// method form was removed once the SequenceProxy existed, forcing every call site to
 		// port forward rather than accumulating a second permanent form; unlike vertexArray/
 		// colorArray/normalArray's dual forms above, nothing outside this repo's own Python
-		// examples called it -- osgGLTF's C++ loader calls osg::Geometry::addPrimitiveSet()
+		// examples called it - osgGLTF's C++ loader calls osg::Geometry::addPrimitiveSet()
 		// directly, not through this binding).
 	;
 

@@ -28,7 +28,7 @@ def test_construction_kwargs():
 	assert g.drawables[1].name == "bar"
 
 def test_drawables_extend_call_shapes():
-	# Same 3 .extend() shapes as Group.children -- iterable (tested elsewhere), bare separate
+	# Same 3 .extend() shapes as Group.children - iterable (tested elsewhere), bare separate
 	# arguments, and a single bare (non-iterable) item.
 	g = Geode(name="g")
 	d0 = Drawable(name="d0")
@@ -57,7 +57,7 @@ def test_drawables_insert():
 	g.drawables.insert(1, d1)
 
 	assert list(g.drawables) == [d0, d1, d2]
-	# Identity through the remove/re-add round trip -- not just equal drawables, the SAME
+	# Identity through the remove/re-add round trip - not just equal drawables, the SAME
 	# cached wrapper objects.
 	assert g.drawables[0] is d0
 	assert g.drawables[2] is d2
@@ -71,7 +71,7 @@ def test_drawables_insert():
 def test_drawables_insert_does_not_prematurely_destroy():
 	# The emulation fallback (del()+append() rotation) temporarily removes everything from `i`
 	# onward from the C++ container mid-insert(). No local Python variables are kept here on
-	# purpose -- the only things that can keep a Drawable alive during that window are the
+	# purpose - the only things that can keep a Drawable alive during that window are the
 	# proxy's SlotCache and (briefly) the C++ container itself. If either dropped its reference
 	# at the wrong moment, `deleted` would show entries appearing before clear() runs.
 	deleted = []

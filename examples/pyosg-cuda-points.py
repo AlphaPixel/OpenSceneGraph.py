@@ -7,7 +7,7 @@ import time
 
 # Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
 # pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example -- these need to land before OSG's DisplaySettings reads them.
+# example - these need to land before OSG's DisplaySettings reads them.
 from pyosg_example import window_size
 
 from OpenSceneGraph import *
@@ -17,7 +17,7 @@ from cuda.bindings import driver, nvrtc
 
 # The proof: a CUDA kernel writes point positions directly into the SAME GL buffer OSG
 # renders from, every frame, with zero CPU involvement in that data. No NumPy array, no
-# def_buffer() host pointer, no readback -- the CPU only ever passes a single scalar (the
+# def_buffer() host pointer, no readback - the CPU only ever passes a single scalar (the
 # current time) as a kernel launch parameter, exactly like a GLSL uniform. This is the
 # "GPU-resident LLM data, no CPU roundtrip" story from ai/context-todo-cuda-gpu-interop.md,
 # in its smallest possible form: swap KERNEL for "an LLM's output tensor" and this is the
@@ -28,7 +28,7 @@ from cuda.bindings import driver, nvrtc
 # raw GL buffer name CUDA's cuGraphicsGLRegisterBuffer() needs to register the SAME memory.
 #
 # Uses NVRTC (in-process kernel compilation, via the `cuda-python` pip wheel) instead of a
-# system CUDA toolkit -- nvcc is not required to run this.
+# system CUDA toolkit - nvcc is not required to run this.
 
 POINT_COUNT = 2000
 
@@ -142,7 +142,7 @@ class CUDAPointDriver:
 		self.function = cu(driver.cuModuleGetFunction(module, b"animateSpiral"))
 
 	# Registration can only happen once OSG has actually compiled a real GL buffer for the
-	# array (glObjectID reads 0 until then) -- this quietly retries every frame until that's
+	# array (glObjectID reads 0 until then) - this quietly retries every frame until that's
 	# true, then registers exactly once.
 	def try_register(self, context_id):
 		if self.resource is not None:
@@ -189,7 +189,7 @@ class CUDAPointDriver:
 
 		# Diagnostic-only verification, NOT part of the render path: proves the kernel is
 		# actually writing new values each call, without which this would be unverifiable
-		# from a screenshot alone. Reads while still mapped -- reading after unmap is
+		# from a screenshot alone. Reads while still mapped - reading after unmap is
 		# undefined per the CUDA/GL interop contract.
 		if verbose:
 			cu(driver.cuCtxSynchronize())
@@ -205,7 +205,7 @@ class CUDAPointDriver:
 		cu(driver.cuGraphicsUnmapResources(1, self.resource, 0))
 
 
-# Set by build_scene(), read by configure_viewer() -- CUDAPointDriver isn't an osg Callback (no
+# Set by build_scene(), read by configure_viewer() - CUDAPointDriver isn't an osg Callback (no
 # __call__), so it can't ride along stashed on a node's callback slot the way pyosg-picking.py/
 # pyosg-hover.py recover their own plain-Python state; a same-module variable is the simpler
 # channel here. Both runners and every __main__ block call build_scene() before
