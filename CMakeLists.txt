@@ -270,6 +270,7 @@ set(PYOSG_SOURCES
 	"pyosg/osg/Quat.cpp"
 	"pyosg/osg/Matrix.cpp"
 	"pyosg/osg/Bound.cpp"
+	"pyosg/osg/Plane.cpp"
 	"pyosg/osg/Buffer.cpp"
 	"pyosg/osg/Array.cpp"
 	"pyosg/osg/Object.cpp"
@@ -408,6 +409,22 @@ if(NOT PYOSG_EMBEDDED)
 				"${PYOSG_BUILD_AIPYTHON_DIR}" SYMBOLIC COPY_ON_ERROR
 			)
 		endif()
+
+		# importlib.metadata discovers package entry points from *.dist-info
+		# directories on PYTHONPATH. Mirror the wheel metadata here so aipython
+		# can discover the symlinked knowledge when driving a developer build.
+		set(PYOSG_BUILD_DIST_INFO_DIR
+			"${CMAKE_CURRENT_BINARY_DIR}/OpenSceneGraph-${PROJECT_VERSION}.dist-info")
+		file(MAKE_DIRECTORY "${PYOSG_BUILD_DIST_INFO_DIR}")
+		file(WRITE "${PYOSG_BUILD_DIST_INFO_DIR}/METADATA"
+			"Metadata-Version: 2.1\n"
+			"Name: OpenSceneGraph\n"
+			"Version: ${PROJECT_VERSION}\n"
+		)
+		file(WRITE "${PYOSG_BUILD_DIST_INFO_DIR}/entry_points.txt"
+			"[aipython.skills]\n"
+			"OpenSceneGraph = OpenSceneGraph\n"
+		)
 
 		# PYOSG_CORE_EXAMPLES and PYOSG_OFFICIAL_EXAMPLES above, mirrored here as symlinks
 		# so `python -m OpenSceneGraph.examples.<name>` also works against a dev build for
