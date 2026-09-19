@@ -32,52 +32,28 @@ namespace detail {
 	>;
 
 	constexpr auto InitialDrawCallbackGetter =
-		static_cast<osg::Camera::DrawCallback*(osg::Camera::*)()>(
-			&osg::Camera::getInitialDrawCallback
-		)
+		py::overload_cast<>(&osg::Camera::getInitialDrawCallback)
 	;
 
-	constexpr auto InitialDrawCallbackSetter =
-		static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
-			&osg::Camera::setInitialDrawCallback
-		)
-	;
+	constexpr auto InitialDrawCallbackSetter = &osg::Camera::setInitialDrawCallback;
 
 	constexpr auto PreDrawCallbackGetter =
-		static_cast<osg::Camera::DrawCallback*(osg::Camera::*)()>(
-			&osg::Camera::getPreDrawCallback
-		)
+		py::overload_cast<>(&osg::Camera::getPreDrawCallback)
 	;
 
-	constexpr auto PreDrawCallbackSetter =
-		static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
-			&osg::Camera::setPreDrawCallback
-		)
-	;
+	constexpr auto PreDrawCallbackSetter = &osg::Camera::setPreDrawCallback;
 
 	constexpr auto PostDrawCallbackGetter =
-		static_cast<osg::Camera::DrawCallback*(osg::Camera::*)()>(
-			&osg::Camera::getPostDrawCallback
-		)
+		py::overload_cast<>(&osg::Camera::getPostDrawCallback)
 	;
 
-	constexpr auto PostDrawCallbackSetter =
-		static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
-			&osg::Camera::setPostDrawCallback
-		)
-	;
+	constexpr auto PostDrawCallbackSetter = &osg::Camera::setPostDrawCallback;
 
 	constexpr auto FinalDrawCallbackGetter =
-		static_cast<osg::Camera::DrawCallback*(osg::Camera::*)()>(
-			&osg::Camera::getFinalDrawCallback
-		)
+		py::overload_cast<>(&osg::Camera::getFinalDrawCallback)
 	;
 
-	constexpr auto FinalDrawCallbackSetter =
-		static_cast<void(osg::Camera::*)(osg::Camera::DrawCallback*)>(
-			&osg::Camera::setFinalDrawCallback
-		)
-	;
+	constexpr auto FinalDrawCallbackSetter = &osg::Camera::setFinalDrawCallback;
 
 	// Slot-backed callback setter. We canonicalize the stored pointer via the getter so SlotCache
 	// compares the same pointer representation the getter will later return.

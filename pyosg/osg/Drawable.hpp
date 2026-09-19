@@ -27,17 +27,8 @@ namespace detail {
 		false
 	>;
 
-	constexpr auto DrawableCallbackGetter =
-		static_cast<osg::Drawable::DrawCallback*(osg::Drawable::*)()>(
-			&osg::Drawable::getDrawCallback
-		)
-	;
-
-	constexpr auto DrawableCallbackSetter =
-		static_cast<void(osg::Drawable::*)(osg::Drawable::DrawCallback*)>(
-			&osg::Drawable::setDrawCallback
-		)
-	;
+	constexpr auto DrawableCallbackGetter = py::overload_cast<>(&osg::Drawable::getDrawCallback);
+	constexpr auto DrawableCallbackSetter = &osg::Drawable::setDrawCallback;
 
 	template<size_t I, auto Setter, auto Getter, typename Callback, typename Wrapper>
 	auto callback_property_setter() {

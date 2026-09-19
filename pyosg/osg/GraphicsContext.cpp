@@ -101,7 +101,7 @@ void bind_GraphicsContext(py::module_& m) {
 		// script code, outside of a draw callback's RenderInfo.
 		.def_property_readonly(
 			"state",
-			static_cast<osg::State*(osg::GraphicsContext::*)()>(&osg::GraphicsContext::getState),
+			py::overload_cast<>(&osg::GraphicsContext::getState),
 			py::return_value_policy::reference,
 			"This context's osg::State; only valid (non-crashing to use for GL work) once the "
 			"context has been realized."

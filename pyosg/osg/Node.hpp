@@ -28,23 +28,16 @@ namespace detail {
 		true
 	>;
 
-	// Pointers to class methods have always mystified me; the pieces are:
-	//
-	//    <$ReturnValue($Class::*)($MethodParams...)>(&$Method)
-	//
-	// TODO: There must be a way to make this less crazy?
-	constexpr auto UpdateCallbackGetter =
-		static_cast<osg::Callback*(osg::Node::*)()>(&osg::Node::getUpdateCallback)
-	;
-
+	// NOTE: setUpdateCallback/setEventCallback are each overloaded with a member TEMPLATE
+	// (setX(const ref_ptr<T>&), for convenience) alongside the plain setX(Callback*) - that
+	// template poisons plain `auto` deduction (and overload_cast) for the whole set, same as
+	// Bound.hpp's expandBy/expandRadiusBy; static_cast's explicit target type is what lets the
+	// compiler pick the non-template overload here.
+	constexpr auto UpdateCallbackGetter = py::overload_cast<>(&osg::Node::getUpdateCallback);
 	constexpr auto UpdateCallbackSetter =
 		static_cast<void(osg::Node::*)(osg::Callback*)>(&osg::Node::setUpdateCallback)
 	;
-
-	constexpr auto EventCallbackGetter =
-		static_cast<osg::Callback*(osg::Node::*)()>(&osg::Node::getEventCallback)
-	;
-
+	constexpr auto EventCallbackGetter = py::overload_cast<>(&osg::Node::getEventCallback);
 	constexpr auto EventCallbackSetter =
 		static_cast<void(osg::Node::*)(osg::Callback*)>(&osg::Node::setEventCallback)
 	;

@@ -48,14 +48,10 @@ void bind_Buffer(py::module_& m) {
 		.def_property(
 			"bufferObject",
 			detail::BufferDataSlots::getter<detail::BufferObjectSlot>(
-				static_cast<osg::BufferObject*(osg::BufferData::*)()>(
-					&osg::BufferData::getBufferObject
-				)
+				py::overload_cast<>(&osg::BufferData::getBufferObject)
 			),
 			detail::BufferDataSlots::setter<detail::BufferObjectSlot, osg::BufferObject*>(
-				static_cast<void(osg::BufferData::*)(osg::BufferObject*)>(
-					&osg::BufferData::setBufferObject
-				)
+				&osg::BufferData::setBufferObject
 			),
 			"The GPU BufferObject (SSBO/UBO/VBO) this data uploads through; assign the same "
 			"BufferObject to multiple BufferData instances to pack them into one GPU buffer."
@@ -83,7 +79,7 @@ void bind_Buffer(py::module_& m) {
 		)
 		.def_property_readonly(
 			"glObjectID",
-			static_cast<GLuint(osg::GLBufferObject::*)() const>(&osg::GLBufferObject::getGLObjectID),
+			py::overload_cast<>(&osg::GLBufferObject::getGLObjectID, py::const_),
 			"The raw GL buffer name (glGenBuffers() id) for this context; reads 0 until "
 			"the buffer has actually been compiled (uploaded) at least once."
 		)

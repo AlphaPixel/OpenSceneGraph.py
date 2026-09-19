@@ -74,6 +74,10 @@ namespace detail {
 				"Return one of the box's 8 corner points, indexed 0-7 by which extreme "
 				"(min/max) each axis takes (bit 0=x, bit 1=y, bit 2=z)."
 			)
+			// NOTE: `expandBy(const BoundingSphereImpl<BST>&)` is itself a member TEMPLATE (BST is
+			// independent of this class's own VT), which poisons overload_cast's deduction for the
+			// whole `expandBy` overload set here (GCC can't resolve ANY of these three via
+			// overload_cast, not just the templated one) - static_cast is the only option.
 			.def("expandBy", static_cast<void(T::*)(const vec_type&)>(&T::expandBy),
 				"Grow the box in place to also contain a point."
 			)
@@ -124,6 +128,9 @@ namespace detail {
 				"The sphere's radius."
 			)
 			.def_property_readonly("radius2", &T::radius2, "The square of `radius`.")
+			// NOTE: same story as BoundingBox::expandBy above - `expandBy`/`expandRadiusBy`'s
+			// BoundingBox-taking overload is a member template (BBT independent of this class's own
+			// VT), which poisons overload_cast's deduction for the whole set; static_cast it is.
 			.def("expandBy", static_cast<void(T::*)(const vec_type&)>(&T::expandBy),
 				"Grow the sphere in place to also contain a point."
 			)
@@ -133,13 +140,13 @@ namespace detail {
 			.def("expandBy", static_cast<void(T::*)(const osg::BoundingBox&)>(&T::expandBy),
 				"Grow the sphere in place to also contain a box."
 			)
-			.def("expandRadiusBy", static_cast<void(T::*)(const vec_type&)>(&T::expandBy),
+			.def("expandRadiusBy", static_cast<void(T::*)(const vec_type&)>(&T::expandRadiusBy),
 				"Grow only the radius (never move the center) to also contain a point."
 			)
-			.def("expandRadiusBy", static_cast<void(T::*)(const T&)>(&T::expandBy),
+			.def("expandRadiusBy", static_cast<void(T::*)(const T&)>(&T::expandRadiusBy),
 				"Grow only the radius (never move the center) to also contain another sphere."
 			)
-			.def("expandRadiusBy", static_cast<void(T::*)(const osg::BoundingBox&)>(&T::expandBy),
+			.def("expandRadiusBy", static_cast<void(T::*)(const osg::BoundingBox&)>(&T::expandRadiusBy),
 				"Grow only the radius (never move the center) to also contain a box."
 			)
 			.def("intersects", &T::intersects, "Return whether this sphere overlaps another.")

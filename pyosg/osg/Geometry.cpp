@@ -185,7 +185,7 @@ void bind_Geometry(py::module_& m) {
 		.def_property(
 			"vertexArray",
 			detail::GeometrySlots::getter<detail::VertexArraySlot>(
-				static_cast<osg::Array*(osg::Geometry::*)()>(&osg::Geometry::getVertexArray)
+				py::overload_cast<>(&osg::Geometry::getVertexArray)
 			),
 			detail::GeometrySlots::setter<detail::VertexArraySlot, osg::Array*>(
 				&osg::Geometry::setVertexArray
@@ -197,7 +197,7 @@ void bind_Geometry(py::module_& m) {
 		.def_property(
 			"colorArray",
 			detail::GeometrySlots::getter<detail::ColorArraySlot>(
-				static_cast<osg::Array*(osg::Geometry::*)()>(&osg::Geometry::getColorArray)
+				py::overload_cast<>(&osg::Geometry::getColorArray)
 			),
 			detail::GeometrySlots::setter<detail::ColorArraySlot, osg::Array*>(
 				py::overload_cast<osg::Array*>(&osg::Geometry::setColorArray)
@@ -208,7 +208,7 @@ void bind_Geometry(py::module_& m) {
 		.def_property(
 			"normalArray",
 			detail::GeometrySlots::getter<detail::NormalArraySlot>(
-				static_cast<osg::Array*(osg::Geometry::*)()>(&osg::Geometry::getNormalArray)
+				py::overload_cast<>(&osg::Geometry::getNormalArray)
 			),
 			detail::GeometrySlots::setter<detail::NormalArraySlot, osg::Array*>(
 				py::overload_cast<osg::Array*>(&osg::Geometry::setNormalArray)
