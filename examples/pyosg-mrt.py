@@ -13,8 +13,8 @@
 # extra normal buffer: the toon lighting from pyosg-rtt.py's scene shader is
 # moved OUT of the geometry pass entirely (deferred) into the composite pass,
 # computed from the color+normal+depth G-buffer instead - the same shape
-# Step 11 of the lighting-class series (see ai/context-todo-lighting-class.md)
-# will need for its SSAO/SSR post-processing stack. The composite outline is
+# The lighting tutorial's final deferred stage needs this shape for its SSAO/SSR
+# post-processing stack. The composite outline is
 # also upgraded to combine depth-edge AND normal-edge detection (silhouette
 # vs. crease/grazing-angle edges), which is measurably more robust than
 # pyosg-rtt.py's depth-only Sobel-ish outline.

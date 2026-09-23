@@ -1,10 +1,8 @@
 # Building GPU-only, one-shot particle/burst effects live
 
 Patterns for instanced GPU effects (fire, explosions, shockwaves — a swarm of
-quads driven by a formula) built live via REPL. First built out in
-`examples/pyosg-fire.py`; design/TODO for that specific effect lives in
-`ai/context-todo-particles.md`, not here — this file is the reusable
-technique.
+quads driven by a formula) built live via REPL. `examples/pyosg-fire.py` is a
+concrete reference; this file covers the reusable technique.
 
 ## 1. Per-instance "seed" data: hash `gl_InstanceID`, don't reach for an SSBO
 

@@ -69,9 +69,8 @@ set(PYOSG_OFFICIAL_EXAMPLES
 	"pyosg-voxelize2d.py=voxelize2d.py"
 
 	# The lighting tutorial series: a subpackage (dst contains "/"), tutorial-numbered source
-	# filenames map to clean package-facing module names -- see
-	# ai/context-todo-examplespackage.md's "Lighting Series Naming" section for the reasoning
-	# (never make hyphenated/leading-digit names the canonical import API). Canonical
+	# filenames map to clean package-facing module names: never make hyphenated/leading-digit
+	# names the canonical import API. Canonical
 	# invocation: `python -m OpenSceneGraph.examples lighting.lambert`.
 	"lighting/__init__.py=lighting/__init__.py"
 	"lighting/00-lambert.py=lighting/lambert.py"

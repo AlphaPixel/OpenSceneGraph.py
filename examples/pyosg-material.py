@@ -322,7 +322,8 @@ GLITTER_FRAGMENT_SHADER = """
 
 const float PI = 3.14159265359;
 
-#pragma osgx::pbr MATERIAL_STRUCT, DIRECT_LIGHTING_DECL
+#pragma osgx::pbr MATERIAL_STRUCT
+#pragma osgx::light DIRECT_LIGHTING_DECL
 
 in vec3 vNormal;
 in vec3 vPosition;
@@ -503,7 +504,8 @@ SPOTS_FRAGMENT_SHADER = """
 
 const float PI = 3.14159265359;
 
-#pragma osgx::pbr MATERIAL_STRUCT, DIRECT_LIGHTING_DECL
+#pragma osgx::pbr MATERIAL_STRUCT
+#pragma osgx::light DIRECT_LIGHTING_DECL
 
 in vec3 vNormal;
 in vec3 vPosition;

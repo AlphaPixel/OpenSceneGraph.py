@@ -116,8 +116,7 @@ namespace detail {
 	using VertexAttribProxy = pyx::MappingProxy<osg::Geometry, VertexAttribTag>;
 	using PrimitiveSetsProxy = pyx::SequenceProxy<osg::Geometry>;
 
-	// One canonical storage alias per owner type - see ai/context-todo-pybind11x.md's
-	// "Important Storage Rule": splitting this into per-proxy storage aliases would attach
+	// One canonical storage alias per owner type: splitting this into per-proxy storage aliases would attach
 	// independent sidecars to the same OSG object instead of one shared one.
 	using GeometryStorage = pyx::ProxyStorageOSG<
 		osg::Geometry,

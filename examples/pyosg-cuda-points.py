@@ -19,8 +19,8 @@ from cuda.bindings import driver, nvrtc
 # renders from, every frame, with zero CPU involvement in that data. No NumPy array, no
 # def_buffer() host pointer, no readback - the CPU only ever passes a single scalar (the
 # current time) as a kernel launch parameter, exactly like a GLSL uniform. This is the
-# "GPU-resident LLM data, no CPU roundtrip" story from ai/context-todo-cuda-gpu-interop.md,
-# in its smallest possible form: swap KERNEL for "an LLM's output tensor" and this is the
+# "GPU-resident LLM data, no CPU roundtrip" mechanism in its smallest possible form: swap
+# KERNEL for "an LLM's output tensor" and this is the
 # whole mechanism.
 #
 # Chain used: osg.Vec3Array.bufferObject -> osg.BufferObject.glBufferObject(contextID)

@@ -107,7 +107,8 @@ PBR_FALLBACK_FRAGMENT_SHADER_SRC = """
 // declared here, before the #pragma lines below expand to text that uses it.
 const float PI = 3.14159265359;
 
-#pragma osgx::pbr MATERIAL_STRUCT, D_GGX, G_SCHLICK, G_SMITH, F_SCHLICK, DIRECT_SPECULAR, TONEMAP_PBR_NEUTRAL
+#pragma osgx::pbr MATERIAL_STRUCT, D_GGX, G_SCHLICK, G_SMITH, F_SCHLICK, TONEMAP_PBR_NEUTRAL
+#pragma osgx::light DIRECT_SPECULAR
 #pragma osgx::gltf MATERIAL_INPUTS, GET_MATERIAL, SHADING_NORMAL, EMISSIVE, ALPHA_COVERAGE
 #pragma osgx::ibl HEMISPHERE_AMBIENT
 

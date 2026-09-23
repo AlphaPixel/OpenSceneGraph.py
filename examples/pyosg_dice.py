@@ -2,7 +2,7 @@
 
 """Shared polyhedral-dice mesh factory + atlas/decal shader, factored out of
 `pyosg-d4.py`/`pyosg-d6-numbers.py` once both were proven working
-separately - see ai/context-todo-dice.md. Not a standalone example (no
+separately. Not a standalone example (no
 `__main__`); imported by the per-die scripts, same relationship
 `pyosg_repl.py` has to the examples that `from pyosg_repl import repl`.
 
@@ -161,7 +161,8 @@ FRAGMENT_SHADER_IBL = """
 
 const float PI = 3.14159265359;
 
-#pragma osgx::pbr F_MULTISCATTER, MATERIAL_STRUCT, DIRECT_LIGHTING_DECL
+#pragma osgx::pbr F_MULTISCATTER, MATERIAL_STRUCT
+#pragma osgx::light DIRECT_LIGHTING_DECL
 
 in vec3 vNormal;
 in vec3 vViewDir;

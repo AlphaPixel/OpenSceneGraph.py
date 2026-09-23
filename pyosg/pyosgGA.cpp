@@ -175,6 +175,27 @@ void bind(py::module_& m) {
 		.export_values()
 	;
 
+	// Function keys are application-level controls, rather than text input, so expose the
+	// shared F-key range explicitly. That covers the established example controls (F1-F7 debug
+	// modes and F12 manipulator toggling) without pretending this is a complete KeySymbol census.
+	py::enum_<osgGA::GUIEventAdapter::KeySymbol>(gea, "KeySymbol",
+		"Named non-text key codes delivered through GUIEventAdapter.key."
+	)
+		.value("KEY_F1", osgGA::GUIEventAdapter::KEY_F1)
+		.value("KEY_F2", osgGA::GUIEventAdapter::KEY_F2)
+		.value("KEY_F3", osgGA::GUIEventAdapter::KEY_F3)
+		.value("KEY_F4", osgGA::GUIEventAdapter::KEY_F4)
+		.value("KEY_F5", osgGA::GUIEventAdapter::KEY_F5)
+		.value("KEY_F6", osgGA::GUIEventAdapter::KEY_F6)
+		.value("KEY_F7", osgGA::GUIEventAdapter::KEY_F7)
+		.value("KEY_F8", osgGA::GUIEventAdapter::KEY_F8)
+		.value("KEY_F9", osgGA::GUIEventAdapter::KEY_F9)
+		.value("KEY_F10", osgGA::GUIEventAdapter::KEY_F10)
+		.value("KEY_F11", osgGA::GUIEventAdapter::KEY_F11)
+		.value("KEY_F12", osgGA::GUIEventAdapter::KEY_F12)
+		.export_values()
+	;
+
 	// Was entirely unbound - ea.button/ea.buttonMask (both already bound above) returned a raw
 	// int with no Python-side names to compare against, forcing callers to hardcode magic numbers
 	// (LEFT=1, MIDDLE=2, RIGHT=4) to check which button an event carries.

@@ -340,7 +340,8 @@ void main() {
 FLOOR_FRAGMENT = """
 #version 460 core
 
-#pragma osgx::pbr MATERIAL_STRUCT, DIRECT_LIGHTING_DECL
+#pragma osgx::pbr MATERIAL_STRUCT
+#pragma osgx::light DIRECT_LIGHTING_DECL
 
 in vec3 vPosition;
 in vec3 vNormal;

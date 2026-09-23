@@ -841,8 +841,8 @@ def build_multiburst(num_bursts=4, spread_radius=9.0, include_smoke=True, includ
 	as everywhere else in this file) instead of sharing one draw call via a
 	per-instance origin uniform array - explosions are inherently few-at-a-time here,
 	so the extra draw calls cost nothing, and this reuses every already-tested shader
-	completely unchanged. See ai/context-todo-particles.md's "Open questions" for the
-	uniform-array/SSBO alternative that was considered and set aside in favor of this.
+	completely unchanged. A uniform-array/SSBO alternative was considered and set aside in favor
+	of this.
 	"""
 
 	group = osg.Group()

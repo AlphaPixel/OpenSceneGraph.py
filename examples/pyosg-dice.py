@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-"""Combined D4/D6/D8/D10/D12/D20 procedural-number-atlas prototype - see
-ai/context-todo-dice.md. Supersedes the separate `pyosg-d4.py`/
+"""Combined D4/D6/D8/D10/D12/D20 procedural-number-atlas prototype. Supersedes the separate `pyosg-d4.py`/
 `pyosg-d6-numbers.py` prototypes now that all these dice reduce to the same
 mesh/shader mechanism via `pyosg_dice.py` (see that module's docstring for
 the full writeup: one shared vertex-attribute layout, one shared decal

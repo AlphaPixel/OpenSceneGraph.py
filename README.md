@@ -6,7 +6,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/openscenegraph?style=for-the-badge&logo=pypi&logoColor=white)](https://pypi.org/project/openscenegraph/)
 [![Python](https://img.shields.io/badge/Python-%E2%89%A53.9-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![Linux wheel](https://img.shields.io/github/actions/workflow/status/AlphaPixel/OpenSceneGraph.py/wheels.yml?branch=cubicool-wip&style=for-the-badge&logo=githubactions&logoColor=white&label=Linux%20wheel)](https://github.com/AlphaPixel/OpenSceneGraph.py/actions/workflows/wheels.yml)
+[![Linux wheel](https://img.shields.io/github/actions/workflow/status/AlphaPixel/OpenSceneGraph.py/wheels.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=Linux%20wheel)](https://github.com/AlphaPixel/OpenSceneGraph.py/actions/workflows/wheels.yml)
 [![MIT License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/20)
 [![OpenSceneGraph](https://img.shields.io/badge/OpenSceneGraph-3.6.5-0080ff?style=for-the-badge)](https://github.com/openscenegraph/OpenSceneGraph)
@@ -99,10 +99,9 @@
   can be introduced as a scripting/runtime layer without requiring an all-Python
   rewrite of the existing codebase.
 
-- All of the OpenSceneGraph.py headers are exposed, allowing any existing
-  codebase to adapt its current stack so that it works inside OpenSceneGraph.py
-  natively. Helpers, trampoline classes, proxy machinery, and related
-  infrastructure are all accessible from C++.
+- The binding headers are available to source-checkout C++ integrations, so an
+  existing OSG codebase can embed Python or build on the same helpers,
+  trampolines, and proxy machinery rather than requiring an all-Python rewrite.
 
 - Makes wide use of the buffer protocol, meaning data coming from libraries like
   NumPy or PyTorch can be passed to and visualized with OpenSceneGraph.py with
@@ -122,7 +121,13 @@
 # Examples
 
 The best way to get acquainted with `OpenSceneGraph.py` is to dive right into
-the [examples](examples).
+the [examples](examples). The base `OpenSceneGraph` wheel keeps only the small
+`info` diagnostic; install the matching `OpenSceneGraph-examples` overlay for
+the lighting series and other official examples:
+
+```bash
+pip install OpenSceneGraph OpenSceneGraph-examples
+```
 
 ## CUDA (AI/LLM Integration)
 
@@ -457,8 +462,8 @@ direct DRM/KMS scanout with no X server running at all.
 **TODO**: Detailed CMake compilation guide (but honestly, it's NOT hard).
 
 Most users never need any of this - `pip install OpenSceneGraph` grabs a prebuilt wheel
-(Linux x86-64/aarch64 `manylinux_2_28`, Windows x86-64; CPython 3.12 currently) with OSG already
-compiled in. The notes below are for anyone on a platform/Python version without a matching
+(Linux x86-64/aarch64 `manylinux_2_28`, Windows x86-64; CPython 3.12-3.14 currently) with OSG
+already compiled in. The notes below are for anyone on a platform/Python version without a matching
 wheel, or who wants to build against a local checkout.
 
 **From a git checkout.** `git clone --recurse-submodules` is required - `etc/osgx` (the

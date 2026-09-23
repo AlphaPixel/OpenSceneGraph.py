@@ -57,8 +57,8 @@ import osgx
 # keeping with the series' deliberate "self-contained, diffable" teaching design for its shader/
 # lighting-math code, but this is plain asset-resolution plumbing with no pedagogical value, and
 # the duplication cost a real bug: a package-asset fallback fixed once in pyosg-khronos-viewer.py
-# (see ai/context-todo-examplespackage.md) never got copied into any of the 12 lighting files,
-# surfacing 2026-09-04 as "Cannot find environment manifest" against the newly-published
+# never got copied into any of the 12 lighting files, surfacing 2026-09-04 as
+# "Cannot find environment manifest" against the newly-published
 # openscenegraph-examples wheel. Centralized here instead of re-duplicating the fix 12 times.
 PACKAGE_ASSET_DIR = pathlib.Path(__file__).resolve().parent / "assets"
 
