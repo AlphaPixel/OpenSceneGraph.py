@@ -106,7 +106,7 @@ void main() {
 FRAGMENT_SHADER = """
 #version 460 core
 
-#pragma osgx::pbr MATERIAL_STRUCT
+#pragma osgx::pbr MATERIAL_STRUCT, MATERIAL_INPUTS
 #pragma osgx::light DIRECT_LIGHTING_DECL
 
 in vec3 vT;
@@ -121,10 +121,8 @@ uniform sampler2D normalTex;
 uniform sampler2D ormTex;
 uniform sampler2D emissiveTex;
 
-// Exported by osgGLTF per material. This older forward example does not use
-// its full material buffer yet, but it can still honor texture alpha coverage.
-uniform float osgx_gltf_alphaMode;
-uniform float osgx_gltf_alphaCutoff;
+// alphaMode/alphaCutoff come from the loader's osgx.Material buffer (MATERIAL_INPUTS above). This
+// example samples its own textures rather than using osgx_GetMaterial().
 
 uniform vec3 emissiveFactor;
 uniform float scanlineFreq;
@@ -140,7 +138,7 @@ out vec4 fragColor;
 void main() {
 	vec4 baseColor = texture(baseColorTex, vUV);
 	float alpha = baseColor.a;
-	if (osgx_gltf_alphaMode == 1.0 && alpha < osgx_gltf_alphaCutoff) discard;
+	if (osgx_materialInputs.alphaMode == OSGX_ALPHA_MODE_MASK && alpha < osgx_materialInputs.alphaCutoff) discard;
 
 	vec3 NGeom = normalize(vNGeom);
 	vec3 T, B;

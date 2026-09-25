@@ -266,3 +266,18 @@ bound symbol, but it reports raw pybind11 shape (`method`/`property`/`enum
 value`/...) — it doesn't say which of those is the intended Pythonic entry
 point for a task. Cross-check against this rule, not just against a symbol
 merely existing in that file.
+
+## 13. osgx needs a live `osgx.Library`
+
+osgx's shader expansion (`osgx.resolveShaderLibs`), shader cache, BRDF LUTs, `PixelText`, and
+`osgx.gltf.readNodeFile` raise `RuntimeError` while no `osgx.Library` is alive. Importing
+`pyosg_example` creates one (`pyosg_example.LIBRARY`) unless one already exists, so example code
+exec'd into a session just works. A session that builds osgx objects without importing
+`pyosg_example` creates its own, once, and keeps it referenced:
+
+```python
+lib = osgx.initialize()  # raises if one is already alive; check osgx.Library.alive()
+```
+
+osgSlug sessions use `osgSlug.initialize()` instead (an osgx Library subclass that also registers
+osgSlug's shader catalog); `pyosgslug_example` creates that one.

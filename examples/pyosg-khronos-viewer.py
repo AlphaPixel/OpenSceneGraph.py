@@ -285,24 +285,22 @@ def build_scene(w, h):
 			"hdr",
 			("glTF-Sample-Environments/{}",)
 		)
-		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepare(str(hdr_path), lutSize=1024)
+		environment = osgx.Environment(osgDB.readImageFile(str(hdr_path)))
+		environment.rotation = osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION
 		environment_description = str(hdr_path)
 
 	else:
 		env_path = resolve_environment_manifest(_args.env)
-		environment = osgx.gltf.pbribl.PBRIBLEnvironment.load(str(env_path))
+		environment = osgx.gltf.pbribl.loadEnvironment(str(env_path))
 		environment_description = str(env_path)
 
-	pbr = osgx.gltf.pbribl.PBRIBLScene.create(
-		model,
-		environment,
-		iblDiffuseIntensity=1.0,
-		iblSpecularIntensity=1.0,
-		diagnostics=diagnostics
-	)
-
-	if not environment.valid() or not pbr.valid():
+	if environment is None:
 		raise RuntimeError(f"failed to prepare PBR IBL resources for {environment_description}")
+
+	pbr = osgx.gltf.pbribl.PBRIBLScene.create(model, environment, diagnostics=diagnostics)
+
+	if not pbr.valid():
+		raise RuntimeError(f"failed to apply PBR IBL resources for {environment_description}")
 
 	if diagnostics:
 		pbr.debugMode.value = DEBUG_MODES[_args.debug]
@@ -311,8 +309,8 @@ def build_scene(w, h):
 
 	root = osg.Group()
 
-	if environment.root is not None:
-		root.children.append(environment.root)
+	if environment.bakeRoot is not None:
+		root.children.append(environment.bakeRoot)
 
 	root.children.append(pbr.node)
 

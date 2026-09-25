@@ -3,20 +3,20 @@
 # Step 10 - Dynamic Probes
 #
 # Step 9 (09-ibl.py) bakes its whole environment (diffuse + specular + BRDF LUT) ONCE at startup
-# via osgx.gltf.pbribl.PBRIBLEnvironment.prepare(). This step demonstrates that the specular half
-# of that environment can be REBAKED LIVE: press 'r' to replace the entire reflection environment
-# with a synthetic one - each of the 6 cube faces filled with a fresh checkerboard of random/
-# palette colors (see paint_random_faces()) - and rebake the specular cubemap from it on the fly,
-# swapping the result onto texture unit 5. There's no photographic content left at all after a
+# via osgx.Environment(hdrImage). This step demonstrates that the specular half of that
+# environment can be REBAKED LIVE: press 'r' to replace the entire reflection environment with a
+# synthetic one - each of the 6 cube faces filled with a fresh checkerboard of random/palette
+# colors (see paint_random_faces()) - and rebake the specular cubemap from it on the fly,
+# assigning the result to environment.specularMap. There's no photographic content left at all after a
 # repaint, so there's zero ambiguity about what's changing frame-to-frame: the whole reflection
 # environment.
 #
 # Since specular here is ALWAYS procedural (the very first frame already fires a repaint - see
 # ProbeRebaker below), baking a real GGX-prefiltered specular cubemap from --hdr at startup would
-# be pure waste: real work thrown away before a single frame ever samples it. So this step is the
-# one caller of osgx.gltf.pbribl.PBRIBLEnvironment.prepareDiffuseOnly() (added alongside this
-# file's conversion) - diffuse irradiance and the BRDF LUT still bake for real, specular starts
-# as an unbaked placeholder and is immediately replaced by the first procedural repaint. --env
+# be pure waste: real work thrown away before a single frame ever samples it. So --hdr builds the
+# Environment with EnvironmentBakeOptions.bakeSpecular = False - diffuse irradiance and the BRDF
+# LUT still bake for real, specular starts as an unbaked placeholder and is immediately replaced
+# by the first procedural repaint. --env
 # (a fully pre-baked manifest) has no such waste to avoid - its specular is a cheap KTX2 load,
 # not a GPU bake - but the first repaint replaces it too, for the same reason: this step is about
 # proving the environment CAN change live, not about which bytes it starts with.
@@ -32,8 +32,7 @@
 # dynamically, even if it's not perfect or async."
 #
 # Diffuse (SH/Lambertian) irradiance and the BRDF LUT are intentionally left static, baked once at
-# startup by PBRIBLEnvironment.prepareDiffuseOnly()/load() - only the specular prefiltered
-# cubemap rebakes live.
+# startup - only the specular prefiltered cubemap rebakes live.
 
 import sys
 import random
@@ -232,12 +231,12 @@ class ProbeRebaker(osgGA.GUIEventHandler):
 	complete instantly.
 	"""
 
-	def __init__(self, camera, root, model_ss, base_image, color_source, prefilter_size):
+	def __init__(self, camera, root, environment, base_image, color_source, prefilter_size):
 		super().__init__()
 
 		self.camera = camera
 		self.root = root
-		self.model_ss = model_ss
+		self.environment = environment
 		self.base_image = base_image
 		self.color_source = color_source
 		self.prefilter_size = prefilter_size
@@ -290,7 +289,7 @@ class ProbeRebaker(osgGA.GUIEventHandler):
 			# regenerate them, same as the static-environment path in 09-ibl.py.
 			cubemap.useHardwareMipMapGeneration = False
 
-			self.model_ss.textureAttributes[5] = cubemap
+			self.environment.specularMap = cubemap
 
 			print(f"[dynamicprobes] rebake done after {self.elapsed} frames", flush=True)
 
@@ -441,9 +440,9 @@ def build_scene(w, h):
 	model = osgDB.readNodeFile(path)
 
 	# --- IBL environment: diffuse/BRDF LUT are the only real bake either path performs - specular
-	# is ALWAYS procedural (ProbeRebaker above), so --hdr uses prepareDiffuseOnly() rather than
-	# prepare(), which would GGX-prefilter a real specular cubemap only to discard it before a
-	# single frame ever samples it. --env still loads a real specular bake off disk (a cheap KTX2
+	# is ALWAYS procedural (ProbeRebaker above), so --hdr skips the specular bake (bakeSpecular =
+	# False), which would GGX-prefilter a real specular cubemap only to discard it before a single
+	# frame ever samples it. --env still loads a real specular bake off disk (a cheap KTX2
 	# read, not a GPU bake), which the first procedural repaint replaces regardless. ------------ #
 	if args.hdr:
 		hdr_path = resolve_asset(args.hdr, "hdr")
@@ -451,7 +450,12 @@ def build_scene(w, h):
 		if not hdr_path:
 			sys.exit(f"Cannot find HDR {args.hdr!r} - check OSG_FILE_PATH")
 
-		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepareDiffuseOnly(hdr_path, lutSize=1024)
+		# bakeSpecular=False: specular comes from ProbeRebaker's live bakes, not the HDR.
+		options = osgx.EnvironmentBakeOptions()
+		options.bakeSpecular = False
+
+		environment = osgx.Environment(osgDB.readImageFile(str(hdr_path)), options)
+		environment.rotation = osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION
 
 	else:
 		env_path = resolve_asset(args.env, "gltf")
@@ -459,10 +463,13 @@ def build_scene(w, h):
 		if not env_path:
 			sys.exit(f"Cannot find environment manifest {args.env!r}")
 
-		environment = osgx.gltf.pbribl.PBRIBLEnvironment.load(env_path)
+		environment = osgx.gltf.pbribl.loadEnvironment(str(env_path))
 
-	if not environment.valid():
+	if environment is None:
 		sys.exit("Failed to prepare/load the PBR/IBL environment")
+
+	environment.diffuseIntensity = args.ibl_diffuse
+	environment.specularIntensity = args.ibl_specular
 
 	# --- Lights ----------------------------------------------------------------- #
 	main_group = osg.Group()
@@ -500,15 +507,11 @@ def build_scene(w, h):
 	pbr = osgx.gltf.pbribl.PBRIBLScene.create(
 		model,
 		environment,
-		iblDiffuseIntensity=args.ibl_diffuse,
-		iblSpecularIntensity=args.ibl_specular,
 		shadowMap=shadow_map
 	)
 
 	if not pbr.valid():
 		sys.exit("Failed to build the PBR/IBL scene")
-
-	model_ss = model.stateSet
 
 	# --- Floor (optional) ------------------------------------------------------ #
 	if args.floor:
@@ -548,8 +551,8 @@ def build_scene(w, h):
 
 	root = osg.Group()
 
-	if environment.root is not None:
-		root.children.append(environment.root)
+	if environment.bakeRoot is not None:
+		root.children.append(environment.bakeRoot)
 
 	if shadow_map is not None:
 		root.children.append(shadow_map.camera)
@@ -558,7 +561,7 @@ def build_scene(w, h):
 
 	_probe = {
 		"root": root,
-		"model_ss": model_ss,
+		"environment": pbr.environment,
 		"color_source": _make_color_source(args.mode),
 		"prefilter_size": args.prefilter_size,
 	}
@@ -572,7 +575,7 @@ def configure_viewer(viewer, root):
 	rebaker = ProbeRebaker(
 		viewer.camera,
 		probe["root"],
-		probe["model_ss"],
+		probe["environment"],
 		make_probe_template_image(),
 		probe["color_source"],
 		probe["prefilter_size"]

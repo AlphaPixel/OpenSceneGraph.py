@@ -31,6 +31,8 @@ import osgx
 # windowing path, which is exactly what we're replacing here by assigning our
 # own GraphicsContext directly.
 if __name__ == "__main__":
+	lib = osgx.initialize()
+
 	args = sys.argv[1:]
 	gbm = "--gbm" in args
 

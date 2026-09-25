@@ -243,13 +243,14 @@ def build_sweep_scene(args):
 
 	if args.hdr:
 		hdr_path = resolve_asset(args.hdr, "hdr", ("glTF-Sample-Environments/{}",))
-		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepare(str(hdr_path), lutSize=1024)
+		environment = osgx.Environment(osgDB.readImageFile(str(hdr_path)))
+		environment.rotation = osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION
 
 	else:
 		env_path = resolve_environment_manifest(args.env)
-		environment = osgx.gltf.pbribl.PBRIBLEnvironment.load(str(env_path))
+		environment = osgx.gltf.pbribl.loadEnvironment(str(env_path))
 
-	if not environment.valid():
+	if environment is None:
 		raise RuntimeError(f"failed to prepare PBR IBL resources for {args.hdr or args.env}")
 
 	# Program/IBL textures attach to `shapes`' own StateSet, inherited by every child below --
@@ -258,17 +259,15 @@ def build_sweep_scene(args):
 	# the Program PBRIBLScene.create() attaches here coexist on the same StateSet without
 	# conflict - different StateAttribute::Type/member slots (LightSet is Type.CAPABILITY
 	# member=1, Material is member=0, Program is its own Type entirely).
-	pbr = osgx.gltf.pbribl.PBRIBLScene.create(
-		shapes, environment, iblDiffuseIntensity=1.0, iblSpecularIntensity=1.0
-	)
+	pbr = osgx.gltf.pbribl.PBRIBLScene.create(shapes, environment)
 
 	if not pbr.valid():
 		raise RuntimeError("failed to apply PBR/IBL environment")
 
 	root = osg.Group(name="root")
 
-	if environment.root is not None:
-		root.children.append(environment.root)
+	if environment.bakeRoot is not None:
+		root.children.append(environment.bakeRoot)
 
 	root.children.append(pbr.node)
 

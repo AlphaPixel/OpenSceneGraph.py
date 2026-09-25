@@ -29,36 +29,32 @@ the attribute's own `.type`.
 | `roughness` | float factor. `0.0`–`0.1` reads as a sharp mirror-like reflection; `1.0` is fully matte. |
 | `metallic` | float factor. `1.0` tints specular by `baseColor` (real metal); `0.0` keeps a neutral white `F0=0.04` dielectric specular. |
 | `hasOcclusion` | bool. No dedicated texture slot — occlusion is read from `metallicRoughnessMap`'s R channel, so this flag opts in explicitly. |
-| `baseColorMap`, `normalMap`, `metallicRoughnessMap`, `emissiveMap` | `osg.Texture2D` or `None`. Bind at the loader's conventional units (`osgx.gltf.shader.{BASE_COLOR,NORMAL,ORM,EMISSIVE}_TEXTURE_UNIT`). |
+| `baseColorMap`, `normalMap`, `metallicRoughnessMap`, `emissiveMap` | `osg.Texture2D` or `None`. Bound at the `osgx::material.*` texture-unit slots (`lib.binding("osgx::material.baseColor")` etc.); a mesh's UVs for each map come from texcoord array `osgx.{BASE_COLOR,NORMAL,ORM,EMISSIVE}_UV_CHANNEL`. |
 
 `hasBaseColorMap`/`hasMetallicRoughnessMap`/`hasNormalMap` are **not**
 separate properties — derived automatically from whether the corresponding
 `*Map` property is set. Setting `baseColorMap` and having the texture
 actually sample are the same operation.
 
-## Shader side: the same `osgx_gltf_Material` SSBO as before
+## Shader side: `osgx_materialInputs`
 
-`Material` populates the exact same `osgx_gltf_Material` std430 buffer
-(`#pragma osgx::gltf MATERIAL_INPUTS`) the real glTF loader populates for a
-loaded asset, at the same binding (`osgx.MATERIAL_BINDING` /
-`osgx.gltf.shader.MATERIAL_BINDING`, both aliases of the same constant). A
-minimal factor-only fragment shader:
+`Material` populates one `std140` uniform block, `osgx_materialInputs`
+(`#pragma osgx::pbr MATERIAL_INPUTS`), at the `osgx::material` binding slot - the same
+buffer the glTF loader populates for a loaded asset, since every glTF material
+is an `osgx.Material`. Factors, emissive, and alpha mode/cutoff all live in
+it; the four maps use samplers that declare their own texture units. A
+minimal fragment shader:
 
 ```glsl
-#pragma osgx::gltf MATERIAL_INPUTS
-#pragma osgx::pbr MATERIAL_STRUCT, DIRECT_LIGHTING_DECL
+#pragma osgx::pbr MATERIAL_STRUCT, MATERIAL_INPUTS, GET_MATERIAL
+#pragma osgx::light DIRECT_LIGHTING_DECL
 
-osgx_Material mat;
-
-mat.albedo = osgx_gltf_material.baseColorFactor.rgb;
-mat.ao = 1.0;
-mat.roughness = clamp(osgx_gltf_material.roughnessFactor, 0.04, 1.0);
-mat.metallic = osgx_gltf_material.metallicFactor;
-mat.F0 = mix(vec3(0.04), mat.albedo, mat.metallic);
+osgx_Material mat = osgx_GetMaterial(vUV, vUV);
 ```
 
-Clamp roughness away from exactly `0.0` (`0.04` here) — a true zero
-denominator in the GGX distribution term is a real division-by-near-zero.
+`osgx_DirectSpecular()` floors roughness at `0.045` itself - a true zero is a
+0/0 in the GGX distribution term - so shaders using the stock direct-light
+functions need no clamp of their own.
 
 ## Works on a plain `osg.ShapeDrawable`, not just osgx shapes
 
@@ -105,5 +101,4 @@ highlight or environment reflection, regardless of roughness. Add a smooth
 near-zero roughness, near-white base color) — if it shows a clear reflection
 and the original shape doesn't, that's a geometry limitation, not a material
 or shader bug. `examples/pyosg-material-lab.py` is exactly this setup, with
-`--hdr`/`--env` wiring a real environment through
-`osgx.gltf.pbribl.PBRIBLEnvironment` (see [`30-pbribl.md`](30-pbribl.md)).
+`--hdr`/`--env` wiring a real `osgx.Environment` (see [`30-pbribl.md`](30-pbribl.md)).

@@ -16,6 +16,18 @@ os.environ.setdefault("OSG_GL_CONTEXT_PROFILE_MASK", "1")
 os.environ.setdefault("OSG_GL_VERSION", "4.6")
 os.environ.setdefault("OSG_GL_CONTEXT_VERSION", "4.6")
 
+# The process's one osgx.Library, created when an example imports this module and released at
+# interpreter exit. None when osgx is not installed (examples that need only OpenSceneGraph run
+# without it) or when a Library is already alive (e.g. one an aipython REPL session created).
+try:
+	import osgx
+
+except ImportError:
+	LIBRARY = None
+
+else:
+	LIBRARY = None if osgx.Library.alive() else osgx.initialize()
+
 # Derives (width, height) from OSG_WINDOW ("x y width height", e.g. "50 50 800 600") instead of a
 # second, separately-hardcoded W, H module constant - one declared value per file instead of two
 # that can silently drift apart. Standalone __main__ blocks call this; the pyosg/

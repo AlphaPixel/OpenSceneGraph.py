@@ -2,16 +2,16 @@
 
 Check `git log -1 -- src/osgx/PBR.hpp` in the configured osgx source dir (see
 the repo's `CLAUDE.md` on `PYOSG_OSGX_SOURCE_DIR`) if anything here looks
-stale — this describes an SSBO-backed contract that may still be uncommitted
+stale — this describes a uniform-block-backed contract that may still be uncommitted
 in some checkouts.
 
 ## What this is
 
 `osgx::pbr::LightSet` (C++: `src/osgx/PBR.hpp`/`src/PBR.cpp`, Python:
 `osgx.LightSet`) is a typed direct-light rig. Per-light data
-(`osgx.MAX_LIGHTS` == 6 slots) lives in a single `std430` Shader Storage
-Buffer Object (`osgx_LightBuffer`/`osgx_lights[]`, binding 3 — C++
-`osgx::LIGHT_BINDING`, not currently exposed to Python) plus one
+(`osgx.MAX_LIGHTS` == 6 slots) lives in a single `std140` uniform block
+(`osgx_LightBuffer`/`osgx_lights[]`, at the `osgx::light` UBO binding slot —
+`lib.binding("osgx::light")`) plus one
 `osgx_lightCount` uniform — not parallel flat uniform arrays. Three real
 types — Point, Directional, Spot — plus a "Sphere" light that is NOT a
 fourth type: it's `setPoint(..., sourceRadius>0)`, see below.
@@ -52,7 +52,7 @@ accessors (`getCount`/`getType`/`getPosIntensity`/`getColor`/`getDirection`/
 ## Minimal live REPL setup
 
 ```python
-lights = osgx.LightSet.create(root.stateSet)  # allocates the SSBO buffer (size MAX_LIGHTS, zero-initialized) + osgx_lightCount on root.stateSet
+lights = osgx.LightSet.create(root.stateSet)  # allocates the uniform-block buffer (size MAX_LIGHTS, zero-initialized) + osgx_lightCount on root.stateSet
 
 lights.setCount(1)  # how many of the 6 slots osgx_DirectLighting()'s loop actually reads this frame
 
@@ -79,12 +79,12 @@ lights.setPoint(0, osg.Vec3(2.5, -2.5, 6.0), osg.Vec3(0.85, 0.55, 0.30), 12.0, s
 lights.getType(0), lights.getPosIntensity(0), lights.getColor(0), lights.getSourceRadius(0)
 ```
 
-`LightSet.create()` REPLACES the SSBO buffer + `osgx_lightCount` on that
+`LightSet.create()` REPLACES the uniform-block buffer + `osgx_lightCount` on that
 StateSet — don't call it twice on the same live StateSet if you've already
 populated lights there, or you'll zero it out. To WRAP an already-populated
 StateSet's LightSet instead, construct `osgx.LightSet()` and set `.ss`
 directly — `LightSet` has exactly one field (`ss`); the setters/getters
-mutate the SSBO/uniforms that `ss` already carries, there is no separate
+mutate the buffer/uniforms that `ss` already carries, there is no separate
 `.lights` handle to assign:
 
 ```python

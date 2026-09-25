@@ -138,6 +138,8 @@ DIE_FRAGMENT_SHADER_IBL = """
 #version 460 core
 
 #pragma osgx::pbr F_MULTISCATTER
+// The osgx.Environment attached to the scene root - see dice.rotate_ibl_environment().
+#pragma osgx::environment ENVIRONMENT_INPUTS, ENVIRONMENT_SAMPLE
 
 in vec3 vNormal;
 in vec3 vViewDir;
@@ -155,27 +157,12 @@ uniform vec3 ink;
 uniform int activeFaceMask;
 uniform int activeDecalValue;
 
-uniform samplerCube envMap;
-uniform sampler2D brdfLUT;
-uniform samplerCube diffuseEnv;
-
-// Same cubemap lookup basis osgx.gltf.pbribl.PBRIBLScene.create() reads off
-// PBRIBLEnvironment.iblAxis - see dice.rotate_ibl_environment().
-uniform vec3 iblAxis[3];
-
 // Whole-die material knobs - no per-face roughness/metallic data yet, just a uniform
 // scalar pair so the PBR/IBL response is at least visibly tunable from the CLI.
 uniform float roughness;
 uniform float metallic;
 
 out vec4 fragColor;
-
-// Ported from osgx::gltf::pbribl's own PBRIBL.cpp shader - Z-up world direction to the
-// baked cubemap's Y-up convention, then onto the (possibly rotated) lookup basis.
-vec3 osgx_ZUpToGLTF(vec3 d) { return vec3(d.x, d.z, -d.y); }
-vec3 osgx_OrientIBL(vec3 d) {
-	return vec3(dot(d, iblAxis[0]), dot(d, iblAxis[1]), dot(d, iblAxis[2]));
-}
 
 void main() {
 	const float DECAL_FACE_STRIDE = 32.0;
@@ -231,11 +218,10 @@ void main() {
 	vec3 V = invView * normalize(vViewDir);
 	vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
-	vec3 diffuseIrradiance = texture(diffuseEnv, osgx_OrientIBL(osgx_ZUpToGLTF(N))).rgb;
+	vec3 diffuseIrradiance = osgx_EnvironmentIrradiance(N);
 	vec3 R = reflect(-V, N);
-	float maxMip = float(max(textureQueryLevels(envMap) - 2, 0));
-	vec3 prefiltered = textureLod(envMap, osgx_OrientIBL(osgx_ZUpToGLTF(R)), roughness * maxMip).rgb;
-	vec3 Fd = osgx_F_MultiScatter(N, V, roughness, F0, brdfLUT);
+	vec3 prefiltered = osgx_EnvironmentSpecular(R, roughness);
+	vec3 Fd = osgx_F_MultiScatter(N, V, roughness, F0, osgx_environmentBRDFLUT);
 	vec3 color = diffuseIrradiance * albedo * (1.0 - Fd) * (1.0 - metallic) + prefiltered * Fd;
 
 	fragColor = vec4(pow(color, vec3(1.0 / 2.2)), 1.0);
@@ -257,8 +243,8 @@ def create_scene(die_names, environment=None, roughness=0.45, metallic=0.0):
 		root.stateSet.uniforms.extend((
 			osg.Uniform("roughness", roughness),
 			osg.Uniform("metallic", metallic),
-			osg.Uniform(osg.Uniform.Type.FLOAT_VEC3, "iblAxis", tuple(environment.iblAxis)),
 		))
+		root.stateSet.attributes.append(environment)
 
 	else:
 		die_program = osg.Program(name="pyosg-dice", shaders=(
@@ -319,16 +305,6 @@ def create_scene(die_names, environment=None, roughness=0.45, metallic=0.0):
 			active_face_uniform,
 			active_decal_uniform,
 		))
-
-		if environment is not None:
-			die_ss.textureAttributes[5] = environment.envMap
-			die_ss.textureAttributes[6] = environment.brdfLUT
-			die_ss.textureAttributes[7] = environment.diffuseEnv
-			die_ss.uniforms.extend((
-				osg.Uniform("envMap", 5),
-				osg.Uniform("brdfLUT", 6),
-				osg.Uniform("diffuseEnv", 7),
-			))
 
 		rollable_dice.append((mt, rest_xy, roll_spec))
 		active_face_uniforms.append(active_face_uniform)
@@ -400,15 +376,15 @@ def build_scene(w, h):
 
 	environment = dice.prepare_environment(args.hdr, args.env, args.ibl_rotate)
 
-	if environment is not None and not environment.valid():
+	if (args.hdr or args.env) and environment is None:
 		parser.error("failed to prepare PBR/IBL environment resources")
 
 	scene, rollable_dice, active_face_uniforms, active_decal_uniforms = create_scene(
 		die_names, environment, args.roughness, args.metallic
 	)
 
-	if environment is not None and environment.root is not None:
-		scene.children.append(environment.root)
+	if environment is not None and environment.bakeRoot is not None:
+		scene.children.append(environment.bakeRoot)
 
 	# 0 until a die's first roll completes, so the total is always the sum of whatever's
 	# currently showing - populated by highlight_result() below, same per-die "which value did

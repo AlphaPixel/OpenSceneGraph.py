@@ -123,4 +123,6 @@ def configure_viewer(viewer, root):
 	main(viewer)
 
 if __name__ == "__main__":
+	lib = osgx.initialize()
+
 	main(osgViewer.Viewer())

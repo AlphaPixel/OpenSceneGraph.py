@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Sanity check for pyosg_dice.rotate_ibl_environment()'s 90-degree axis permutation --
+"""Sanity check for pyosg_dice.rotate_ibl_environment()'s osgx.Environment rotation --
 NOT a real IBL bake. Builds a synthetic 6-face osg.TextureCubeMap by hand - a smooth
 per-texel vertical (cubemap-space Y, i.e. OSG world Z/up) gradient, black at the bottom
 to white at the top, the SAME on all 6 faces, plus a soft cosine-power "spotlight"
@@ -18,20 +18,19 @@ bleeding onto its neighbor, even viewed corner-on, which is confusing to read. T
 falloff blends continuously across every edge/corner instead, so an edge-on or corner-on
 view naturally splits it across the visible faces the way you'd intuitively expect.
 
-The gradient depends only on cubemap Y, and rotate_ibl_environment()'s 90-degree steps
-only ever permute iblAxis's X/Z rows - Y is untouched at every step (see its own
-docstring) - so the gradient should stay COMPLETELY STATIONARY as you press 'r', while
-only the red spotlight sweeps to a new compass position. If the gradient itself visibly
-shifts too, that's a real bug in the "rotation never touches up/down" invariant, not a
-rendering quirk.
+The gradient depends only on cubemap Y (world up), and rotate_ibl_environment() only ever
+rotates about world Z (see its own docstring) - so the gradient should stay COMPLETELY
+STATIONARY as you press 'r', while only the red spotlight sweeps to a new compass position. If
+the gradient itself visibly shifts too, that's a real bug in the "rotation never touches
+up/down" invariant, not a rendering quirk.
 
 Deliberately bypasses osgx's real bake pipeline (computeLambertianCubeMap/
 GGXPrefilterScene.create both take an equirectangular osg.Image, not a cubemap already
 in face-space) - this hand-fills 6 gradient faces directly (see direction_for_face(),
-the standard per-face inverse-cubemap-projection formulas) and samples with a plain
-mirror reflection (no roughness/BRDF/Fresnel), since the only thing under test is the
-osgx_ZUpToGLTF/osgx_OrientIBL remap itself, ported verbatim from pyosg_dice.py's
-FRAGMENT_SHADER_IBL (and osgx::gltf::pbribl's own PBRIBL.cpp shader).
+the standard per-face inverse-cubemap-projection formulas), wraps it in an osgx.Environment
+(as both specular and diffuse map), and samples it with a plain mirror reflection (no
+roughness/BRDF/Fresnel), since the only thing under test is osgx::Environment's lookup
+direction (osgx_EnvironmentDirection()) under rotation.
 
 Press 'r' to step live through 0/90/180/270 degree rotations.
 """
@@ -82,15 +81,6 @@ def direction_for_face(face_name, s, t):
 		"+z": osg.Vec3(u, -v, 1.0), "-z": osg.Vec3(-u, -v, -1.0),
 	}[face_name]
 
-# The one orthonormal basis every consumer (PBRIBLScene.create()'s glTF shader,
-# FRAGMENT_SHADER_IBL, and this test's own shader below) rotates identically via
-# dice.rotate_ibl_environment() - same default osgx::gltf::pbribl ships.
-DEFAULT_IBL_AXIS = (
-	osg.Vec3(0.0, 0.0, 1.0),
-	osg.Vec3(0.0, 1.0, 0.0),
-	osg.Vec3(-1.0, 0.0, 0.0),
-)
-
 VERTEX_SHADER = """
 #version 460 core
 
@@ -114,36 +104,30 @@ void main() {
 }
 """
 
-# Ported verbatim from pyosg_dice.py's FRAGMENT_SHADER_IBL - same osgx_ZUpToGLTF/
-# osgx_OrientIBL remap, same eye-space-to-world-space N/V trick, just a plain mirror
-# reflection instead of the diffuse+specular PBR combine (nothing here needs roughness/
+# Same eye-space-to-world-space N/V trick as pyosg_dice.py's FRAGMENT_SHADER_IBL, just a plain
+# mirror reflection instead of the diffuse+specular PBR combine (nothing here needs roughness/
 # metallic/brdfLUT - this is purely a "which direction am I looking" test).
 FRAGMENT_SHADER = """
 #version 460 core
+
+#pragma osgx::environment ENVIRONMENT_INPUTS, ENVIRONMENT_SAMPLE
 
 in vec3 vNormal;
 in vec3 vViewDir;
 
 uniform mat4 osg_ViewMatrix;
-uniform samplerCube envMap;
-uniform vec3 iblAxis[3];
 // Debug mode: show the raw per-face world-space normal as color instead of the cubemap
 // reflection - proves (or disproves) that flat per-face shading survives this shader,
 // independent of the cubemap's own 6-color quantization. Press 'n' to toggle.
 uniform int debugNormals;
 // Diffuse-style mode: sample the SAME cubemap by N instead of the view-dependent
 // reflection vector R - exactly how real diffuse IBL differs from specular IBL
-// (osgx_LambertianIrradiance samples by N too). No view-dependence at all: whichever
+// (osgx_EnvironmentIrradiance samples by N too). No view-dependence at all: whichever
 // face's normal points closest to the accent direction shows the most accent color,
 // full stop, regardless of camera angle. Press 'd' to toggle.
 uniform int diffuseView;
 
 out vec4 fragColor;
-
-vec3 osgx_ZUpToGLTF(vec3 d) { return vec3(d.x, d.z, -d.y); }
-vec3 osgx_OrientIBL(vec3 d) {
-	return vec3(dot(d, iblAxis[0]), dot(d, iblAxis[1]), dot(d, iblAxis[2]));
-}
 
 void main() {
 	mat3 invView = transpose(mat3(osg_ViewMatrix));
@@ -156,8 +140,10 @@ void main() {
 		return;
 	}
 
-	vec3 sampleDir = diffuseView != 0 ? N : reflect(-V, N);
-	vec3 color = texture(envMap, osgx_OrientIBL(osgx_ZUpToGLTF(sampleDir))).rgb;
+	vec3 color = diffuseView != 0
+		? osgx_EnvironmentIrradiance(N)
+		: osgx_EnvironmentSpecular(reflect(-V, N), 0.0)
+	;
 
 	fragColor = vec4(pow(color, vec3(1.0 / 2.2)), 1.0);
 }
@@ -213,32 +199,18 @@ def build_test_cubemap():
 
 	return cubemap
 
-class Basis:
-	"""Just enough of a PBRIBLEnvironment's shape (a single `.iblAxis` list of 3 Vec3)
-	for dice.rotate_ibl_environment() to operate on - this test has no other
-	environment resources (envMap/brdfLUT/diffuseEnv/root) to speak of."""
+def set_rotation(environment, degrees):
+	"""The same Khronos-viewer starting orientation every glTF consumer uses, then
+	rotate_ibl_environment() on top - so `degrees` is always relative to that default."""
+	environment.rotation = osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION
 
-	def __init__(self, axis):
-		self.iblAxis = list(axis)
-
-def set_ibl_axis_uniform(uniform, axis):
-	"""Update a live FLOAT_VEC3[3] uniform in place - .array is the flat 9-float
-	backing store (no per-Vec3 __setitem__), so write 3 floats per axis and dirty()
-	to flag it for re-upload."""
-	array = uniform.array
-
-	for i, vec in enumerate(axis):
-		array[i * 3 + 0] = vec.x
-		array[i * 3 + 1] = vec.y
-		array[i * 3 + 2] = vec.z
-
-	uniform.dirty()
+	dice.rotate_ibl_environment(environment, degrees)
 
 class RotateKeyHandler(osgGA.GUIEventHandler):
-	def __init__(self, uniform, degrees):
+	def __init__(self, environment, degrees):
 		super().__init__()
 
-		self.uniform = uniform
+		self.environment = environment
 		self.degrees = degrees
 
 	def handle(self, event, action):
@@ -249,10 +221,8 @@ class RotateKeyHandler(osgGA.GUIEventHandler):
 			return False
 
 		self.degrees = (self.degrees + 90) % 360
-		basis = Basis(DEFAULT_IBL_AXIS)
 
-		dice.rotate_ibl_environment(basis, self.degrees)
-		set_ibl_axis_uniform(self.uniform, basis.iblAxis)
+		set_rotation(self.environment, self.degrees)
 		osg.notice(f"[pyosg-ibl-rotate-test] --ibl-rotate {self.degrees}")
 
 		return True
@@ -280,14 +250,14 @@ class ToggleUniformKeyHandler(osgGA.GUIEventHandler):
 
 		return True
 
-# Set by build_scene(), read by configure_viewer() - args.ibl_rotate has no natural home in
-# the returned Node the way the three uniforms below do (recovered straight back out of the
-# geode's own StateSet instead of needing a second stash). Same reason/shape as
-# pyosg-khronos-viewer.py's _args.
+# Set by build_scene(), read by configure_viewer() - args.ibl_rotate and the Environment have
+# no natural home in the returned Node the way the two uniforms below do (recovered straight
+# back out of the geode's own StateSet). Same reason/shape as pyosg-khronos-viewer.py's _args.
 _args = None
+_environment = None
 
 def build_scene(w, h):
-	global _args
+	global _args, _environment
 
 	parser = argparse.ArgumentParser(description=__doc__)
 	parser.add_argument(
@@ -303,26 +273,29 @@ def build_scene(w, h):
 	geode.drawables.append(shape)
 	root.children.append(geode)
 
-	basis = Basis(DEFAULT_IBL_AXIS)
+	cubemap = build_test_cubemap()
 
-	dice.rotate_ibl_environment(basis, _args.ibl_rotate)
+	_environment = osgx.Environment(cubemap, cubemap)
 
-	ibl_axis_uniform = osg.Uniform(osg.Uniform.Type.FLOAT_VEC3, "iblAxis", tuple(basis.iblAxis))
+	set_rotation(_environment, _args.ibl_rotate)
+
 	debug_normals_uniform = osg.Uniform("debugNormals", 0)
 	diffuse_view_uniform = osg.Uniform("diffuseView", 0)
 	ss = geode.stateSet
 
 	ss.attributes.append(osg.Program(name="pyosg-ibl-rotate-test", shaders=(
 		osg.Shader(osg.Shader.VERTEX, VERTEX_SHADER),
-		osg.Shader(osg.Shader.FRAGMENT, FRAGMENT_SHADER),
+		osg.Shader(osg.Shader.FRAGMENT, osgx.resolveShaderLibs(FRAGMENT_SHADER)),
 	)))
-	ss.textureAttributes[0] = build_test_cubemap()
+	ss.attributes.append(_environment)
 	ss.uniforms.extend((
-		osg.Uniform("envMap", 0),
-		ibl_axis_uniform,
 		debug_normals_uniform,
 		diffuse_view_uniform,
 	))
+
+	# The shared BRDF LUT's one-time bake pass, if this is the first Environment in the process.
+	if _environment.bakeRoot is not None:
+		root.children.append(_environment.bakeRoot)
 	root.children.append(label("R to rotate", w, h))
 
 	return root
@@ -330,11 +303,10 @@ def build_scene(w, h):
 def configure_viewer(viewer, root):
 	geode = root.children[0]
 	ss = geode.stateSet
-	ibl_axis_uniform = ss.uniforms["iblAxis"]
 	debug_normals_uniform = ss.uniforms["debugNormals"]
 	diffuse_view_uniform = ss.uniforms["diffuseView"]
 
-	viewer.eventHandlers.append(RotateKeyHandler(ibl_axis_uniform, _args.ibl_rotate))
+	viewer.eventHandlers.append(RotateKeyHandler(_environment, _args.ibl_rotate))
 	viewer.eventHandlers.append(ToggleUniformKeyHandler(debug_normals_uniform, "n", "debugNormals"))
 	viewer.eventHandlers.append(ToggleUniformKeyHandler(diffuse_view_uniform, "d", "diffuseView"))
 

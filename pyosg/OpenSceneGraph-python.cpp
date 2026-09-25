@@ -228,9 +228,9 @@ PYBIND11_MODULE(PYOSG_MODULE_NAME, m) {
 	m.attr("F64_MAX") = std::numeric_limits<double>::max();
 	m.attr("F64_LOWEST") = std::numeric_limits<double>::lowest();
 
-	/* py::module_ atexit = py::module_::import("atexit");
-
-	atexit.attr("register")( py::cpp_function([]() { })); */
+	// No atexit cleanup: process-wide state belongs to explicit objects whose lifetime the caller
+	// controls (e.g. the Library returned by osgx.initialize()). atexit handlers run while daemon
+	// threads may still be executing, so cleanup there can race them.
 
 	py::class_<pyx::StopEvent>(
 		m,

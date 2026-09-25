@@ -1323,6 +1323,8 @@ def configure_viewer(viewer, root):
 	viewer.camera.updateCallback = update
 
 if __name__ == "__main__":
+	lib = osgx.initialize()
+
 	print(f"pyosg-noise: 6 columns x 4 rows, row-major from the bottom-left:")
 
 	for name in LEGEND:

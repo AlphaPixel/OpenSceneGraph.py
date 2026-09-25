@@ -59,17 +59,11 @@ def make_spinner(child, axis=(0, 0, 1), speed=0.4):
 	return t
 
 # Trimmed PBR shader for lighting a raw osgDB.readNodeFile()'d glTF model well
-# enough to RTT-snapshot. Used to be a hand-copy of examples/pyosg-lighting/
-# 09-ibl.py's full shader (shadows/scanline/animated-lights/IBL-cubemap
-# stripped, ambient replaced by its `iblEnabled == 0` hemisphere fallback) --
-# that copy is what prompted porting the reusable parts (the osgx_gltf_Material
-# material-buffer contract, material/shading-normal/emissive/alpha reads, and the
-# hemisphere-ambient fallback itself) into osgGLTF/PBR.hpp plus generic osgx/PBR.hpp and
-# osgx/IBL.hpp, pulled in below via shader-library pragmas and
-# osgx.gltf.pbribl.resolveShaderLibs()
-# instead of copy-pasted a third time. Only the direct-light loop, tonemap
-# application, and main() - the part that's genuinely specific to what this
-# example wants lit and how - stay hand-written here.
+# enough to RTT-snapshot: no shadows/IBL, hemisphere ambient only. The material
+# reads (osgx.Material buffer, shading normal, emissive, alpha) and the
+# hemisphere-ambient term come from osgx/PBR.hpp and osgx/IBL.hpp via
+# shader-library pragmas and osgx.resolveShaderLibs(). Only the direct-light loop,
+# tonemap application, and main() are hand-written here.
 PBR_FALLBACK_VERTEX_SHADER = """
 #version 460 core
 
@@ -107,9 +101,8 @@ PBR_FALLBACK_FRAGMENT_SHADER_SRC = """
 // declared here, before the #pragma lines below expand to text that uses it.
 const float PI = 3.14159265359;
 
-#pragma osgx::pbr MATERIAL_STRUCT, D_GGX, G_SCHLICK, G_SMITH, F_SCHLICK, TONEMAP_PBR_NEUTRAL
+#pragma osgx::pbr MATERIAL_STRUCT, MATERIAL_INPUTS, GET_MATERIAL, GET_SHADING_NORMAL, GET_EMISSIVE, GET_ALPHA, D_GGX, G_SCHLICK, G_SMITH, F_SCHLICK, TONEMAP_PBR_NEUTRAL
 #pragma osgx::light DIRECT_SPECULAR
-#pragma osgx::gltf MATERIAL_INPUTS, GET_MATERIAL, SHADING_NORMAL, EMISSIVE, ALPHA_COVERAGE
 #pragma osgx::ibl HEMISPHERE_AMBIENT
 
 in vec3 vNGeom;
@@ -156,25 +149,23 @@ vec3 evaluateDirectLighting(osgx_Material mat, vec3 N, vec3 V, float NdotV) {
 }
 
 void main() {
-	float alpha = osgx_gltf_AlphaCoverage(vUV);
-	if (osgx_gltf_alphaMode == 1.0 && alpha < osgx_gltf_alphaCutoff) discard;
+	float alpha = osgx_GetAlpha(vUV);
+	if (osgx_materialInputs.alphaMode == OSGX_ALPHA_MODE_MASK && alpha < osgx_materialInputs.alphaCutoff) discard;
 
-	vec3 N = osgx_gltf_ShadingNormal(vNGeom, vTangent, vPosition, vUV);
+	vec3 N = osgx_GetShadingNormal(vNGeom, vTangent, vPosition, vUV);
 	vec3 V = normalize(-vPosition);
-	// osgx::gltf::pbribl::GET_MATERIAL now takes separate baseColor/ORM UVs
-	// (per-slot TEXCOORD_n support); this shader only ever produces one UV
-	// set, so pass vUV for both.
-	osgx_Material mat = osgx_gltf_GetMaterial(vUV, vUV, N);
+	// osgx_GetMaterial() takes separate baseColor/ORM UVs (per-slot TEXCOORD_n
+	// support); this shader only ever produces one UV set, so pass vUV for both.
+	osgx_Material mat = osgx_GetMaterial(vUV, vUV);
 	float NdotV = max(dot(N, V), 0.0);
 
 	vec3 worldUp = normalize(mat3(osg_ViewMatrix) * vec3(0.0, 0.0, 1.0));
 
 	vec3 Lo = evaluateDirectLighting(mat, N, V, NdotV);
 	vec3 ambient = osgx_HemisphereAmbient(N, worldUp, mat.albedo, mat.ao, skyColor, groundColor);
-	// osgx_gltf_Emissive() now reads the per-material osgx_gltf_emissiveFactor/
-	// osgx_gltf_hasEmissiveMap uniforms the loader sets, rather than taking a
-	// caller-supplied factor.
-	vec3 emissive = osgx_gltf_Emissive(vUV);
+	// osgx_GetEmissive() reads emissiveFactor/hasEmissiveMap from the same
+	// osgx.Material buffer as every other factor.
+	vec3 emissive = osgx_GetEmissive(vUV);
 
 	vec3 color = ambient + Lo + emissive;
 	color = osgx_TonemapPBRNeutral(color);
@@ -183,8 +174,6 @@ void main() {
 	fragColor = vec4(color, alpha);
 }
 """
-
-PBR_FALLBACK_FRAGMENT_SHADER = osgx.gltf.pbribl.resolveShaderLibs(PBR_FALLBACK_FRAGMENT_SHADER_SRC)
 
 # Applies the fallback PBR shader above to `node` (in place - overrides
 # whatever Program the glTF loader's own StateSet may or may not carry).
@@ -221,13 +210,12 @@ def apply_gltf_fallback_pbr(
 
 	p = osg.Program(name="voxelizeFallbackPBR", shaders=(
 		osg.Shader(osg.Shader.VERTEX, PBR_FALLBACK_VERTEX_SHADER),
-		osg.Shader(osg.Shader.FRAGMENT, PBR_FALLBACK_FRAGMENT_SHADER)
+		osg.Shader(osg.Shader.FRAGMENT, osgx.resolveShaderLibs(PBR_FALLBACK_FRAGMENT_SHADER_SRC))
 	))
 	osgx.gltf.shader.configureProgram(p)
 
 	ss = node.stateSet
 
-	osgx.gltf.shader.configureStateSet(ss)
 	ss.attributes[osg.StateAttribute.PROGRAM] = (p, osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE)
 	ss.uniforms["skyColor"] = osg.Vec3(*sky_color)
 	ss.uniforms["groundColor"] = osg.Vec3(*ground_color)

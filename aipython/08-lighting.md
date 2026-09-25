@@ -4,10 +4,10 @@
 no `osgGLTF` Python module) is the glTF loader plus its optional PBR/IBL adapter. The ownership
 boundary is:
 
-- `osgx.gltf.shader` defines the state populated by the loader (attribute locations, sampler
-  units, `configureProgram()`/`configureStateSet()`).
-- `osgx.gltf.pbribl` provides glTF-specific material/shading GLSL snippets and the optional
-  one-call renderer (`PBRIBLEnvironment`/`PBRIBLScene`).
+- `osgx.gltf.shader` defines the glTF-specific vertex state populated by the loader (tangent and
+  skinning attribute locations, `configureProgram()`). Materials are plain `osgx.Material`s.
+- `osgx.gltf.pbribl` provides the optional one-call renderer (`PBRIBLScene`), the manifest loader
+  `loadEnvironment()`, and `KHRONOS_ENVIRONMENT_ROTATION`.
 - `osgx` and `osgx` provide generic rendering and environment-processing facilities.
 - `osgx.resolveShaderLibs()` expands generic catalogs (`osgx::pbr`, `osgx::ibl`, `osgx::shadow`).
 - `osgx.gltf.pbribl.resolveShaderLibs()` registers and expands the `osgx::gltf` catalog together
@@ -40,8 +40,8 @@ immediately; unrelated pragmas remain intact for OSG or other tooling.
 
 ## Required program and StateSet setup
 
-Custom renderers should use `osgx.gltf.shader`'s public contract rather than repeat attribute
-locations or sampler units:
+Custom renderers should use `osgx.gltf.shader`'s public contract rather than repeat the tangent/
+skinning attribute locations:
 
 ```python
 program = osg.Program(shaders=(
@@ -51,7 +51,6 @@ program = osg.Program(shaders=(
 
 state_set = model.stateSet
 osgx.gltf.shader.configureProgram(program)
-osgx.gltf.shader.configureStateSet(state_set)
 state_set.setAttributeAndModes(
 	program,
 	osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE,
@@ -59,8 +58,9 @@ state_set.setAttributeAndModes(
 ```
 
 `configureProgram()` binds tangent and skin attributes to the locations populated by the loader.
-`configureStateSet()` maps base-color, normal, ORM, and emissive samplers to the loader's texture
-units. The loader owns the material data; the application still owns its renderer and Program.
+Material data needs no setup: every glTF material is an `osgx.Material`, read with
+`#pragma osgx::pbr MATERIAL_INPUTS, GET_MATERIAL`, and its samplers declare their own texture units.
+The loader owns the material data; the application still owns its renderer and Program.
 
 `examples/pyosg-voxelize2d.py` is a complete hand-assembled fallback example (its
 `PBR_FALLBACK_FRAGMENT_SHADER`).
@@ -89,30 +89,34 @@ Lo += (diffuse + specular) * lightColor[i] * attenuation;
 
 ## One-call PBR/IBL renderer
 
-For a pre-baked environment, load its `osgx_pbribl` manifest and use osgx's optional renderer —
-`PBRIBLEnvironment`/`PBRIBLScene` are classes with static factory methods, not free functions (see
-[`30-pbribl.md`](30-pbribl.md) for the full API, including the shadow/skinning/tonemap `hooks`
-options and the deferred G-buffer variant for many-light scenes):
+For a pre-baked environment, load its `osgx_pbribl` manifest as an `osgx.Environment` and use osgx's
+optional renderer (see [`30-pbribl.md`](30-pbribl.md) for the full API, including the
+shadow/skinning/tonemap `hooks` options and the deferred G-buffer variant for many-light scenes):
 
 ```python
 model = osgDB.readNodeFile("scene.gltf")
-environment = osgx.gltf.pbribl.PBRIBLEnvironment.load("papermill.gltf")
+environment = osgx.gltf.pbribl.loadEnvironment("papermill.gltf")
+
+if environment is None:
+	raise RuntimeError("failed to load PBR/IBL environment")
+
 scene = osgx.gltf.pbribl.PBRIBLScene.create(model, environment)
 
-if not environment.valid() or not scene.valid():
+if not scene.valid():
 	raise RuntimeError("PBR/IBL setup failed")
 
 root = osg.Group()
 
-if environment.root is not None:
-	root.children.append(environment.root)
+if environment.bakeRoot is not None:
+	root.children.append(environment.bakeRoot)
 
 root.children.append(scene.node)
 ```
 
-The environment root must participate in the rendered scene graph when the manifest uses a built-in
-LUT. For a fully dynamic setup, use `PBRIBLEnvironment.prepare("environment.hdr")`; it bakes
-specular, diffuse, and the BRDF LUT from that one source. The helper is IBL-only and does not
+`environment.bakeRoot` must participate in the rendered scene graph when it is not `None`. For a
+fully dynamic setup, build `osgx.Environment(osgDB.readImageFile("environment.hdr"))` and set its
+`rotation` to `osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION`; it bakes specular, diffuse, and the
+BRDF LUT from that one source. The helper is IBL-only and does not
 invent authored/direct lights. Generic light rigs remain in `osgx` (see
 [`40-typed-lights-gizmos.md`](40-typed-lights-gizmos.md)); glTF-authored camera and
 `KHR_lights_punctual` support are separate loader work.

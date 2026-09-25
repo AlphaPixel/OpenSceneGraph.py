@@ -9,10 +9,9 @@
 # second time here would be re-teaching a solved problem, not teaching a new one, so this step pivots
 # to consuming it directly:
 #
-# osgx.gltf.pbribl.PBRIBLEnvironment.prepare(hdrPath) - bakes diffuse irradiance, the BRDF LUT, and
-# a GGX-prefiltered specular cubemap all LIVE from one equirectangular .hdr, via a handful of
-# PRE_RENDER passes added to the scene graph (environment.root). No .ktx2 pre-bake step needed
-# anymore - that's what this step's numpy/cv2 SH compute + --ktx2 loading used to stand in for.
+# osgx.Environment(hdrImage) - bakes diffuse irradiance, the BRDF LUT, and a GGX-prefiltered
+# specular cubemap all LIVE from one equirectangular .hdr, via a handful of PRE_RENDER passes
+# added to the scene graph (environment.bakeRoot). No .ktx2 pre-bake step needed.
 #
 # osgx.gltf.pbribl.PBRIBLScene.create(node, environment, ..., shadowMap=...) - wires the whole
 # thing (material + IBL + optional direct lights + optional shadow) onto node's own StateSet with
@@ -200,7 +199,8 @@ def build_scene(w, h):
 		if not hdr_path:
 			sys.exit(f"Cannot find HDR {args.hdr!r} - check OSG_FILE_PATH")
 
-		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepare(hdr_path, lutSize=1024)
+		environment = osgx.Environment(osgDB.readImageFile(str(hdr_path)))
+		environment.rotation = osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION
 
 	else:
 		env_path = resolve_asset(args.env, "gltf")
@@ -208,10 +208,13 @@ def build_scene(w, h):
 		if not env_path:
 			sys.exit(f"Cannot find environment manifest {args.env!r}")
 
-		environment = osgx.gltf.pbribl.PBRIBLEnvironment.load(env_path)
+		environment = osgx.gltf.pbribl.loadEnvironment(str(env_path))
 
-	if not environment.valid():
+	if environment is None:
 		sys.exit("Failed to prepare/load the PBR/IBL environment")
+
+	environment.diffuseIntensity = args.ibl_diffuse
+	environment.specularIntensity = args.ibl_specular
 
 	# --- Lights ----------------------------------------------------------------- #
 	main_group = osg.Group()
@@ -253,8 +256,6 @@ def build_scene(w, h):
 	pbr = osgx.gltf.pbribl.PBRIBLScene.create(
 		model,
 		environment,
-		iblDiffuseIntensity=args.ibl_diffuse,
-		iblSpecularIntensity=args.ibl_specular,
 		diagnostics=args.diagnostics,
 		shadowMap=shadow_map
 	)
@@ -300,8 +301,8 @@ def build_scene(w, h):
 
 	root = osg.Group()
 
-	if environment.root is not None:
-		root.children.append(environment.root)
+	if environment.bakeRoot is not None:
+		root.children.append(environment.bakeRoot)
 
 	if shadow_map is not None:
 		root.children.append(shadow_map.camera)

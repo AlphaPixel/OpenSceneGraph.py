@@ -139,6 +139,8 @@ async def load(viewer, path, stop, progress, bar, t0):
 	del bar
 
 if __name__ == "__main__":
+	lib = osgx.initialize()
+
 	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
 	print(f"Loading (async, in the background): {PATH}", flush=True)

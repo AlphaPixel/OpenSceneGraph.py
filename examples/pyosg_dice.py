@@ -35,7 +35,7 @@ import math
 import pathlib
 import time
 
-from OpenSceneGraph import osg, osgAnimation, osgGA
+from OpenSceneGraph import osg, osgAnimation, osgDB, osgGA
 import osgx
 
 DECAL_VALUES_LOCATION = 13
@@ -163,6 +163,10 @@ const float PI = 3.14159265359;
 
 #pragma osgx::pbr F_MULTISCATTER, MATERIAL_STRUCT
 #pragma osgx::light DIRECT_LIGHTING_DECL
+// The osgx.Environment attached to an ancestor StateSet - the same one a --scene backdrop lit
+// through osgx.gltf.pbribl.PBRIBLScene.create() uses, so rotating it (rotate_ibl_environment())
+// or changing its intensities affects dice and backdrop identically.
+#pragma osgx::environment ENVIRONMENT_INPUTS, ENVIRONMENT_SAMPLE
 
 in vec3 vNormal;
 in vec3 vViewDir;
@@ -179,36 +183,12 @@ uniform float decalHalf;
 uniform vec3 bodyColor;
 uniform vec3 ink;
 
-uniform samplerCube envMap;
-uniform sampler2D brdfLUT;
-uniform samplerCube diffuseEnv;
-
-// Same cubemap lookup basis osgx.gltf.pbribl.PBRIBLScene.create() reads off
-// PBRIBLEnvironment.iblAxis - rotating that (in Python, on the SAME environment object)
-// rotates a --scene backdrop lit through that renderer and these dice identically, since
-// both end up sampling through this same remap.
-uniform vec3 iblAxis[3];
-
 // Whole-die material knobs - no per-face roughness/metallic data yet, just a uniform
 // scalar pair so the PBR/IBL response is at least visibly tunable from the CLI.
 uniform float roughness;
 uniform float metallic;
 
-// Independent diffuse-irradiance/specular-reflection intensity, matching the SAME uniform names
-// osgx::gltf::pbribl::PBRIBLScene::create()'s backdrop shader reads - e.g. --ibl-diffuse/
-// --ibl-specular dial these down on both the dice AND a --scene backdrop identically, so
-// LIGHT_UNIFORMS' punctual lights (a torch) can be made to read more clearly against IBL.
-uniform float iblDiffuseIntensity;
-uniform float iblSpecularIntensity;
-
 out vec4 fragColor;
-
-// Ported from osgx::gltf::pbribl's own PBRIBL.cpp shader - Z-up world direction to the
-// baked cubemap's Y-up convention, then onto the (possibly rotated) lookup basis.
-vec3 osgx_ZUpToGLTF(vec3 d) { return vec3(d.x, d.z, -d.y); }
-vec3 osgx_OrientIBL(vec3 d) {
-	return vec3(dot(d, iblAxis[0]), dot(d, iblAxis[1]), dot(d, iblAxis[2]));
-}
 
 void main() {
 	const float DECAL_FACE_STRIDE = 32.0;
@@ -259,13 +239,11 @@ void main() {
 	vec3 V = invView * normalize(vViewDir);
 	vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
-	vec3 diffuseIrradiance = texture(diffuseEnv, osgx_OrientIBL(osgx_ZUpToGLTF(N))).rgb;
+	vec3 diffuseIrradiance = osgx_EnvironmentIrradiance(N);
 	vec3 R = reflect(-V, N);
-	float maxMip = float(max(textureQueryLevels(envMap) - 2, 0));
-	vec3 prefiltered = textureLod(envMap, osgx_OrientIBL(osgx_ZUpToGLTF(R)), roughness * maxMip).rgb;
-	vec3 Fd = osgx_F_MultiScatter(N, V, roughness, F0, brdfLUT);
-	vec3 color = diffuseIrradiance * albedo * (1.0 - Fd) * (1.0 - metallic) * iblDiffuseIntensity
-		+ prefiltered * Fd * iblSpecularIntensity;
+	vec3 prefiltered = osgx_EnvironmentSpecular(R, roughness);
+	vec3 Fd = osgx_F_MultiScatter(N, V, roughness, F0, osgx_environmentBRDFLUT);
+	vec3 color = diffuseIrradiance * albedo * (1.0 - Fd) * (1.0 - metallic) + prefiltered * Fd;
 
 	// Direct/punctual lights, via the osgx_DirectLighting() CONTRACT (DIRECT_LIGHTING_DECL/
 	// DIRECT_LIGHTING_HOOK_DEFAULT in PBR.hpp) - worldPos comes from vViewDir's own unnormalized
@@ -355,54 +333,37 @@ def resolve_environment_manifest(value):
 	raise FileNotFoundError(f"Cannot find environment manifest {value!r}")
 
 def rotate_ibl_environment(environment, degrees):
-	"""Rotate `environment`'s cubemap lookup basis (iblAxis, always exactly 3 Vec3 --
-	one orthonormal basis) about the world's vertical (Z) axis, in place, by an exact
-	multiple of 90 degrees - a pure axis permutation, no interpolation. `degrees` must
-	be one of 0/90/180/270 (mod 360).
+	"""Rotate an osgx.Environment about the world's vertical (Z) axis by `degrees`, on top of
+	whatever rotation it already has.
 
-	This is THE rotation knob for a baked HDRI: there's no authored "this way is north"
-	in an equirect environment map, so however it landed at bake time is arbitrary.
-	Rotating the lookup basis (rather than resampling the cubemap itself) is exact and
-	free - both PBRIBLScene.create()'s glTF material shader and FRAGMENT_SHADER_IBL read
-	iblAxis the same way, so applying this once to a shared `environment` before handing
-	it to either rotates dice and backdrop identically.
-
-	iblAxis round-trips through Python as a plain list copy (pybind11/stl.h), not a live
-	view - reassign the whole list, per-element mutation is silently a no-op.
+	This is THE rotation knob for a baked HDRI: there's no authored "this way is north" in an
+	equirect environment map, so however it landed at bake time is arbitrary. Every shader
+	reading the environment (PBRIBLScene.create()'s glTF shader, FRAGMENT_SHADER_IBL) samples
+	through the same Environment, so rotating it once rotates dice and backdrop identically.
 	"""
 
-	if degrees % 90 != 0:
-		raise ValueError(f"rotate_ibl_environment: {degrees} is not a multiple of 90")
+	turn = osg.Quat(-math.radians(degrees), osg.Vec3(0.0, 0.0, 1.0))
 
-	steps = (degrees // 90) % 4
-
-	def rotated(axis):
-		x, y, z = axis.x, axis.y, axis.z
-
-		for _ in range(steps):
-			x, z = -z, x
-
-		return osg.Vec3(x, y, z)
-
-	environment.iblAxis = [rotated(axis) for axis in environment.iblAxis]
+	environment.rotation = turn * environment.rotation
 
 def prepare_environment(hdr=None, env=None, rotate=0):
-	"""Resolve --hdr/--env (mutually exclusive; both optional) into a PBRIBLEnvironment,
-	optionally pre-rotated - see rotate_ibl_environment(). Returns None if neither
-	hdr nor env is given."""
+	"""Resolve --hdr/--env (mutually exclusive; both optional) into an osgx.Environment in the
+	Khronos glTF-Sample-Viewer orientation, optionally rotated further - see
+	rotate_ibl_environment(). Returns None if neither hdr nor env is given, or if loading fails."""
 
 	if hdr:
 		hdr_path = resolve_hdr(hdr)
-		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepare(str(hdr_path), lutSize=1024)
+		environment = osgx.Environment(osgDB.readImageFile(str(hdr_path)))
+		environment.rotation = osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION
 
 	elif env:
 		env_path = resolve_environment_manifest(env)
-		environment = osgx.gltf.pbribl.PBRIBLEnvironment.load(str(env_path))
+		environment = osgx.gltf.pbribl.loadEnvironment(str(env_path))
 
 	else:
 		return None
 
-	if rotate:
+	if environment is not None and rotate:
 		rotate_ibl_environment(environment, rotate)
 
 	return environment

@@ -177,11 +177,19 @@ void main() {
 
 # Bloom bright-pass extract - soft-knee smoothstep rather than a hard cutoff, so bloom doesn't
 # flicker as luminance crosses the threshold frame to frame.
+#
+# Also a firefly guard: a single extreme pixel (a razor-sharp specular peak can legitimately be in
+# the thousands) times even the blur kernel's smallest tail weights still
+# exceeds 1.0, so the separable blur's whole SQUARE footprint saturates - a visible white square
+# under extreme bloom strength. Clamping the bright-pass luminance (hue-preserving scale, not a
+# per-channel clamp) caps what any one pixel can contribute; non-finite values are dropped outright.
+# This only limits what feeds the BLOOM - the HDR image itself keeps the full-range highlight.
 BLOOM_THRESHOLD_FRAGMENT_SHADER = """
 #version 460 core
 
 uniform sampler2D hdrColorTex;
 uniform float bloomThreshold;
+uniform float bloomMaxLuminance;
 
 in vec2 vUV;
 
@@ -189,7 +197,15 @@ out vec4 fragColor;
 
 void main() {
 	vec3 c = texture(hdrColorTex, vUV).rgb;
+
+	if(any(isnan(c)) || any(isinf(c))) c = vec3(0.0);
+
 	float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+
+	if(lum > bloomMaxLuminance) {
+		c *= bloomMaxLuminance / lum;
+		lum = bloomMaxLuminance;
+	}
 
 	fragColor = vec4(c * smoothstep(bloomThreshold, bloomThreshold + 0.5, lum), 1.0);
 }
@@ -495,7 +511,7 @@ def create_bloom_cameras(hdr_color_tex, w, h):
 		w=w, h=h,
 		name="BloomThreshold",
 		order=5,
-		extra_uniforms={"bloomThreshold": 1.0},
+		extra_uniforms={"bloomThreshold": 1.0, "bloomMaxLuminance": 8.0},
 	)
 
 	blur_h_cam = make_fullscreen_rtt_pass(
@@ -895,7 +911,8 @@ def build_scene(w, h):
 		if not hdr_path:
 			sys.exit(f"Cannot find HDR {args.hdr!r} - check OSG_FILE_PATH")
 
-		environment = osgx.gltf.pbribl.PBRIBLEnvironment.prepare(hdr_path, lutSize=1024)
+		environment = osgx.Environment(osgDB.readImageFile(str(hdr_path)))
+		environment.rotation = osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION
 
 	else:
 		env_path = resolve_asset(args.env, "gltf")
@@ -903,10 +920,13 @@ def build_scene(w, h):
 		if not env_path:
 			sys.exit(f"Cannot find environment manifest {args.env!r}")
 
-		environment = osgx.gltf.pbribl.PBRIBLEnvironment.load(env_path)
+		environment = osgx.gltf.pbribl.loadEnvironment(str(env_path))
 
-	if not environment.valid():
+	if environment is None:
 		sys.exit("Failed to prepare/load the PBR/IBL environment")
+
+	environment.diffuseIntensity = args.ibl_diffuse
+	environment.specularIntensity = args.ibl_specular
 
 	# --- G-buffer geometry pass -------------------------------------------------- #
 	gbuffer = osgx.gltf.pbribl.PBRIBLGBuffer.create(model, w, h)
@@ -968,7 +988,7 @@ def build_scene(w, h):
 	lighting_options.aoTexture = ssao.aoTexture
 
 	lighting = osgx.gltf.pbribl.PBRIBLLightingScene.create(
-		gbuffer, environment, placeholder_camera, args.ibl_diffuse, args.ibl_specular, lighting_options
+		gbuffer, environment, placeholder_camera, lighting_options
 	)
 
 	if not lighting.valid():
@@ -1111,8 +1131,8 @@ def build_scene(w, h):
 
 	root = osg.Group()
 
-	if environment.root is not None:
-		root.children.append(environment.root)
+	if environment.bakeRoot is not None:
+		root.children.append(environment.bakeRoot)
 
 	if shadow_map is not None:
 		root.children.append(shadow_map.camera)
@@ -1267,16 +1287,16 @@ def configure_viewer(viewer, root):
 
 		def draw_ibl_knobs(ri):
 			changed, value = osgx.imgui.slider_float_nudge(
-				"IBL Diffuse", lighting.iblDiffuseIntensity.value, 0.0, 2.0
+				"IBL Diffuse", lighting.environment.diffuseIntensity, 0.0, 2.0
 			)
 
-			if changed: lighting.iblDiffuseIntensity.value = value
+			if changed: lighting.environment.diffuseIntensity = value
 
 			changed, value = osgx.imgui.slider_float_nudge(
-				"IBL Specular", lighting.iblSpecularIntensity.value, 0.0, 2.0
+				"IBL Specular", lighting.environment.specularIntensity, 0.0, 2.0
 			)
 
-			if changed: lighting.iblSpecularIntensity.value = value
+			if changed: lighting.environment.specularIntensity = value
 
 		gui.addSection("IBL", draw_ibl_knobs, closed_section)
 

@@ -49,6 +49,8 @@ from pyosg_example import window_size
 
 from OpenSceneGraph import *
 
+import osgx
+
 # MotionBricks' demo utilities only touch the real MuJoCo package for two things
 # this script doesn't need: building a full MjModel/MjData pair, and a module-level
 # `import mujoco` used purely for type hints (WASD_controller.generate_control_signals
@@ -88,7 +90,7 @@ in vec3 osg_Normal;
 layout(location = 8) in uvec4 osgx_gltf_JointIndices;
 layout(location = 9) in vec4 osgx_gltf_JointWeights;
 
-layout(std430, binding = 2) readonly buffer osgx_gltf_JointMatrixBuffer {
+layout(std430, binding = @osgx::gltf::joints@) readonly buffer osgx_gltf_JointMatrixBuffer {
 	mat4 osgx_gltf_jointMatrices[];
 };
 
@@ -164,7 +166,7 @@ def install_skinning_shader(model):
 	"""Use the known-good Python skinning path without changing osgx's PBR helper."""
 
 	program = osg.Program(name="motionbricks_skinning", shaders=(
-		osg.Shader(osg.Shader.VERTEX, SKINNING_VERTEX_SHADER),
+		osg.Shader(osg.Shader.VERTEX, osgx.resolveShaderLibs(SKINNING_VERTEX_SHADER)),
 		osg.Shader(osg.Shader.FRAGMENT, SKINNING_FRAGMENT_SHADER)
 	))
 
