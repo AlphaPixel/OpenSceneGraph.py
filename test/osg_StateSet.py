@@ -432,7 +432,7 @@ def test_defines_setdefault():
 	assert len(ss.defines) == 2
 
 # The actual real-world call shape this binding was added FOR (see 11-sketchfab.py's
-# OSGX_PBRIBL_AO wiring) - setDefine()'s single-arg overload sets the define's own value string
+# OSGX_PBR_AO wiring) - setDefine()'s single-arg overload sets the define's own value string
 # to "" (a flag-style, #ifdef-tested define, not a `#define NAME value` substitution). There's no
 # Python-facing way to read that value string back yet (only the OverrideValue half of the
 # DefinePair is exposed - see DefinesTag's own comment in State.hpp), so this only asserts the
@@ -440,6 +440,6 @@ def test_defines_setdefault():
 def test_defines_set_matches_setDefine_single_arg_overload():
 	ss = StateSet()
 
-	ss.defines["OSGX_PBRIBL_AO"] = StateAttribute.ON
+	ss.defines["OSGX_PBR_AO"] = StateAttribute.ON
 
-	assert ss.defines["OSGX_PBRIBL_AO"] == StateAttribute.ON
+	assert ss.defines["OSGX_PBR_AO"] == StateAttribute.ON

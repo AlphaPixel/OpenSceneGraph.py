@@ -5,10 +5,10 @@ customize OSG.py/osgx's PBR material pipeline. Each scene picks a different poin
 pipeline to hook:
 
 - sweep [default] - the SANCTIONED path: a real osgx.Material StateAttribute per mesh, under a
-  live GL context, rendered via osgx.gltf.pbribl.PBRIBLScene.create() - the same production
+  live GL context, rendered via osgx.PBRScene.create() - the same production
   PBR/IBL pipeline pyosg-khronos-viewer.py uses for real glTF assets, applied here to plain
   osgx/OSG geometry instead (see pyosg-metal-sphere.py for the single-shape version of this same
-  idea, and aipython/30-pbribl.md's "PBRIBLScene.create() is not limited to glTF-loaded nodes"
+  idea, and aipython/30-pbr.md's "PBRScene.create() is not limited to glTF-loaded nodes"
   section). Two rows of small osgx Polyhedron instances (--shape: tetrahedron/cube/octahedron/
   icosahedron [default]/dodecahedron/pentagonal-trapezohedron): metallic=0.0 (dielectric) on top,
   metallic=1.0 (metal) on the bottom, roughness sweeping left to right on both rows. A fixed
@@ -244,11 +244,11 @@ def build_sweep_scene(args):
 	if args.hdr:
 		hdr_path = resolve_asset(args.hdr, "hdr", ("glTF-Sample-Environments/{}",))
 		environment = osgx.Environment(osgDB.readImageFile(str(hdr_path)))
-		environment.rotation = osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION
+		environment.rotation = osgx.gltf.KHRONOS_ENVIRONMENT_ROTATION
 
 	else:
 		env_path = resolve_environment_manifest(args.env)
-		environment = osgx.gltf.pbribl.loadEnvironment(str(env_path))
+		environment = osgx.gltf.loadEnvironment(str(env_path))
 
 	if environment is None:
 		raise RuntimeError(f"failed to prepare PBR IBL resources for {args.hdr or args.env}")
@@ -256,10 +256,10 @@ def build_sweep_scene(args):
 	# Program/IBL textures attach to `shapes`' own StateSet, inherited by every child below --
 	# only each Geode's own osgx.Material differs, matching how a real scene shares one shader
 	# (and one environment) across many differently-materialed primitives. LightSet (above) and
-	# the Program PBRIBLScene.create() attaches here coexist on the same StateSet without
+	# the Program PBRScene.create() attaches here coexist on the same StateSet without
 	# conflict - different StateAttribute::Type/member slots (LightSet is Type.CAPABILITY
 	# member=1, Material is member=0, Program is its own Type entirely).
-	pbr = osgx.gltf.pbribl.PBRIBLScene.create(shapes, environment)
+	pbr = osgx.PBRScene.create(shapes, osgx.PBRSceneOptions(environment=environment))
 
 	if not pbr.valid():
 		raise RuntimeError("failed to apply PBR/IBL environment")
@@ -682,7 +682,7 @@ def parse_args():
 		"--env",
 		metavar="MANIFEST",
 		default="pisa",
-		help="fully pre-baked osgx_pbribl environment manifest (default: pisa)"
+		help="fully pre-baked osgx_environment manifest (default: pisa)"
 	)
 
 	subparsers.add_parser("glitter", help="per-face vertex-attribute-driven normal-perturbation sparkle")

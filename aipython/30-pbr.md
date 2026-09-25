@@ -1,12 +1,14 @@
-# Reflective PBR/IBL for ordinary OSG geometry
+# Forward PBR (osgx.PBRScene) for ordinary OSG geometry
 
-`osgx.gltf.pbribl.PBRIBLScene.create()` is not limited to glTF-loaded nodes —
+`osgx.PBRScene.create()` is not limited to glTF-loaded nodes —
 it works with an ordinary `osg.ShapeDrawable`, provided the drawable carries
 an `osgx.Material` (see [`29-material.md`](29-material.md)) — a real
 `StateAttribute` whose buffer (`osgx_materialInputs`) the renderer reads. The
-lighting comes from an `osgx.Environment` (the distant-IBL `StateAttribute`:
-specular + diffuse cubemaps + BRDF LUT) that the caller builds or loads and
-passes in; the caller owns it and may share it between scenes.
+light sources are all optional, passed in `osgx.PBRSceneOptions`: an
+`osgx.Environment` (image-based light: specular + diffuse cubemaps + BRDF LUT,
+owned by the caller and shareable between scenes), an `osgx.ShadowMap`, plus
+whatever `osgx.LightSet` direct lights the scene graph carries. Without an
+environment, the environment term is zero.
 
 ## Minimal live REPL setup
 
@@ -23,14 +25,14 @@ material.roughness = 0.12
 material.metallic = 1.0
 drawable.stateSet.attributes.append(material)
 
-environment = osgx.gltf.pbribl.loadEnvironment(
+environment = osgx.gltf.loadEnvironment(
 	"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/env/papermill.gltf",
 )
 
 if environment is None:
 	raise RuntimeError("failed to load PBR/IBL environment")
 
-pbr = osgx.gltf.pbribl.PBRIBLScene.create(geode, environment)
+pbr = osgx.PBRScene.create(geode, osgx.PBRSceneOptions(environment=environment))
 
 if not pbr.valid():
 	raise RuntimeError("PBR/IBL setup failed")
@@ -51,20 +53,20 @@ Intensities and orientation are live properties of the environment, not of
 the scene: `environment.diffuseIntensity`, `environment.specularIntensity`,
 `environment.rotation` (an `osg.Quat`).
 
-## Use a pre-baked `osgx_pbribl` environment manifest
+## Use a pre-baked `osgx_environment` manifest
 
 The `.gltf` files in `osgx`'s build `env/` directory are not ordinary scene
-models: they carry the custom `osgx_pbribl` extension pointing at matching
+models: they carry the custom `osgx_environment` extension pointing at matching
 pre-baked specular and diffuse KTX2 cubemaps beside the manifest.
-`osgx.gltf.pbribl.loadEnvironment(path)` loads one as an `osgx.Environment`
-(already rotated by `osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION`), or
+`osgx.gltf.loadEnvironment(path)` loads one as an `osgx.Environment`
+(already rotated by `osgx.gltf.KHRONOS_ENVIRONMENT_ROTATION`), or
 returns `None` on failure.
 
 To bake the whole environment dynamically from one HDR instead:
 
 ```python
 environment = osgx.Environment(osgDB.readImageFile("environment.hdr"))
-environment.rotation = osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION
+environment.rotation = osgx.gltf.KHRONOS_ENVIRONMENT_ROTATION
 ```
 
 It bakes diffuse irradiance, GGX-prefiltered specular, and the BRDF LUT live
@@ -81,14 +83,14 @@ glTF-authored camera/`KHR_lights_punctual` support is separate loader work.
 Given the `geode`/`viewer` variables from the setup above:
 
 ```python
-environment = osgx.gltf.pbribl.loadEnvironment(
+environment = osgx.gltf.loadEnvironment(
 	"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/env/Cannon_Exterior.gltf",
 )
 
 if environment is None:
 	raise RuntimeError("failed to load PBR/IBL environment")
 
-pbr = osgx.gltf.pbribl.PBRIBLScene.create(geode, environment)
+pbr = osgx.PBRScene.create(geode, osgx.PBRSceneOptions(environment=environment))
 
 if not pbr.valid():
 	raise RuntimeError("failed to apply PBR/IBL environment")
@@ -104,9 +106,9 @@ viewer.sceneData = root
 
 The material attached to `drawable` does not need to be rebuilt.
 
-## Extra `PBRIBLScene.create()` options
+## Extra `PBRScene.create()` options
 
-`create(node, environment, diagnostics=False, shadowMap=None, hooks=[])`:
+`osgx.PBRSceneOptions(environment=None, shadowMap=None, hooks={}, diagnostics=False)`:
 
 - `diagnostics=True` builds `pbr.debugMode` for switching between
   combined/diffuse/specular/normal/roughness/diffuse-IBL-only visualizations
@@ -115,20 +117,21 @@ The material attached to `drawable` does not need to be rebuilt.
 - `shadowMap` accepts an `osgx.ShadowMap` (see
   [`10-rtt.md`](10-rtt.md)) to shadow the light at `LightSet` index
   `shadowMap.casterIndex`; omit it for unshadowed direct light.
-- `hooks` is a plain list of `(osgx.Hook, osg.Shader)` pairs
+- `hooks` is a dict of `{osgx.Hook: osg.Shader}` (or a list of pairs)
   substituting one of this Program's built-in shader slots (`osgx.Hook.Skinning`,
   `osgx.Hook.Tonemap`). Each hook *replaces* the built-in definition (GLSL
   allows one body per function; adding a second is a link error, not an
-  override) — `osgx.gltf.shader.SKINNING_HOOK_LINEAR_BLEND` (wrapped in
-  `osgx.gltf.pbribl.resolveShaderLibs()`) enables real joint-matrix skinning
+  override) — `osgx.SKINNING_HOOK_LINEAR_BLEND` (wrapped in
+  `osgx.resolveShaderLibs()`) enables real joint-matrix skinning
   in place of the identity-passthrough default.
 
 There is also a deferred, G-buffer-split path for scenes with many lights —
-`PBRIBLGBuffer.create(node, width, height)` (material-only geometry pass) →
-`PBRIBLLightingScene.create(gbuffer, environment, mainCamera, ...)`
-(lighting pass reading the G-buffer) — not covered in the minimal setup
-above; reach for it only once a scene's light count/overdraw makes the
-single-pass `PBRIBLScene` genuinely too expensive.
+`PBRGBuffer.create(node, width, height)` (material-only geometry pass) →
+`PBRLightingPass.create(gbuffer, mainCamera,
+osgx.PBRLightingPassOptions(environment=environment, ...))` (lighting pass
+reading the G-buffer) — see [`12-gbuffer.md`](12-gbuffer.md); reach for it only
+once a scene's light count/overdraw makes the single-pass `PBRScene` genuinely
+too expensive.
 
 ## Hand-assembled shader (no `osgx.Material`)
 

@@ -14,15 +14,15 @@ osgx_source="${PYOSG_OSGX_SOURCE_DIR:-$repo_root/etc/osgx}"
 python_bin="${PYTHON:-python3}"
 hdr_input="${PYOSG_HDR:-}"
 asset_name="${PYOSG_ASSET_NAME:-}"
-software_bake="${PYOSG_PBRIBL_SOFTWARE:-0}"
+software_bake="${PYOSG_ENVIRONMENT_SOFTWARE:-0}"
 prepare_catalog_assets="${PYOSG_PREPARE_CATALOG_ASSETS:-0}"
 catalog_asset_dir="${PYOSG_CATALOG_ASSET_DIR:-$scratch/catalog-assets}"
 khronos_environments_dir="${PYOSG_KHRONOS_ENVIRONMENTS_DIR:-/home/cubicool/dev/OpenSceneGraph-Data/glTF-Sample-Environments}"
 khronos_assets_dir="${PYOSG_KHRONOS_ASSETS_DIR:-/home/cubicool/dev/OpenSceneGraph-Data/glTF-Sample-Assets}"
-pbribl_prefilter_size="${PYOSG_PBRIBL_PREFILTER_SIZE:-}"
-pbribl_samples="${PYOSG_PBRIBL_SAMPLES:-}"
-pbribl_diffuse_cube_size="${PYOSG_PBRIBL_DIFFUSE_CUBE_SIZE:-}"
-pbribl_diffuse_samples="${PYOSG_PBRIBL_DIFFUSE_SAMPLES:-}"
+environment_prefilter_size="${PYOSG_ENVIRONMENT_PREFILTER_SIZE:-}"
+environment_samples="${PYOSG_ENVIRONMENT_SAMPLES:-}"
+environment_diffuse_cube_size="${PYOSG_ENVIRONMENT_DIFFUSE_CUBE_SIZE:-}"
+environment_diffuse_samples="${PYOSG_ENVIRONMENT_DIFFUSE_SAMPLES:-}"
 build_base_wheel="${PYOSG_BUILD_BASE_WHEEL:-1}"
 build_examples_wheel="${PYOSG_BUILD_EXAMPLES_WHEEL:-0}"
 examples_asset_dir="${PYOSG_EXAMPLES_ASSET_DIR:-}"
@@ -34,7 +34,7 @@ if [[ ! -f "$osgx_source/CMakeLists.txt" ]]; then
 fi
 
 if [[ "$software_bake" != "0" && "$software_bake" != "1" ]]; then
-	echo "PYOSG_PBRIBL_SOFTWARE must be 0 or 1." >&2
+	echo "PYOSG_ENVIRONMENT_SOFTWARE must be 0 or 1." >&2
 	exit 1
 fi
 
@@ -50,7 +50,7 @@ fi
 
 mkdir -p "$native_dir" "$wheelhouse"
 
-# This independent native build provides osgx-pbribl for preparing selected
+# This independent native build provides osgx-environment for preparing selected
 # third-party assets. It is deliberately retained between invocations so CMake
 # and the pinned OSG checkout can be reused.
 cmake -S "$repo_root" -B "$native_dir" \
@@ -61,10 +61,10 @@ cmake -S "$repo_root" -B "$native_dir" \
 	-DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
 cmake --build "$native_dir" \
-	--target osgx-pbribl osgdb_hdr osgdb_ktx2 \
+	--target osgx-environment osgdb_hdr osgdb_ktx2 \
 	--parallel "$(nproc)"
 
-asset_tool="$native_dir/_deps/osgx-build/utils/osgx-pbribl"
+asset_tool="$native_dir/_deps/osgx-build/utils/osgx-environment"
 
 shopt -s nullglob
 osg_plugin_dirs=("$native_dir"/_deps/openscenegraph-build/lib/osgPlugins-*)
@@ -103,20 +103,20 @@ if [[ "$prepare_catalog_assets" == "1" ]]; then
 		prepare_args+=(--software)
 	fi
 
-	if [[ -n "$pbribl_prefilter_size" ]]; then
-		prepare_args+=(--prefilter-size "$pbribl_prefilter_size")
+	if [[ -n "$environment_prefilter_size" ]]; then
+		prepare_args+=(--prefilter-size "$environment_prefilter_size")
 	fi
 
-	if [[ -n "$pbribl_samples" ]]; then
-		prepare_args+=(--samples "$pbribl_samples")
+	if [[ -n "$environment_samples" ]]; then
+		prepare_args+=(--samples "$environment_samples")
 	fi
 
-	if [[ -n "$pbribl_diffuse_cube_size" ]]; then
-		prepare_args+=(--diffuse-cube-size "$pbribl_diffuse_cube_size")
+	if [[ -n "$environment_diffuse_cube_size" ]]; then
+		prepare_args+=(--diffuse-cube-size "$environment_diffuse_cube_size")
 	fi
 
-	if [[ -n "$pbribl_diffuse_samples" ]]; then
-		prepare_args+=(--diffuse-samples "$pbribl_diffuse_samples")
+	if [[ -n "$environment_diffuse_samples" ]]; then
+		prepare_args+=(--diffuse-samples "$environment_diffuse_samples")
 	fi
 
 	# Catalog preparation requires a new staging directory. This prevents stale,
@@ -140,18 +140,18 @@ if [[ -n "$hdr_input" ]]; then
 
 	asset_output="$scratch/assets/env/$asset_name"
 	mkdir -p "$(dirname "$asset_output")"
-	pbribl_args=()
+	environment_args=()
 
 	if [[ "$software_bake" == "1" ]]; then
-		pbribl_args+=(--software)
+		environment_args+=(--software)
 	fi
 
-	# osgx-pbribl uses osgDB::readImageFile(), whose HDR reader is an OSG
+	# osgx-environment uses osgDB::readImageFile(), whose HDR reader is an OSG
 	# plugin. This build-tree path is the local equivalent of an installed OSG
 	# plugin directory; do not require a system-wide `make install`. Setting
-	# PYOSG_PBRIBL_SOFTWARE=1 selects the CPU/OpenMP baker for headless CI.
+	# PYOSG_ENVIRONMENT_SOFTWARE=1 selects the CPU/OpenMP baker for headless CI.
 	OSG_LIBRARY_PATH="$osg_plugin_dir:$ktx2_plugin_dir${OSG_LIBRARY_PATH:+:$OSG_LIBRARY_PATH}" \
-		"$asset_tool" "$hdr_input" "$asset_output" "${pbribl_args[@]}"
+		"$asset_tool" "$hdr_input" "$asset_output" "${environment_args[@]}"
 
 	echo "Prepared environment: $asset_output.gltf"
 	examples_asset_dir="$scratch/assets"

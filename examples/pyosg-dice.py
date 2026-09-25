@@ -345,7 +345,7 @@ def build_scene(w, h):
 	environment_group.add_argument(
 		"--env",
 		metavar="MANIFEST",
-		help="fully pre-baked osgx_pbribl environment manifest (see pyosg-khronos-viewer.py)"
+		help="fully pre-baked osgx_environment manifest (see pyosg-khronos-viewer.py)"
 	)
 	parser.add_argument(
 		"--roughness",

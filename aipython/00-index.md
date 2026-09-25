@@ -31,8 +31,8 @@ Read the others situationally:
 | [`18-deterministic-captures.md`](18-deterministic-captures.md) | Capturing a precise, repeatable animation state by freezing an effect-local elapsed-time uniform instead of racing the realtime frame loop. |
 | [`20-object-lifetime.md`](20-object-lifetime.md) | Investigating a leak, a "removed but still alive" object, or verifying true C++ destruction vs. just scene-graph detachment. |
 | [`25-async-osgpy.md`](25-async-osgpy.md) | Any background OSG.py operation (not just glTF loading): push vs. poll, why a naive async loader can be *slower* than sync (GIL contention between the render pump and a push-based progress mechanism), making `viewer.frame()` an ordinary `asyncio` task, and where the ceiling is (GIL, non-preemptible `frame()`, cooperative cancellation). Read before assuming async is "free" overlap with rendering. |
-| [`29-material.md`](29-material.md) | Setting a PBR material (base color/roughness/metallic/maps) on any Drawable via `osgx.Material` — a real `osg.StateAttribute`. Read before `30-pbribl.md` if you just need factors on a shape, no full IBL renderer. |
-| [`30-pbribl.md`](30-pbribl.md) | Applying `osgx.gltf.pbribl`'s full reflective PBR/IBL renderer to ordinary OSG geometry such as `ShapeDrawable`. |
+| [`29-material.md`](29-material.md) | Setting a PBR material (base color/roughness/metallic/maps) on any Drawable via `osgx.Material` — a real `osg.StateAttribute`. Read before `30-pbr.md` if you just need factors on a shape, no full IBL renderer. |
+| [`30-pbr.md`](30-pbr.md) | Applying `osgx.PBRScene` (forward PBR, optional environment/shadow light sources) to ordinary OSG geometry such as `ShapeDrawable`. |
 | [`40-typed-lights-gizmos.md`](40-typed-lights-gizmos.md) | Adding typed direct/punctual lights (`osgx.LightSet` — Point/Directional/Spot/Sphere) and their debug gizmos (`osgx.LightGizmos`/`osgx.LightMarkers`) to a live scene; also documents the `osgx_DirectLighting()` hook contract every direct-lit shader should call into. |
 
 ## Why this exists as `aipython/*.md` and not a Claude Code skill

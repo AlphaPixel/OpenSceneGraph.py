@@ -212,7 +212,7 @@ gui.addSection("Spot", spot_section)
 
 No `HookList`-style helper (mirroring osgSlug's `HookList`) yet for composing
 multiple fragment-stage hooks on one Program — `osgx_DirectLighting()` is the
-first hook, added by hand since there's only one so far. `PBRIBL.cpp`'s
+first hook, added by hand since there's only one so far. `PBRScene.cpp`'s
 `evaluateIBL()` and the final tonemap/composite step are candidates for the
 same treatment once a real second consumer needs to override one
 specifically.

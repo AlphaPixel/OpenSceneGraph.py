@@ -71,7 +71,7 @@ FILL_LIGHT_POS_1 = osg.Vec3( 0.0, -0.6, 0.2) # warm back/rim
 # +Z, -Z) - see _equirect_face_uv() below.
 FACE_NAMES = ("+X", "-X", "+Y", "-Y", "+Z", "-Z")
 
-# HDR magnitude for a fully-saturated (1.0) color channel. NOTE: PBRIBLScene.create()'s specular
+# HDR magnitude for a fully-saturated (1.0) color channel. NOTE: PBRScene.create()'s specular
 # term samples envMap directly and is NOT scaled by --ibl-diffuse - only --ibl-specular affects
 # it - so this has to sit near a real HDR's own peak magnitude (photographed HDRs like
 # papermill.hdr are typically ~0.5-3), not just "however bright looks fun" - too high and every
@@ -392,7 +392,7 @@ def build_scene(w, h):
 	env_group.add_argument(
 		"--env",
 		default=None,
-		help="Pre-baked osgx_pbribl environment manifest (default: papermill) - its specular "
+		help="Pre-baked osgx_environment manifest (default: papermill) - its specular "
 			"bake is immediately replaced by the first procedural repaint, same as --hdr's"
 	)
 	ap.add_argument(
@@ -455,7 +455,7 @@ def build_scene(w, h):
 		options.bakeSpecular = False
 
 		environment = osgx.Environment(osgDB.readImageFile(str(hdr_path)), options)
-		environment.rotation = osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION
+		environment.rotation = osgx.gltf.KHRONOS_ENVIRONMENT_ROTATION
 
 	else:
 		env_path = resolve_asset(args.env, "gltf")
@@ -463,7 +463,7 @@ def build_scene(w, h):
 		if not env_path:
 			sys.exit(f"Cannot find environment manifest {args.env!r}")
 
-		environment = osgx.gltf.pbribl.loadEnvironment(str(env_path))
+		environment = osgx.gltf.loadEnvironment(str(env_path))
 
 	if environment is None:
 		sys.exit("Failed to prepare/load the PBR/IBL environment")
@@ -476,7 +476,7 @@ def build_scene(w, h):
 	mg_ss = main_group.stateSet
 
 	# LightSet must live on the SAME StateSet as the Program that actually calls
-	# osgx_DirectLighting() (model's own StateSet, wired by PBRIBLScene.create() below - not
+	# osgx_DirectLighting() (model's own StateSet, wired by PBRScene.create() below - not
 	# main_group, an ancestor). See [[project_osgx_lightset_maxlights_fix]] for the full root
 	# cause; the floor's Program gets the same shared `lights` object attached to ITS OWN
 	# StateSet below.
@@ -504,11 +504,10 @@ def build_scene(w, h):
 		shadow_map.camera.children.append(model)
 
 	# --- glTF PBR/IBL scene ---------------------------------------------------- #
-	pbr = osgx.gltf.pbribl.PBRIBLScene.create(
-		model,
-		environment,
+	pbr = osgx.PBRScene.create(model, osgx.PBRSceneOptions(
+		environment=environment,
 		shadowMap=shadow_map
-	)
+	))
 
 	if not pbr.valid():
 		sys.exit("Failed to build the PBR/IBL scene")
@@ -535,7 +534,7 @@ def build_scene(w, h):
 
 	# --- Scene graph ------------------------------------------------------------ #
 	# Shadow uniforms/texture live on main_group's StateSet so the hand-rolled floor shader sees
-	# them by inheritance - PBRIBLScene.create() already wired them directly onto model's own
+	# them by inheritance - PBRScene.create() already wired them directly onto model's own
 	# StateSet above, so this is redundant (but harmless) for the model itself.
 	if shadow_map is not None:
 		mg_ss.textureAttributes[4] = shadow_map.depthTexture

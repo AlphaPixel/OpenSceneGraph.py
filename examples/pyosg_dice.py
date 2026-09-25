@@ -164,7 +164,7 @@ const float PI = 3.14159265359;
 #pragma osgx::pbr F_MULTISCATTER, MATERIAL_STRUCT
 #pragma osgx::light DIRECT_LIGHTING_DECL
 // The osgx.Environment attached to an ancestor StateSet - the same one a --scene backdrop lit
-// through osgx.gltf.pbribl.PBRIBLScene.create() uses, so rotating it (rotate_ibl_environment())
+// through osgx.PBRScene.create() uses, so rotating it (rotate_ibl_environment())
 // or changing its intensities affects dice and backdrop identically.
 #pragma osgx::environment ENVIRONMENT_INPUTS, ENVIRONMENT_SAMPLE
 
@@ -248,7 +248,7 @@ void main() {
 	// Direct/punctual lights, via the osgx_DirectLighting() CONTRACT (DIRECT_LIGHTING_DECL/
 	// DIRECT_LIGHTING_HOOK_DEFAULT in PBR.hpp) - worldPos comes from vViewDir's own unnormalized
 	// eye-space encoding (-eyePos.xyz, see VERTEX_SHADER_IBL), so no extra varying is needed. Same
-	// hook backdrop scenes use via osgx::gltf::pbribl::PBRIBLScene::create() - share the SAME
+	// hook backdrop scenes use via osgx::PBRScene::create() - share the SAME
 	// osgx::pbr.LightSet (e.g. set on a common ancestor StateSet) to light dice and a --scene
 	// backdrop identically. The per-light dispatch loop itself lives ONCE in
 	// DIRECT_LIGHTING_HOOK_DEFAULT (added as a second FRAGMENT shader object - see where this shader
@@ -338,7 +338,7 @@ def rotate_ibl_environment(environment, degrees):
 
 	This is THE rotation knob for a baked HDRI: there's no authored "this way is north" in an
 	equirect environment map, so however it landed at bake time is arbitrary. Every shader
-	reading the environment (PBRIBLScene.create()'s glTF shader, FRAGMENT_SHADER_IBL) samples
+	reading the environment (PBRScene.create()'s glTF shader, FRAGMENT_SHADER_IBL) samples
 	through the same Environment, so rotating it once rotates dice and backdrop identically.
 	"""
 
@@ -354,11 +354,11 @@ def prepare_environment(hdr=None, env=None, rotate=0):
 	if hdr:
 		hdr_path = resolve_hdr(hdr)
 		environment = osgx.Environment(osgDB.readImageFile(str(hdr_path)))
-		environment.rotation = osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION
+		environment.rotation = osgx.gltf.KHRONOS_ENVIRONMENT_ROTATION
 
 	elif env:
 		env_path = resolve_environment_manifest(env)
-		environment = osgx.gltf.pbribl.loadEnvironment(str(env_path))
+		environment = osgx.gltf.loadEnvironment(str(env_path))
 
 	else:
 		return None

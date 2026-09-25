@@ -4,26 +4,26 @@
 #
 # This step used to hand-build its OWN deferred G-buffer + composite lighting pass (the same PBR/
 # IBL/shadow math 09-ibl.py's single-pass shader had, just split across two passes) - osgx's
-# header for PBRIBLGBuffer.create()/PBRIBLLightingScene.create() says outright that split was
+# header for PBRGBuffer.create()/PBRLightingPass.create() says outright that split was
 # "hand-built and validated pixel-for-pixel against Sketchfab's own renderer" against THIS file,
 # so re-deriving it by hand a second time here would just be re-teaching a solved problem. This
 # step pivots the G-buffer + lighting-pass math to those two calls, exactly like 09/10 pivoted the
-# single-pass shader to PBRIBLScene.create() - everything downstream of the lighting pass (bloom,
+# single-pass shader to PBRScene.create() - everything downstream of the lighting pass (bloom,
 # the tonemap-comparison/post-fx final pass) stays 100% hand-rolled Python, since osgx deliberately
 # does NOT standardize bloom generation (too taste-dependent) and this step's whole teaching point
 # is comparing tonemap curves live, which doesn't fit the (link-time-only) osgx_Tonemap() hook. SSAO
 # itself is a SECOND, smaller pivot (2026-08-21, after osgx.SSAO shipped, ported straight
 # from this file's own proven-live hand-rolled version) - no longer hand-rolled Python either, see
-# the "--- SSAO ---" section below and PBRIBLLightingPassOptions.aoTexture's own doc comment.
+# the "--- SSAO ---" section below and PBRLightingPassOptions.aoTexture's own doc comment.
 #
 # Real, human-visible tradeoffs from this pivot, called out up front rather than discovered later:
 # - The 0-9 raw-channel/lighting-term debug views are gone, replaced by a smaller 0-6 set (see
-#   "Visualize Mode" below). PBRIBLLightingScene.create()'s own diagnostics option exists but isn't
+#   "Visualize Mode" below). PBRLightingPass.create()'s own diagnostics option exists but isn't
 #   wired up to anything in its shader yet (a real osgx gap, not something this file works around
 #   by hand-rolling a second lighting shader) - direct-only/IBL-only/shadow-only isolation would
 #   need that ported first. What's left (albedo/normal/material/emissive/depth/AO) is exactly what
 #   a raw texture blit CAN show without any new shader math.
-# - --msaa and the "Debug Tint (red)" shadow-strength aid are both gone - PBRIBLGBuffer.create()
+# - --msaa and the "Debug Tint (red)" shadow-strength aid are both gone - PBRGBuffer.create()
 #   doesn't expose a G-buffer MSAA knob, and there's no hook to tint the shared lighting shader's
 #   output. The room/grid backdrop is a much clearer way to judge shadow softness/strength anyway.
 # - The light rig is a single directional key light via osgx.LightSet (unchanged from what
@@ -93,11 +93,11 @@ void main() {
 }
 """
 
-# The grid room writes a complete G-buffer record (NOT PBRIBLGBuffer.create()'s glTF-material
+# The grid room writes a complete G-buffer record (NOT PBRGBuffer.create()'s glTF-material
 # shader - a procedural grid has none of that data) so it shares the model's real depth buffer
 # and receives its shadow, added as an extra child of the geometry pass's own camera - same
 # pattern osgx-gbuffer.cpp's own floor addition already proved out. Channel layout matches
-# PBRIBLGBuffer exactly (see PBRIBL.cpp's GBUFFER_FRAGMENT_SHADER_SRC): gAlbedo.a = ambient
+# PBRGBuffer exactly (see osgx's PBRDeferred.cpp GBUFFER_FRAGMENT_SHADER_SRC): gAlbedo.a = ambient
 # occlusion (1.0 = none baked in), gMaterial = (roughness, metallic, unused, unused).
 GRID_ROOM_VERTEX = """
 #version 460 core
@@ -821,7 +821,7 @@ def build_scene(w, h):
 	env_group.add_argument(
 		"--env",
 		default=None,
-		help="Pre-baked osgx_pbribl environment manifest (default: papermill)"
+		help="Pre-baked osgx_environment manifest (default: papermill)"
 	)
 
 	ap.add_argument("--ibl-diffuse", type=float, default=1.0, dest="ibl_diffuse")
@@ -873,11 +873,11 @@ def build_scene(w, h):
 
 	model = osgDB.readNodeFile(path)
 
-	# PBRIBLLightingScene.create() needs a real osg.Camera* to seed its initial view-matrix
+	# PBRLightingPass.create() needs a real osg.Camera* to seed its initial view-matrix
 	# uniforms from - but build_scene() never receives the live viewer (the runner constructs it
 	# AFTER calling this), unlike the standalone __main__ block's old shape, which built `v` this
-	# early specifically to have one. A throwaway placeholder is enough: PBRIBLLightingScene::create()
-	# (PBRIBL.cpp) only ever READS it, once, via its own update() at the end of construction --
+	# early specifically to have one. A throwaway placeholder is enough: PBRLightingPass::create()
+	# (PBRDeferred.cpp) only ever READS it, once, via its own update() at the end of construction --
 	# it stores no reference to it. configure_viewer()'s update_per_frame() callback (wired below,
 	# once the real viewer exists) supplies the real camera on every subsequent frame, which is the
 	# only copy that ever actually matters for rendering.
@@ -912,7 +912,7 @@ def build_scene(w, h):
 			sys.exit(f"Cannot find HDR {args.hdr!r} - check OSG_FILE_PATH")
 
 		environment = osgx.Environment(osgDB.readImageFile(str(hdr_path)))
-		environment.rotation = osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION
+		environment.rotation = osgx.gltf.KHRONOS_ENVIRONMENT_ROTATION
 
 	else:
 		env_path = resolve_asset(args.env, "gltf")
@@ -920,7 +920,7 @@ def build_scene(w, h):
 		if not env_path:
 			sys.exit(f"Cannot find environment manifest {args.env!r}")
 
-		environment = osgx.gltf.pbribl.loadEnvironment(str(env_path))
+		environment = osgx.gltf.loadEnvironment(str(env_path))
 
 	if environment is None:
 		sys.exit("Failed to prepare/load the PBR/IBL environment")
@@ -929,7 +929,7 @@ def build_scene(w, h):
 	environment.specularIntensity = args.ibl_specular
 
 	# --- G-buffer geometry pass -------------------------------------------------- #
-	gbuffer = osgx.gltf.pbribl.PBRIBLGBuffer.create(model, w, h)
+	gbuffer = osgx.PBRGBuffer.create(model, w, h)
 
 	if not gbuffer.valid():
 		sys.exit("Failed to build the G-buffer geometry pass")
@@ -960,7 +960,7 @@ def build_scene(w, h):
 		shadow_map.camera.children.append(model)
 
 	# --- SSAO ---------------------------------------------------------------------------- #
-	# Built BEFORE lighting_options/PBRIBLLightingScene.create() specifically so aoTexture can be
+	# Built BEFORE lighting_options/PBRLightingPass.create() specifically so aoTexture can be
 	# set on lighting_options normally below - osgx.SSAO replaces the hand-rolled kernel/
 	# noise/RTT-pass code this step used to carry (generate_ssao_kernel()/make_ssao_noise_texture()/
 	# create_ssao_camera()/create_ssao_blur_camera(), all removed). Reads gbuffer's normal/position
@@ -981,23 +981,22 @@ def build_scene(w, h):
 		sys.exit("Failed to build the SSAO pass")
 
 	# --- Deferred lighting pass -------------------------------------------------- #
-	lighting_options = osgx.gltf.pbribl.PBRIBLLightingPassOptions()
+	lighting_options = osgx.PBRLightingPassOptions()
 
 	lighting_options.tonemap = False # bloom needs pre-tonemap linear HDR; final_cam tonemaps
 	lighting_options.shadowMap = shadow_map
 	lighting_options.aoTexture = ssao.aoTexture
 
-	lighting = osgx.gltf.pbribl.PBRIBLLightingScene.create(
-		gbuffer, environment, placeholder_camera, lighting_options
-	)
+	lighting_options.environment = environment
+	lighting = osgx.PBRLightingPass.create(gbuffer, placeholder_camera, lighting_options)
 
 	if not lighting.valid():
 		sys.exit("Failed to build the lighting pass")
 
-	# PBRIBLLightingScene.create() returns a POST_RENDER camera drawing straight to the backbuffer
+	# PBRLightingPass.create() returns a POST_RENDER camera drawing straight to the backbuffer
 	# by default (the "pipeline ends here" shape options.tonemap=True implies) - re-target it to
 	# an offscreen texture ourselves so bloom/final can chain after it, exactly as its own doc
-	# comment in PBRIBL.hpp says to.
+	# comment in PBRDeferred.hpp says to.
 	lighting_cam = lighting.node
 
 	hdr_color_tex = osg.Texture2D(
@@ -1034,7 +1033,7 @@ def build_scene(w, h):
 
 	# --- Final LDR pass ---------------------------------------------------------------------- #
 	# ssao.aoTexture is ALREADY the aoTex the lighting pass reads (wired via lighting_options.aoTexture
-	# above, at real PBRIBLLightingScene.create() call time - no hand-wiring workaround needed
+	# above, at real PBRLightingPass.create() call time - no hand-wiring workaround needed
 	# anymore) - sampled a second time here purely for this pass's own grainAOBoost effect, unrelated
 	# to the lighting pass's own use of it.
 	final_cam = create_final_camera(hdr_color_tex, bloom_blur_b_tex, ssao.aoTexture, w, h)
@@ -1197,7 +1196,7 @@ def build_scene(w, h):
 # The live viewer.camera (for update_per_frame()'s per-frame matrix refresh, and the
 # cameraManipulator/ImGui setup below) doesn't exist until the runner constructs it AFTER
 # build_scene() returns - everything here needs it directly, unlike build_scene()'s own
-# placeholder_camera workaround for PBRIBLLightingScene.create().
+# placeholder_camera workaround for PBRLightingPass.create().
 def configure_viewer(viewer, root):
 	args = _args
 	state = _state
@@ -1231,12 +1230,12 @@ def configure_viewer(viewer, root):
 	color_gain_u = state["color_gain_u"]
 	post_enabled_u = state["post_enabled_u"]
 
-	# Combined per-frame update: the lighting pass's view-matrix uniforms (PBRIBLLightingScene.update())
+	# Combined per-frame update: the lighting pass's view-matrix uniforms (PBRLightingPass.update())
 	# plus SSAO's own forward projection matrix (see ssao_projection_u's own comment - neither is
 	# meaningfully established until well after the cameras that need them are built). Installed on
 	# whichever camera is the FIRST PRE_RENDER camera in this scene graph (add-order breaks the tie
 	# between shadow_map.camera and gbuffer.gbuffer.camera, both default order 0) - see
-	# PBRIBLLightingScene.update()'s own comment for why it must NOT be viewer.camera's own
+	# PBRLightingPass.update()'s own comment for why it must NOT be viewer.camera's own
 	# preDrawCallback or application code after viewer.frame() returns, both of which hand the
 	# lighting pass a one-frame-stale matrix relative to what the geometry pass just rendered with.
 	def update_per_frame(ri):

@@ -20,10 +20,11 @@ an FBO camera.
    mode writes raw RGBA color and has no PBR, IBL, glTF, or fallback-lighting
    contract.
 2. **Deferred PBR/IBL**:
-   `osgx.gltf.pbribl.PBRIBLGBuffer.create(node, width, height)` is the
+   `osgx.PBRGBuffer.create(node, width, height)` is the
    specialized wrapper around `osgx.GBuffer`. It owns the same RTT geometry
    pass but writes the fixed PBR material layout. Feed it to
-   `PBRIBLLightingScene.create(gbuffer, environment, mainCamera, ...)` for
+   `PBRLightingPass.create(gbuffer, mainCamera, options)` (the environment goes in
+   `osgx.PBRLightingPassOptions(environment=...)`) for
    the terminal fullscreen PBR/IBL pass. The example selects this path when
    `--env manifest.gltf` or `--hdr environment.hdr` is present; with neither,
    it demonstrates the generic path. This path's shaders require the
@@ -39,7 +40,7 @@ Add a generic attachment only when a consumer needs it. For example, SSAO
 needs view-space normal and position attachments, while a depth-only consumer
 can use `gbuffer.depthTexture` directly.
 
-## Generic G-buffer versus PBRIBL
+## Generic G-buffer versus PBR
 
 `GBuffer.create()` is deliberately neutral: it creates the RTT camera,
 attachments, and depth texture, but it does not choose a shader or lighting
@@ -48,19 +49,20 @@ color and contains no lighting calculation; that is why its shapes are
 flat-colored. OSG fallback behavior is separate and depends on the active
 render state/context, so do not use it as this pipeline's lighting contract.
 
-`osgx.gltf.pbribl` offers two different PBR/IBL conveniences:
+osgx offers two PBR renderers, both taking optional light sources (environment,
+shadow map) in an options object:
 
-- `PBRIBLScene.create(node, environment)` is the forward path: one shader on
-  geometry calculates PBR/IBL lighting directly.
-- `PBRIBLGBuffer.create(node, width, height)` is the specialized deferred
-  path: its geometry pass stores glTF material data in a fixed multi-attachment
+- `PBRScene.create(node, options)` is the forward path: one shader on
+  geometry calculates PBR lighting directly.
+- `PBRGBuffer.create(node, width, height)` is the specialized deferred
+  path: its geometry pass stores `osgx.Material` data in a fixed multi-attachment
   layout, still without lighting. Feed it to
-  `PBRIBLLightingScene.create(...)` for the fullscreen lighting pass.
+  `PBRLightingPass.create(...)` for the fullscreen lighting pass.
 
-`PBRIBLScene.create()` is forward PBR/IBL, not a G-buffer mode. Use it when a
-single geometry shader is sufficient. Use `PBRIBLGBuffer` plus
-`PBRIBLLightingScene` when the scene specifically needs deferred PBR/IBL or
-its G-buffer seams. See [`30-pbribl.md`](30-pbribl.md).
+`PBRScene.create()` is forward PBR, not a G-buffer mode. Use it when a
+single geometry shader is sufficient. Use `PBRGBuffer` plus
+`PBRLightingPass` when the scene specifically needs deferred PBR/IBL or
+its G-buffer seams. See [`30-pbr.md`](30-pbr.md).
 
 ## Keep stored data canonical; derive interpretations in consumers
 

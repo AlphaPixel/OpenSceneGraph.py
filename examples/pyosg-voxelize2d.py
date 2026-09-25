@@ -212,7 +212,7 @@ def apply_gltf_fallback_pbr(
 		osg.Shader(osg.Shader.VERTEX, PBR_FALLBACK_VERTEX_SHADER),
 		osg.Shader(osg.Shader.FRAGMENT, osgx.resolveShaderLibs(PBR_FALLBACK_FRAGMENT_SHADER_SRC))
 	))
-	osgx.gltf.shader.configureProgram(p)
+	osgx.bindMeshAttributes(p)
 
 	ss = node.stateSet
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Thin Python viewer for osgx.gltf.pbribl.PBRIBLScene.create().
+"""Thin Python viewer for osgx.PBRScene.create().
 
 This is the Python counterpart to osgx/utils/osgx-gltf-viewer.cpp. It loads the model, selects
 optional diagnostics, and drives an osgViewer.Viewer.
@@ -220,7 +220,7 @@ class Diagnostics(osgGA.GUIEventHandler):
 		return True
 
 # Set by build_scene(), read by configure_viewer() - args.camera/args.debug/args.screenshot and
-# the PBRIBLScene object aren't retrievable from the returned root (build_scene()'s contract is
+# the PBRScene object aren't retrievable from the returned root (build_scene()'s contract is
 # just "return a Node"), and args in particular has no natural home in the graph the way e.g.
 # pyosg-mrt.py pulls a Uniform back out of a StateSet. A same-module variable is the simpler
 # channel; both runners and every __main__ block call build_scene() before configure_viewer().
@@ -243,7 +243,7 @@ def build_scene(w, h):
 	environment_group.add_argument(
 		"--env",
 		metavar="MANIFEST",
-		help="fully pre-baked osgx_pbribl environment manifest"
+		help="fully pre-baked osgx_environment manifest"
 	)
 	parser.add_argument("--camera", help="Khronos camera-export glTF")
 	parser.add_argument(
@@ -286,18 +286,20 @@ def build_scene(w, h):
 			("glTF-Sample-Environments/{}",)
 		)
 		environment = osgx.Environment(osgDB.readImageFile(str(hdr_path)))
-		environment.rotation = osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION
+		environment.rotation = osgx.gltf.KHRONOS_ENVIRONMENT_ROTATION
 		environment_description = str(hdr_path)
 
 	else:
 		env_path = resolve_environment_manifest(_args.env)
-		environment = osgx.gltf.pbribl.loadEnvironment(str(env_path))
+		environment = osgx.gltf.loadEnvironment(str(env_path))
 		environment_description = str(env_path)
 
 	if environment is None:
 		raise RuntimeError(f"failed to prepare PBR IBL resources for {environment_description}")
 
-	pbr = osgx.gltf.pbribl.PBRIBLScene.create(model, environment, diagnostics=diagnostics)
+	pbr = osgx.PBRScene.create(
+		model, osgx.PBRSceneOptions(environment=environment, diagnostics=diagnostics)
+	)
 
 	if not pbr.valid():
 		raise RuntimeError(f"failed to apply PBR IBL resources for {environment_description}")

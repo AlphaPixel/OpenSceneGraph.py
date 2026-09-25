@@ -87,12 +87,8 @@ SKINNING_VERTEX_SHADER = """
 
 in vec4 osg_Vertex;
 in vec3 osg_Normal;
-layout(location = 8) in uvec4 osgx_gltf_JointIndices;
-layout(location = 9) in vec4 osgx_gltf_JointWeights;
 
-layout(std430, binding = @osgx::gltf::joints@) readonly buffer osgx_gltf_JointMatrixBuffer {
-	mat4 osgx_gltf_jointMatrices[];
-};
+#pragma osgx::skinning JOINT_INPUTS
 
 uniform mat4 osg_ModelViewProjectionMatrix;
 uniform mat4 osg_ModelViewMatrix;
@@ -103,10 +99,10 @@ out vec3 vPosition;
 
 void main() {
 	mat4 skin =
-		osgx_gltf_JointWeights.x * osgx_gltf_jointMatrices[osgx_gltf_JointIndices.x] +
-		osgx_gltf_JointWeights.y * osgx_gltf_jointMatrices[osgx_gltf_JointIndices.y] +
-		osgx_gltf_JointWeights.z * osgx_gltf_jointMatrices[osgx_gltf_JointIndices.z] +
-		osgx_gltf_JointWeights.w * osgx_gltf_jointMatrices[osgx_gltf_JointIndices.w]
+		osgx_JointWeights.x * osgx_jointMatrices[osgx_JointIndices.x] +
+		osgx_JointWeights.y * osgx_jointMatrices[osgx_JointIndices.y] +
+		osgx_JointWeights.z * osgx_jointMatrices[osgx_JointIndices.z] +
+		osgx_JointWeights.w * osgx_jointMatrices[osgx_JointIndices.w]
 	;
 
 	vec4 localVertex = skin * osg_Vertex;

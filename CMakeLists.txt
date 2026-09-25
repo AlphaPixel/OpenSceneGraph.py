@@ -34,7 +34,7 @@ option(PYOSG_MSVC_ANALYZE "Enable MSVC's /analyze static analyzer (slow)" OFF)
 option(PYOSG_BUILD_OSGX "Build osgx alongside a manually supplied OpenSceneGraph" OFF)
 
 # The normal bindings/wheel build has no need for standalone osgx utilities.
-# Asset-preparation builds opt in to osgx-pbribl through this project-owned
+# Asset-preparation builds opt in to osgx-environment through this project-owned
 # switch, keeping the default distribution graph unchanged.
 option(PYOSG_BUILD_OSGX_UTILS "Build osgx standalone utilities" OFF)
 

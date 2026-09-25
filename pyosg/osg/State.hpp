@@ -382,7 +382,7 @@ struct pyx::ValueMappingTraits<osg::StateSet, pyosg::detail::ModesTag> {
 	}
 };
 
-// The shader-define list - e.g. `stateSet.defines["OSGX_PBRIBL_AO"] = osg.StateAttribute.ON`
+// The shader-define list - e.g. `stateSet.defines["OSGX_PBR_AO"] = osg.StateAttribute.ON`
 // (matches osg::StateSet::setDefine(name, value)'s single-arg overload - sets the define's own
 // value string to "", i.e. a flag-style #ifdef-tested define, not a `#define NAME value`
 // substitution; OSG's OTHER setDefine(name, valueString, mode) overload for a real value string

@@ -202,7 +202,7 @@ def build_test_cubemap():
 def set_rotation(environment, degrees):
 	"""The same Khronos-viewer starting orientation every glTF consumer uses, then
 	rotate_ibl_environment() on top - so `degrees` is always relative to that default."""
-	environment.rotation = osgx.gltf.pbribl.KHRONOS_ENVIRONMENT_ROTATION
+	environment.rotation = osgx.gltf.KHRONOS_ENVIRONMENT_ROTATION
 
 	dice.rotate_ibl_environment(environment, degrees)
 

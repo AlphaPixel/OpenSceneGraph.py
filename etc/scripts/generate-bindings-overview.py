@@ -117,7 +117,7 @@ MODULE_CALL_RE = re.compile(
 )
 ATTR_ASSIGN_RE = re.compile(r'\b(\w+)\.attr\(\s*"([^"]+)"\s*\)\s*=')
 # `auto VAR = OTHER.def_submodule("name", ...)` -- a nested py::module_ a binding file creates for
-# itself (osgx-gltf.cpp's `m_gltf_shader`/`m_gltf_pbribl`, off the `m_gltf` parameter). Recorded so
+# itself (osgx-gltf.cpp's `m_gltf_sdf`, off the `m_gltf` parameter). Recorded so
 # render_group() can walk VAR back to a real attribute path off the group's own resolved base
 # module, instead of only ever recognizing symbols bound directly on that base -- see scan_text()'s
 # `submodules` return and resolve_submodule_chain() below.
@@ -818,7 +818,7 @@ def render_group(
 				base = candidate if inspect.ismodule(candidate) else native
 
 			# A symbol bound on a submodule the file created for itself via def_submodule() (e.g.
-			# osgx-gltf.cpp's `m_gltf_pbribl`) lives one or more attribute levels deeper than
+			# osgx-gltf.cpp's `m_gltf_sdf`) lives one or more attribute levels deeper than
 			# `base` -- walk the chain SUBMODULE_DECL_RE recorded rather than reporting it missing.
 			for part in resolve_submodule_chain(owners.get(symbol.name, ""), submodules):
 				if base is None:

@@ -101,4 +101,4 @@ highlight or environment reflection, regardless of roughness. Add a smooth
 near-zero roughness, near-white base color) — if it shows a clear reflection
 and the original shape doesn't, that's a geometry limitation, not a material
 or shader bug. `examples/pyosg-material-lab.py` is exactly this setup, with
-`--hdr`/`--env` wiring a real `osgx.Environment` (see [`30-pbribl.md`](30-pbribl.md)).
+`--hdr`/`--env` wiring a real `osgx.Environment` (see [`30-pbr.md`](30-pbr.md)).
