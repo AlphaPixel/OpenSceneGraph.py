@@ -51,6 +51,7 @@ import math
 import subprocess
 import time
 import traceback
+import weakref
 
 from aipython.integration import MainLoopController, drive
 
@@ -378,22 +379,37 @@ class CaptureQueueCallback(osg.Camera.DrawCallback):
 
 	`previous` is whatever occupied the camera's final-draw slot before this callback (a C++
 	callback, a DrawCallback subclass, or a plain callable); it runs first, every frame.
+
+	The controller is held weakly: the camera (C++) keeps this callback alive, and a strong
+	reference back to the controller would close a controller -> viewer -> camera -> callback
+	cycle through C++ that Python's garbage collector cannot see, leaking the controller, its
+	viewer and that viewer's graphics context. Once the controller is gone this callback only
+	runs `previous`.
 	"""
 
 	def __init__(self, controller, previous=None):
 		super().__init__()
 
-		self.controller = controller
+		self._controller = weakref.ref(controller)
 		self.previous = previous
+
+	@property
+	def controller(self):
+		return self._controller()
 
 	def __call__(self, ri):
 		if self.previous is not None:
 			self.previous(ri)
 
+		controller = self.controller
+
+		if controller is None:
+			return
+
 		# Move the queue before executing it. Captures queued by completion handlers
 		# therefore belong to the following frame, never this partially-drained batch.
-		batch = self.controller._capture_queue
-		self.controller._capture_queue = []
+		batch = controller._capture_queue
+		controller._capture_queue = []
 
 		for request, texture, data_type in batch:
 			try:
@@ -407,7 +423,7 @@ class CaptureQueueCallback(osg.Camera.DrawCallback):
 					if not osgDB.writeImageFile(image, request.filename):
 						raise RuntimeError(f"failed to write capture {request.filename!r}")
 
-				result = self.controller._capture_metadata(
+				result = controller._capture_metadata(
 					request, image, data_type,
 				)
 
@@ -426,7 +442,7 @@ class CaptureQueueCallback(osg.Camera.DrawCallback):
 				request._set_exception(exc)
 				traceback.print_exc()
 
-		video = self.controller._video_capture
+		video = controller._video_capture
 
 		if video is not None:
 			video.capture(self)
@@ -942,35 +958,66 @@ class ViewerREPLController(MainLoopController):
 			"data_type": image.dataType if image.dataType else data_type,
 		}
 
-def headless_viewer(width=640, height=480, samples=None):
-	"""Return an osgViewer.Viewer rendering into an offscreen EGL pbuffer (Linux, requires osgx
-	built with OSGX_WITH_EGL). No window is created and no X server is needed; captures read
-	the pbuffer. The camera gets a viewport and a default perspective projection; set its
-	viewMatrix (or a cameraManipulator) before rendering.
+def _egl_window_factory():
+	try:
+		import osgx
+
+	except ImportError:
+		return None
+
+	return getattr(osgx.platform, "createEGLWindow", None)
+
+def headless_viewer(width=640, height=480, samples=None, backend=None):
+	"""Return an osgViewer.Viewer rendering into an offscreen pbuffer; no window is shown and
+	captures read the pbuffer. The camera gets a viewport and a default perspective projection;
+	set its viewMatrix (or a cameraManipulator) before rendering.
+
+	`backend` picks the offscreen context:
+
+	- "egl": osgx.platform.createEGLWindow (Linux, osgx built with OSGX_WITH_EGL). Truly
+	  display-less: no X server or window system session is needed at all.
+	- "native": OSG's own per-platform pbuffer via osg.GraphicsContext.createGraphicsContext
+	  (WGL on Windows, Cocoa on macOS, GLX on Linux - which needs an X display).
+	- None: "egl" when available, otherwise "native".
 
 	Like a windowed viewer, the GL context version/profile/flags and MSAA sample count come
 	from osg.DisplaySettings.instance (and so from OSG_GL_CONTEXT_VERSION,
 	OSG_GL_CONTEXT_PROFILE_MASK, OSG_MULTI_SAMPLES, ...); `samples` overrides the latter.
 	"""
 
-	import osgx
+	if backend not in (None, "egl", "native"):
+		raise ValueError(f"unknown headless backend {backend!r} (expected 'egl' or 'native')")
 
-	if not hasattr(osgx.platform, "createEGLWindow"):
-		raise RuntimeError("osgx was built without OSGX_WITH_EGL; headless rendering unavailable")
+	create_egl_window = _egl_window_factory() if backend != "native" else None
+
+	if backend == "egl" and create_egl_window is None:
+		raise RuntimeError("the 'egl' backend requires osgx built with OSGX_WITH_EGL")
 
 	traits = osg.GraphicsContext.Traits(osg.DisplaySettings.instance)
 	traits.width = width
 	traits.height = height
 	traits.pbuffer = True
 
+	# Pbuffers are single-buffered here, as in the EGL path, so reads see what was drawn.
+	traits.doubleBuffer = False
+
 	if samples is not None:
 		traits.sampleBuffers = 1 if samples else 0
 		traits.samples = samples
 
-	gc = osgx.platform.createEGLWindow(traits)
+	if create_egl_window is not None:
+		gc = create_egl_window(traits)
 
-	if not gc.valid():
-		raise RuntimeError("EGL pbuffer context could not be created")
+	else:
+		# The X11 implementation targets hostName:displayNum.screenNum; elsewhere this is unused.
+		traits.readDISPLAY()
+
+		gc = osg.GraphicsContext.createGraphicsContext(traits)
+
+	if gc is None or not gc.valid():
+		kind = "EGL" if create_egl_window is not None else "native"
+
+		raise RuntimeError(f"{kind} pbuffer context could not be created")
 
 	viewer = osgViewer.Viewer()
 

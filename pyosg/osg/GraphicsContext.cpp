@@ -113,6 +113,20 @@ void bind_GraphicsContext(py::module_& m) {
 		.def_property_readonly("traits", &osg::GraphicsContext::getTraits,
 			"The Traits this context was actually realized with."
 		)
+		// OSG's per-platform factory: with traits.pbuffer set this returns the native offscreen
+		// implementation (PixelBufferWin32, PixelBufferX11, PixelBufferCocoa), otherwise a window.
+		.def_static(
+			"createGraphicsContext",
+			[](osg::GraphicsContext::Traits* traits) {
+				return osg::ref_ptr<osg::GraphicsContext>(
+					osg::GraphicsContext::createGraphicsContext(traits)
+				);
+			},
+			"traits"_a,
+			"Create the current windowing system's GraphicsContext for traits: a window, or with "
+			"traits.pbuffer set, the platform's native offscreen pbuffer. Returns None if the "
+			"windowing system cannot create one."
+		)
 	;
 
 	py::class_<osg::GraphicsContext::ScreenIdentifier>(gc, "ScreenIdentifier",
@@ -123,6 +137,19 @@ void bind_GraphicsContext(py::module_& m) {
 		.def(py::init<int>(), "Identify a screen number on the default display.")
 		.def(py::init<const std::string&, int, int>(),
 			"Identify (hostName, displayNum, screenNum) explicitly."
+		)
+		.def_readwrite("hostName", &osg::GraphicsContext::ScreenIdentifier::hostName,
+			"X11 host name; empty for the local machine."
+		)
+		.def_readwrite("displayNum", &osg::GraphicsContext::ScreenIdentifier::displayNum,
+			"X11 display number."
+		)
+		.def_readwrite("screenNum", &osg::GraphicsContext::ScreenIdentifier::screenNum,
+			"Screen number on that display."
+		)
+		.def("readDISPLAY", &osg::GraphicsContext::ScreenIdentifier::readDISPLAY,
+			"Set hostName/displayNum/screenNum from the DISPLAY environment variable, as OSG's "
+			"own window setup does."
 		)
 		.def_property_readonly("displayName", &osg::GraphicsContext::ScreenIdentifier::displayName,
 			"The \"hostName:displayNum.screenNum\" string form of this identifier."
@@ -144,8 +171,28 @@ void bind_GraphicsContext(py::module_& m) {
 	)
 		.def(py::init<>(), "Construct with OSG's built-in defaults.")
 		.def(py::init<osg::DisplaySettings*>(), "ds"_a=nullptr,
-			"Construct, seeding GL version/profile/flags from a DisplaySettings (or the "
-			"process-wide singleton if ds is None)."
+			"Construct, seeding GL version/profile/flags, MSAA and buffer bits from a "
+			"DisplaySettings (e.g. osg.DisplaySettings.instance); None gives OSG's built-in "
+			"defaults, same as Traits()."
+		)
+		// ScreenIdentifier is Traits' second C++ base, but it can't be declared as a pybind11
+		// base here (its default holder differs from Traits' ref_ptr holder), so its members are
+		// bound directly.
+		.def_readwrite("hostName", &osg::GraphicsContext::Traits::hostName,
+			"X11 host name; empty for the local machine."
+		)
+		.def_readwrite("displayNum", &osg::GraphicsContext::Traits::displayNum,
+			"X11 display number."
+		)
+		.def_readwrite("screenNum", &osg::GraphicsContext::Traits::screenNum,
+			"Screen number on that display."
+		)
+		.def("readDISPLAY", &osg::GraphicsContext::Traits::readDISPLAY,
+			"Set hostName/displayNum/screenNum from the DISPLAY environment variable, as OSG's "
+			"own window setup does."
+		)
+		.def_property_readonly("displayName", &osg::GraphicsContext::Traits::displayName,
+			"The \"hostName:displayNum.screenNum\" string form of this Traits' screen."
 		)
 		.def_readwrite("x", &osg::GraphicsContext::Traits::x, "Window/surface X position in pixels.")
 		.def_readwrite("y", &osg::GraphicsContext::Traits::y, "Window/surface Y position in pixels.")

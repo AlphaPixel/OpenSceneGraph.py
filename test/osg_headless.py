@@ -31,14 +31,20 @@ def make_viewer(**fields):
 	if not gc.valid():
 		pytest.skip("no EGL device could create a pbuffer context")
 
+	viewer = osgViewer.Viewer()
+
+	viewer.camera.graphicsContext = gc
+
+	return add_scene(viewer)
+
+def add_scene(viewer):
+	"""The pixel-checked test scene: a unit sphere on CLEAR, framed identically everywhere."""
+
 	root = osg.Group()
 
 	root.children.append(osg.ShapeDrawable(osg.Sphere(osg.Vec3(0, 0, 0), 1.0)))
 
-	viewer = osgViewer.Viewer()
-
 	viewer.sceneData = root
-	viewer.camera.graphicsContext = gc
 	viewer.camera.viewport = (0, 0, W, H)
 	viewer.camera.clearColor = osg.Vec4(*CLEAR, 1.0)
 	viewer.camera.projectionMatrix = osg.Matrixd.perspective(30.0, W / H, 1.0, 100.0)
@@ -331,3 +337,35 @@ def test_controller_preview_downscale_validation(viewer, repl_module):
 
 	with pytest.raises(ValueError):
 		ctl.capture_framebuffer("x.png", preview_downscale=1.5)
+
+# ------------------------------------------------------------------------------------------ #
+# OSG's native per-platform pbuffer (the non-EGL fallback: WGL/Cocoa/GLX)
+# ------------------------------------------------------------------------------------------ #
+
+def test_traits_read_display(monkeypatch):
+	monkeypatch.setenv("DISPLAY", ":3.1")
+
+	traits = osg.GraphicsContext.Traits()
+
+	traits.readDISPLAY()
+
+	assert (traits.displayNum, traits.screenNum) == (3, 1)
+	assert traits.displayName == ":3.1"
+
+def test_headless_viewer_rejects_unknown_backend(repl_module):
+	with pytest.raises(ValueError, match="backend"):
+		repl_module.headless_viewer(W, H, backend="vulkan")
+
+def test_native_pbuffer_backend_renders(repl_module):
+	# On Linux this is GLX's PixelBufferX11, so it needs a real X display (unlike the EGL path).
+	if not os.environ.get("DISPLAY"):
+		pytest.skip("native pbuffer on Linux needs an X display")
+
+	viewer = add_scene(repl_module.headless_viewer(W, H, backend="native"))
+
+	assert not viewer.camera.graphicsContext.traits.doubleBuffer
+
+	data = render_once(viewer)
+
+	assert is_clear(pixel(data, 0, 0))
+	assert not is_clear(pixel(data, W // 2, H // 2))
