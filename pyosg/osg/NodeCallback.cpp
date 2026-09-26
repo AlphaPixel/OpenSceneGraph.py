@@ -34,8 +34,23 @@ void bind_NodeCallback(py::module_& m) {
 		"addNestedCallback()/removeNestedCallback()/getNestedCallback()."
 	);
 
+	// run()/__call__() below: a Python subclass (a trampoline) gets the base implementation, so
+	// super().run()/super().__call__() never re-enter its own override; a C++ subclass dispatches
+	// virtually.
 	callback
 		.def(py::init<>(), "Create a Callback with no nested callbacks.")
+		.def("run", [](osg::Callback& self, osg::Object* object, osg::Object* data) {
+			if(auto* nc = dynamic_cast<detail::NodeCallback*>(&self)) {
+				return nc->osg::NodeCallback::run(object, data);
+			}
+
+			if(dynamic_cast<detail::Callback*>(&self)) return self.osg::Callback::run(object, data);
+
+			return self.run(object, data);
+		}, "object"_a, "data"_a,
+			"Invoke this callback for object (e.g. a Node) with data (e.g. a NodeVisitor); the "
+			"base implementation runs the nested callbacks."
+		)
 	;
 
 	py::class_<
@@ -50,6 +65,14 @@ void bind_NodeCallback(py::module_& m) {
 		"traversal of the node it's attached to."
 	)
 		.def(py::init<>(), "Create a NodeCallback with no nested callbacks.")
+		.def("__call__", [](osg::NodeCallback& self, osg::Node* node, osg::NodeVisitor* nv) {
+			if(dynamic_cast<detail::NodeCallback*>(&self)) self.osg::NodeCallback::operator()(node, nv);
+
+			else self(node, nv);
+		}, "node"_a, "nv"_a,
+			"Invoke this callback for node during nv's traversal; the base implementation "
+			"continues the traversal (nested callbacks, then children)."
+		)
 	;
 }
 

@@ -200,6 +200,18 @@ void bind_Camera(py::module_& m) {
 		"to those properties instead."
 	)
 		.def(py::init<>(), "Create a DrawCallback; subclasses override run(renderInfo).")
+		// A Python subclass (the trampoline) gets the base implementation, so super().__call__()
+		// never re-enters its own override; a C++ subclass dispatches virtually.
+		.def("__call__", [](const osg::Camera::DrawCallback& self, osg::RenderInfo& ri) {
+			if(dynamic_cast<const detail::Camera::DrawCallback*>(&self)) {
+				self.osg::Camera::DrawCallback::operator()(ri);
+			}
+
+			else self(ri);
+		}, "renderInfo"_a,
+			"Invoke this callback, e.g. to chain a callback read back from a camera's draw-callback "
+			"property."
+		)
 	;
 
 	camera

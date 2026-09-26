@@ -42,6 +42,19 @@ void bind_Operation(py::module_& m) {
 			"Construct with a name and whether the operation should be re-run every frame "
 			"(keep=True) or run once and be discarded (keep=False)."
 		)
+		// osg::GraphicsOperation::operator()(GraphicsContext*) is pure virtual, so a Python
+		// subclass (the trampoline) has no base implementation to fall back to; a C++ subclass
+		// dispatches virtually.
+		.def("__call__", [](osg::GraphicsOperation& self, osg::GraphicsContext* gc) {
+			if(dynamic_cast<detail::GraphicsOperation*>(&self)) detail::raise_error(
+				PyExc_NotImplementedError,
+				"osg.GraphicsOperation.__call__ is abstract; override it in the subclass"
+			);
+
+			self(gc);
+		}, "gc"_a,
+			"Run this operation against gc (which must be current)."
+		)
 	;
 }
 
