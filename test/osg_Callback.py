@@ -1,6 +1,8 @@
 from .conftest import refcmp
 
-from OpenSceneGraph.osg import Callback, Node, NodeCallback, Object
+import pytest
+
+from OpenSceneGraph.osg import Callback, GraphicsOperation, Group, Node, NodeCallback, Object
 from OpenSceneGraph.osgUtil import UpdateVisitor
 
 def test_construction():
@@ -130,3 +132,86 @@ def test_run_dispatches_through_real_traversal():
 
 	assert len(calls) == 1
 	assert calls[0][0] is n
+
+class RecordingNodeCallback(NodeCallback):
+	def __init__(self, calls):
+		super().__init__()
+
+		self.calls = calls
+
+	def __call__(self, node, nv):
+		self.calls.append(node)
+
+def test_cpp_nodecallback_is_callable():
+	# A plain NodeCallback() is the C++ osg::NodeCallback itself, not the trampoline; calling it
+	# from Python runs the real C++ operator(), which continues the traversal into children.
+	calls = []
+	root = Group()
+	child = Node()
+
+	child.updateCallback = RecordingNodeCallback(calls)
+	root.children.append(child)
+
+	NodeCallback()(root, UpdateVisitor())
+
+	assert calls == [child]
+
+def test_nodecallback_super_call_does_not_recurse():
+	# super().__call__() runs the base implementation (continue traversal) instead of
+	# re-entering the Python override. Returning False stops the trampoline from ALSO
+	# continuing the traversal itself, so the child is visited exactly once.
+	outer = []
+	inner = []
+
+	class Outer(NodeCallback):
+		def __call__(self, node, nv):
+			outer.append(node)
+
+			super().__call__(node, nv)
+
+			return False
+
+	root = Group()
+	child = Node()
+
+	root.updateCallback = Outer()
+	child.updateCallback = RecordingNodeCallback(inner)
+	root.children.append(child)
+
+	root.accept(UpdateVisitor())
+
+	assert outer == [root]
+	assert inner == [child]
+
+def test_callback_super_run_runs_nested_callbacks():
+	calls = []
+
+	class Nested(Callback):
+		def run(self, obj, data):
+			calls.append("nested")
+
+			return True
+
+	class Outer(Callback):
+		def run(self, obj, data):
+			calls.append("outer")
+
+			return super().run(obj, data)
+
+	n = Node()
+	cb = Outer()
+
+	cb.nestedCallbacks.append(Nested())
+	n.updateCallback = cb
+
+	n.accept(UpdateVisitor())
+
+	assert calls == ["outer", "nested"]
+
+def test_graphicsoperation_super_call_is_abstract():
+	class Op(GraphicsOperation):
+		def __call__(self, gc):
+			super().__call__(gc)
+
+	with pytest.raises(NotImplementedError):
+		Op("op", False)(None)

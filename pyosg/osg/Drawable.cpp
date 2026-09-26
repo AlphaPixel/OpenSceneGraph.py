@@ -64,6 +64,23 @@ void bind_Drawable(py::module_& m) {
 		"around, a Drawable's normal draw."
 	)
 		.def(py::init<>(), "Create a DrawCallback; subclass to override drawImplementation().")
+		// A Python subclass (the trampoline) gets the base implementation (draws the Drawable
+		// normally), so super().drawImplementation() never re-enters its own override; a C++
+		// subclass dispatches virtually.
+		.def("drawImplementation", [](
+			const osg::Drawable::DrawCallback& self,
+			osg::RenderInfo& ri,
+			const osg::Drawable* d
+		) {
+			if(dynamic_cast<const detail::Drawable::DrawCallback*>(&self)) {
+				self.osg::Drawable::DrawCallback::drawImplementation(ri, d);
+			}
+
+			else self.drawImplementation(ri, d);
+		}, "renderInfo"_a, "drawable"_a,
+			"Draw the given Drawable through this callback; the base implementation draws it "
+			"normally."
+		)
 	;
 
 	drawable

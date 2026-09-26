@@ -2,18 +2,11 @@
 
 import os
 
-# You might want to tweak or override these for your environment. However,
-# modifying the `OSG_THREADING` variable isn't advised, as properly interacting
-# with the Python GIL is notoriously difficult to do. You'll have MUCH better
-# luck using Python's `async/await` support (and other examples demonstrate
-# doing exactly that).
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6"
-})
+os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
+
+# Shared example defaults: SingleThreaded, the GL 4.6 core-profile context, and the osgx.Library
+# that osgx.resolveShaderLibs() below requires.
+import pyosg_example
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -308,9 +301,6 @@ def build_scene(w, h):
 if __name__ == "__main__":
 	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
-	# osgx's shader libraries (osgx.resolveShaderLibs()) need a live osgx.Library; keep it
-	# referenced until the viewer is done.
-	lib = osgx.initialize()
 	v = osgViewer.Viewer()
 
 	v.sceneData = build_scene(800, 600)

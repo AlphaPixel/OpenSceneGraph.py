@@ -34,17 +34,8 @@ import numpy as np
 import torch
 
 os.environ.setdefault("OSG_WINDOW", "50 50 1420 933")
-os.environ.setdefault(
-	"OSG_LIBRARY_PATH", ":".join((
-		"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/plugins/ktx2",
-		"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/plugins/gltf"
-	))
-)
-
-# Import side effect: fills in OSG_THREADING/OSG_GL_* env var defaults (see pyosg_example.py).
-# Deliberately after the OSG_WINDOW/OSG_LIBRARY_PATH overrides above (setdefault() means order
-# between these doesn't actually matter, but matching pyosg-khronos-viewer.py's style) and before
-# `from OpenSceneGraph import *` - these need to land before OSG's DisplaySettings reads them.
+# Also applies the shared example defaults: SingleThreaded, the GL 4.6 core-profile context, and
+# the osgx.Library.
 from pyosg_example import window_size
 
 from OpenSceneGraph import *

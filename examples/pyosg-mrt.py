@@ -25,14 +25,10 @@
 import os
 import sys
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 800 600",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6"
-})
+os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
 
+# Also applies the shared example defaults: SingleThreaded, the GL 4.6 core-profile context, and
+# the osgx.Library.
 from pyosg_example import label
 
 from OpenSceneGraph import *

@@ -109,10 +109,9 @@ import os
 import time
 
 os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
-os.environ.setdefault("OSG_THREADING", "SingleThreaded")
-os.environ.setdefault("OSG_GL_CONTEXT_PROFILE_MASK", "1")
-os.environ.setdefault("OSG_GL_VERSION", "4.6")
-os.environ.setdefault("OSG_GL_CONTEXT_VERSION", "4.6")
+
+# Shared example defaults: SingleThreaded, the GL 4.6 core-profile context, and the osgx.Library.
+import pyosg_example
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -1323,8 +1322,6 @@ def configure_viewer(viewer, root):
 	viewer.camera.updateCallback = update
 
 if __name__ == "__main__":
-	lib = osgx.initialize()
-
 	print(f"pyosg-noise: 6 columns x 4 rows, row-major from the bottom-left:")
 
 	for name in LEGEND:

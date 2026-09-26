@@ -3,18 +3,22 @@
 import os
 import pathlib
 
+# Importing this module applies the examples' shared defaults: the OSG_WINDOW/OSG_THREADING
+# environment defaults below and the GL 4.6 core-profile context defaults further down. Set
+# PYOSG_EXAMPLE_DEFAULTS=0 before importing to apply none of them, e.g. to use an example's
+# build_scene() inside a session whose contexts are configured elsewhere. The osgx.Library below
+# is created either way.
+APPLY_DEFAULTS = os.environ.get("PYOSG_EXAMPLE_DEFAULTS", "1") != "0"
+
 # setdefault(), not update() - same reason as pyosg_visitor.py: an example that already set its
-# own OSG_WINDOW/OSG_THREADING/etc. (window size, a non-default GL version, ...) before importing
-# this keeps what it set; this only fills in whatever it didn't. Importing this is now the ONE
-# place "SingleThreaded is mandatory" (see feedback_viewer_close_threading_deadlock - a live
+# own OSG_WINDOW/OSG_THREADING before importing this keeps what it set; this only fills in
+# whatever it didn't. Importing this is the ONE place "SingleThreaded is mandatory" (a live
 # non-SingleThreaded draw thread can deadlock a Viewer's destructor) is declared - an example
 # that imports this for window_size() gets it whether or not its own env block remembers to say
 # so, instead of a standing policy that only holds as well as 42 separate copy-pasted blocks do.
-os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
-os.environ.setdefault("OSG_THREADING", "SingleThreaded")
-os.environ.setdefault("OSG_GL_CONTEXT_PROFILE_MASK", "1")
-os.environ.setdefault("OSG_GL_VERSION", "4.6")
-os.environ.setdefault("OSG_GL_CONTEXT_VERSION", "4.6")
+if APPLY_DEFAULTS:
+	os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
+	os.environ.setdefault("OSG_THREADING", "SingleThreaded")
 
 # The process's one osgx.Library, created when an example imports this module and released at
 # interpreter exit. None when osgx is not installed (examples that need only OpenSceneGraph run
@@ -53,6 +57,19 @@ def window_size(default=(800, 600)):
 from OpenSceneGraph import osg
 from OpenSceneGraph.GL import GL_DEPTH_TEST
 import osgx
+
+# GL 4.6 core-profile context defaults. Applied to the DisplaySettings singleton that every
+# windowed and headless context is seeded from, not to os.environ: nothing is inherited by child
+# processes, and it works whether or not the singleton already exists. A value the user supplied
+# via OSG_GL_VERSION/OSG_GL_CONTEXT_VERSION or OSG_GL_CONTEXT_PROFILE_MASK is left alone.
+if APPLY_DEFAULTS:
+	_settings = osg.DisplaySettings.instance
+
+	if "OSG_GL_VERSION" not in os.environ and "OSG_GL_CONTEXT_VERSION" not in os.environ:
+		_settings.glContextVersion = "4.6"
+
+	if "OSG_GL_CONTEXT_PROFILE_MASK" not in os.environ:
+		_settings.glContextProfileMask = 1
 
 # This module installs at the top level of the wheel (OpenSceneGraph/examples/pyosg_example.py),
 # a sibling of both `assets/` and the `lighting/` subpackage - so this is the one place a plain

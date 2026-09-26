@@ -95,3 +95,59 @@ def test_buffer_readonly_false():
 	img.allocateImage(2, 2, 1, GL_RGBA, GL_FLOAT)
 
 	assert np.asarray(img).flags.writeable is True
+
+def make_rgb(s, t, fill):
+	img = Image()
+	img.allocateImage(s, t, 1, GL_RGB, GL_UNSIGNED_BYTE)
+
+	np.asarray(img)[:] = fill
+
+	return img
+
+def test_scale_image_averages_blocks():
+	# Four uniform 2x2 blocks halve to exactly one pixel per block, on the CPU.
+	img = make_rgb(4, 4, 0)
+	arr = np.asarray(img)
+	colors = ((10, 20, 30), (200, 100, 50), (0, 255, 0), (90, 90, 90))
+
+	for i, color in enumerate(colors):
+		y, x = divmod(i, 2)
+		arr[y * 2:y * 2 + 2, x * 2:x * 2 + 2] = color
+
+	img.scaleImage(2, 2)
+
+	assert (img.s, img.t, img.r) == (2, 2, 1)
+	assert [tuple(np.asarray(img)[y, x]) for y in range(2) for x in range(2)] == list(colors)
+
+def test_scale_image_converts_data_type():
+	img = make_rgb(2, 2, 255)
+
+	img.scaleImage(1, 1, dataType=GL_FLOAT)
+
+	assert img.dataType == GL_FLOAT
+	assert np.allclose(np.asarray(img)[0, 0], 1.0)
+
+def test_copy_and_deepcopy_are_independent():
+	import copy
+
+	original = make_rgb(2, 2, 7)
+
+	for duplicate in (copy.copy(original), copy.deepcopy(original)):
+		assert (duplicate.s, duplicate.t, duplicate.pixelFormat) == (2, 2, GL_RGB)
+
+		np.asarray(original)[0, 0] = 99
+
+		assert tuple(np.asarray(duplicate)[0, 0]) == (7, 7, 7)
+
+		np.asarray(original)[0, 0] = 7
+
+def test_copy_sub_image():
+	target = make_rgb(3, 3, 0)
+	patch = make_rgb(1, 1, 50)
+
+	target.copySubImage(2, 1, 0, patch)
+
+	arr = np.asarray(target)
+
+	assert tuple(arr[1, 2]) == (50, 50, 50)
+	assert arr.sum() == 150

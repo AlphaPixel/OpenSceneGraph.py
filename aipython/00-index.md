@@ -17,6 +17,7 @@ Read the others situationally:
 | [`01-core.md`](01-core.md) | Always, first. Session bootstrap, callback safety, tmux/IPython mechanics, and the Pythonic-vs-raw-OSG binding surface. |
 | [`02-inspect.md`](02-inspect.md) | Handed a live viewer or loaded scene you didn't build — get a real read on its structure/shaders/uniforms instead of guessing. |
 | [`03-headless-frames.md`](03-headless-frames.md) | Testing callbacks, events, visitors, or Python/C++ trampolines without behavior that genuinely needs a Viewer, graphics context, cull, or draw traversal. |
+| [`04-headless-rendering.md`](04-headless-rendering.md) | **Verifying anything visually.** Render + capture + Read a PNG with no window and no X server (EGL pbuffer via `pyosg_repl.headless_viewer()` + `controller.complete()`), identically on kernel and tmux backends; GL version/profile/MSAA control. Default for agent visual checks. |
 | [`05-camera-manipulator.md`](05-camera-manipulator.md) | Building/customizing an `osgGA.CameraManipulator` subclass, or doing camera-relative work (e.g. "light the subject from the camera's upper-right"). |
 | [`06-camera-effects.md`](06-camera-effects.md) | Layering a TEMPORARY camera effect (shake, kick, scripted move) on top of the user's live manipulator without taking control away. |
 | [`07-camera-manual.md`](07-camera-manual.md) | Driving `viewer.camera` directly with NO manipulator (a fixed/orthographic camera) — `realize()`-before-matrices ordering, near/far, and viewport-confinement gotchas. |

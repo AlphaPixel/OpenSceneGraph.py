@@ -39,10 +39,8 @@ import sys
 
 os.environ.setdefault("OSG_WINDOW", "50 50 900 650")
 
-# Import side effect: fills in OSG_THREADING/OSG_GL_* env var defaults (see pyosg_example.py).
-# Deliberately after the OSG_WINDOW override above (setdefault() means order between these
-# doesn't actually matter, but matching pyosg-khronos-viewer.py's style) and before
-# `from OpenSceneGraph import *` - these need to land before OSG's DisplaySettings reads them.
+# Also applies the shared example defaults (see pyosg_example.py): OSG_WINDOW/SingleThreaded,
+# the GL 4.6 core-profile context, and the osgx.Library.
 from pyosg_example import window_size
 
 from OpenSceneGraph import *

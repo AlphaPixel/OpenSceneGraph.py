@@ -1,5 +1,6 @@
 #include "Image.hpp"
 
+#include <optional>
 #include <unordered_map>
 #include <utility>
 
@@ -66,6 +67,38 @@ void bind_Image(py::module_& m) {
 			"given context; result may be GPU-async-stale if read immediately after a render, "
 			"so prefer shader hot-swap for live inspection where possible."
 		)
+		// CPU-side (OSG's bundled software gluScaleImage), so no GL context is needed; averages
+		// each destination pixel over the source area it covers when shrinking.
+		.def(
+			"scaleImage",
+			[](osg::Image& self, int s, int t, int r, std::optional<GLenum> dataType) {
+				self.scaleImage(s, t, r, dataType.value_or(self.getDataType()));
+			},
+			"s"_a,
+			"t"_a,
+			"r"_a=1,
+			"dataType"_a=py::none(),
+			"Resample this Image in place to (s, t, r), optionally converting to dataType. Runs "
+			"on the CPU; no GL context is needed. 3D (r > 1) images are not supported by OSG."
+		)
+		.def(
+			"copySubImage",
+			&osg::Image::copySubImage,
+			"s_offset"_a,
+			"t_offset"_a,
+			"r_offset"_a,
+			"source"_a,
+			"Copy all of source into this Image at the given offset; both must share the same "
+			"pixel format and data type, and source must fit."
+		)
+		// osg::Image's copy constructor always copies the pixel data; the CopyOp only decides
+		// how the inherited osg::Object state (user data, etc.) is copied.
+		.def("__copy__", [](const osg::Image& self) {
+			return osg::ref_ptr<osg::Image>(new osg::Image(self, osg::CopyOp::SHALLOW_COPY));
+		}, "copy.copy(): an independent copy of the pixel data; Object state shared shallowly.")
+		.def("__deepcopy__", [](const osg::Image& self, py::dict) {
+			return osg::ref_ptr<osg::Image>(new osg::Image(self, osg::CopyOp::DEEP_COPY_ALL));
+		}, "memo"_a, "copy.deepcopy(): an independent copy of the pixel data and Object state.")
 		.def_property_readonly("s", &osg::Image::s, "Image width in texels/pixels.")
 		.def_property_readonly("t", &osg::Image::t, "Image height in texels/pixels.")
 		.def_property_readonly(

@@ -97,16 +97,29 @@ Prefer `x.__doc__` instead.
 img = osg.Image()
 img.readPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE)
 
-# WORKS — queued into the render loop's own finalDrawCallback, context
-# guaranteed current:
-result = await _osg_repl_controller.capture_framebuffer("/tmp/shot.png")
+# WORKS on every backend — queued into the render loop's own
+# finalDrawCallback (context guaranteed current), then rendered synchronously
+# until fulfilled:
+ctl = _osg_repl_controller
+result = ctl.complete(ctl.capture_framebuffer("/tmp/shot.png"))
+
+# tmux/terminal IPython only — equivalent, pumps frames while awaiting:
+result = await ctl.capture_framebuffer("/tmp/shot.png")
 ```
+
+**Never `await` a capture on the ipykernel backend.** ipykernel runs the
+frame loop through the same queue as shell messages, so an awaiting cell
+blocks the frames that would fulfill it; `await` there now raises
+`RuntimeError` instead of deadlocking. `complete()` works on both backends
+(and in plain Python), so prefer it everywhere.
 
 If a screenshot comes back black, rule out the capture path first (check the
 window directly, check `_osg_repl_state["frames"]` is incrementing) before
-assuming the scene is broken. Confirmed reliable on the terminal/tmux backend;
-the ipykernel backend has crashed outright on this call — treat as unproven
-there.
+assuming the scene is broken.
+
+For verification captures, prefer a headless viewer (no window on the
+user's desktop, no X server needed): see
+[`04-headless-rendering.md`](04-headless-rendering.md).
 
 ### Model controls facade
 

@@ -2,23 +2,25 @@
 
 # Quick diagnostic dump, not an interactive viewer: build_info() from OpenSceneGraph (and osgx,
 # if installed), the REQUESTED GL context (DisplaySettings, sourced from the OSG_GL_VERSION/
-# OSG_GL_CONTEXT_VERSION/OSG_GL_CONTEXT_PROFILE_MASK env vars set below), what a realized
+# OSG_GL_CONTEXT_VERSION/OSG_GL_CONTEXT_PROFILE_MASK env vars, defaulted below), what a realized
 # GraphicsContext's own Traits resolved that request to, and what the driver ACTUALLY granted
 # (State.glExtensions). Realizes just long enough to populate that last part, then exits.
-# Edit the env vars below (or unset them) to see how the three stages diverge - e.g. request a
-# GL version the driver doesn't support and watch Traits echo the request back while
-# GLExtensions reports what was actually negotiated instead.
+# Set those env vars in the shell (values already in the environment win over the defaults
+# below) to see how the three stages diverge - e.g. request a GL version the driver doesn't
+# support and watch Traits echo the request back while GLExtensions reports what was actually
+# negotiated instead.
 
 import os
 import sys
 
-os.environ.update({
-	"OSG_WINDOW": "50 50 100 100",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6",
-})
+for _name, _value in (
+	("OSG_WINDOW", "50 50 100 100"),
+	("OSG_THREADING", "SingleThreaded"),
+	("OSG_GL_CONTEXT_PROFILE_MASK", "1"),
+	("OSG_GL_VERSION", "4.6"),
+	("OSG_GL_CONTEXT_VERSION", "4.6"),
+):
+	os.environ.setdefault(_name, _value)
 
 from OpenSceneGraph import *
 

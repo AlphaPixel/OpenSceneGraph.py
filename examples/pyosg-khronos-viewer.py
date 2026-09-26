@@ -14,17 +14,8 @@ import time
 
 # os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
 os.environ.setdefault("OSG_WINDOW", "50 50 1420 933") # Default on cubicool's machine
-os.environ.setdefault(
-	"OSG_LIBRARY_PATH", ":".join((
-		"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/plugins/ktx2",
-		"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/plugins/gltf"
-	))
-)
-
-# Import side effect: fills in OSG_THREADING/OSG_GL_* env var defaults (see pyosg_example.py),
-# same reason as every other example - these need to land before OSG's DisplaySettings reads
-# them. Deliberately after the OSG_WINDOW/OSG_LIBRARY_PATH overrides above (setdefault() means
-# order between these doesn't actually matter, but matching the rest of this file's style).
+# Also applies the shared example defaults: SingleThreaded, the GL 4.6 core-profile context, and
+# the osgx.Library.
 from pyosg_example import window_size
 
 from OpenSceneGraph import *

@@ -3,14 +3,14 @@
 import os
 
 # setdefault(), not update() - this module is imported by other examples (pyosg-mrt.py,
-# etc.) that configure their own OSG_WINDOW/OSG_THREADING before importing pyosg_visitor for
-# its GatherVisitor. update() here would silently clobber whatever the caller already set.
-# Only pyosg_visitor.py's own standalone __main__ use below relies on these being filled in.
+# etc.) that configure their own OSG_WINDOW before importing pyosg_visitor for its
+# GatherVisitor. Only pyosg_visitor.py's own standalone __main__ use below relies on it.
 os.environ.setdefault("OSG_WINDOW", "50 50 800 600")
-os.environ.setdefault("OSG_THREADING", "SingleThreaded")
-os.environ.setdefault("OSG_GL_CONTEXT_PROFILE_MASK", "1")
-os.environ.setdefault("OSG_GL_VERSION", "4.6")
-os.environ.setdefault("OSG_GL_CONTEXT_VERSION", "4.6")
+
+# Shared example defaults (SingleThreaded, the GL 4.6 core-profile context this module's own
+# #version 460 core shaders need, the osgx.Library); a no-op re-import for any example that
+# already imported it.
+import pyosg_example
 
 from OpenSceneGraph import *
 

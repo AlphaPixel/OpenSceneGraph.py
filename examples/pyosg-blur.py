@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 
-from OpenSceneGraph import *
-from OpenSceneGraph.GL import *
-
 import os
 import sys
 
 W, H = 800, 600
 
-os.environ.update({
-	"OSG_WINDOW": f"50 50 {W} {H}",
-	"OSG_THREADING": "SingleThreaded",
-	"OSG_GL_CONTEXT_PROFILE_MASK": "1",
-	"OSG_GL_VERSION": "4.6",
-	"OSG_GL_CONTEXT_VERSION": "4.6",
-})
+os.environ.setdefault("OSG_WINDOW", f"50 50 {W} {H}")
+
+# Shared example defaults: SingleThreaded, the GL 4.6 core-profile context, and the osgx.Library.
+import pyosg_example
+
+from OpenSceneGraph import *
+from OpenSceneGraph.GL import *
 
 FULLSCREEN_VERT = """
 #version 330 core

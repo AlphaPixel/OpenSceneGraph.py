@@ -23,6 +23,8 @@
 #   n = _osg_repl_state["frames"]
 #   await asyncio.sleep(1); _osg_repl_state["frames"] - n
 #   await _osg_repl_controller.capture_framebuffer("frame.png")  # raw framebuffer PNG
+#   _osg_repl_controller.complete(_osg_repl_controller.capture_framebuffer("frame.png"))
+#     # same, but renders synchronously; the only form that works under ipykernel
 #   _osg_repl_controls.input.locked = True  # temporarily block mouse/keyboard input
 #   _osg_repl_controls.frames.target_fps = 30  # best-effort viewer pacing
 #
@@ -44,6 +46,7 @@ os.environ.setdefault("OSG_THREADING", "SingleThreaded")
 
 import asyncio
 import contextlib
+import copy
 import math
 import subprocess
 import time
@@ -285,35 +288,108 @@ class CinematicOrbitManipulator(osgGA.CameraManipulator):
 # --------------------------------------------------------------------------- #
 
 class CaptureRequest:
-	"""Awaitable result of a capture queued for the next rendered frame."""
+	"""Result of a capture queued for the next rendered frame.
 
-	def __init__(self, kind, filename=None, label=None, include_image=False):
+	Resolve it with `controller.complete(request)`, which works everywhere (including plain
+	Python with no event loop), or `await request` under terminal IPython only.
+	"""
+
+	def __init__(
+		self,
+		controller,
+		kind,
+		filename=None,
+		label=None,
+		include_image=False,
+		preview_downscale=None
+	):
+		if preview_downscale is not None:
+			if filename is None:
+				raise ValueError("preview_downscale requires a filename")
+
+			if not isinstance(preview_downscale, int) or preview_downscale < 2:
+				raise ValueError("preview_downscale must be an int >= 2")
+
+		self.controller = controller
 		self.kind = kind
 		self.filename = filename
 		self.label = label
 		self.include_image = include_image
-		self._future = asyncio.get_event_loop().create_future()
+		self.preview_downscale = preview_downscale
+		self._done = False
+		self._result = None
+		self._exception = None
+		self._future = None
 
 	def __await__(self):
+		# ipykernel renders frames only between shell messages, so a cell awaiting this would
+		# block the very frames that fulfill it.
+		if self.controller.state["backend"] == "kernel":
+			raise RuntimeError(
+				"awaiting a capture deadlocks under the ipykernel backend; use "
+				"controller.complete(request) instead"
+			)
+
+		if self._future is None:
+			self._future = asyncio.get_running_loop().create_future()
+
+			self._settle_future()
+
 		return self._future.__await__()
 
 	@property
 	def done(self):
-		return self._future.done()
+		return self._done
 
 	def result(self):
-		return self._future.result()
+		if not self._done:
+			raise RuntimeError("capture has not been fulfilled yet")
+
+		if self._exception is not None:
+			raise self._exception
+
+		return self._result
+
+	def _set_result(self, result):
+		self._result = result
+		self._done = True
+
+		self._settle_future()
+
+	def _set_exception(self, exc):
+		self._exception = exc
+		self._done = True
+
+		self._settle_future()
+
+	def _settle_future(self):
+		if not self._done or self._future is None or self._future.done():
+			return
+
+		if self._exception is not None:
+			self._future.set_exception(self._exception)
+
+		else:
+			self._future.set_result(self._result)
 
 
 class CaptureQueueCallback(osg.Camera.DrawCallback):
-	"""Persistent final-draw callback which drains one same-frame capture batch."""
+	"""Persistent final-draw callback which drains one same-frame capture batch.
 
-	def __init__(self, controller):
+	`previous` is whatever occupied the camera's final-draw slot before this callback (a C++
+	callback, a DrawCallback subclass, or a plain callable); it runs first, every frame.
+	"""
+
+	def __init__(self, controller, previous=None):
 		super().__init__()
 
 		self.controller = controller
+		self.previous = previous
 
 	def __call__(self, ri):
+		if self.previous is not None:
+			self.previous(ri)
+
 		# Move the queue before executing it. Captures queued by completion handlers
 		# therefore belong to the following frame, never this partially-drained batch.
 		batch = self.controller._capture_queue
@@ -335,22 +411,42 @@ class CaptureQueueCallback(osg.Camera.DrawCallback):
 					request, image, data_type,
 				)
 
+				if request.preview_downscale is not None:
+					result.update(self._write_preview(image, request))
+
 				if request.include_image:
 					result["image"] = image
 
-				request._future.set_result(result)
+				request._set_result(result)
 
 				if request.filename is not None:
 					print(f"Wrote {request.kind}: {request.filename}", flush=True)
 
 			except Exception as exc:
-				request._future.set_exception(exc)
+				request._set_exception(exc)
 				traceback.print_exc()
 
 		video = self.controller._video_capture
 
 		if video is not None:
 			video.capture(self)
+
+	@staticmethod
+	def _write_preview(image, request):
+		# A reduced copy next to the full-size file ("x.png" -> "x.preview.png"), so an agent can
+		# read the cheap one first. scaleImage() runs on the CPU and box-averages when shrinking;
+		# the full-size image itself is left untouched.
+		n = request.preview_downscale
+		root, ext = os.path.splitext(request.filename)
+		path = f"{root}.preview{ext}"
+		preview = copy.copy(image)
+
+		preview.scaleImage(max(image.s // n, 1), max(image.t // n, 1))
+
+		if not osgDB.writeImageFile(preview, path):
+			raise RuntimeError(f"failed to write capture preview {path!r}")
+
+		return {"preview": path, "preview_size": (preview.s, preview.t)}
 
 	def _read_framebuffer(self):
 		vp = self.controller.viewer.camera.viewport
@@ -674,7 +770,7 @@ class ViewerREPLController(MainLoopController):
 		self.state["frames"] = 0
 		self._capture_queue = []
 		self._video_capture = None
-		self._capture_callback = CaptureQueueCallback(self)
+		self._capture_callback = CaptureQueueCallback(self, self.viewer.camera.finalDrawCallback)
 		self.viewer.camera.finalDrawCallback = self._capture_callback
 
 		# insert(0, ...), not append() - first refusal ahead of whatever handlers the caller
@@ -748,8 +844,26 @@ class ViewerREPLController(MainLoopController):
 
 		return succeeded
 
-	def capture_framebuffer(self, filename="frame.png", label=None):
-		request = CaptureRequest("framebuffer", filename, label)
+	def _check_capture_hook(self):
+		# Anything assigned to camera.finalDrawCallback after this controller was created
+		# replaces (rather than chains) the capture hook, and captures would never resolve.
+		if self.viewer.camera.finalDrawCallback is not self._capture_callback:
+			raise RuntimeError(
+				"viewer.camera.finalDrawCallback was replaced after the REPL controller installed "
+				"its capture hook; assign final-draw callbacks before calling repl(), or chain "
+				"them via _osg_repl_controller._capture_callback.previous"
+			)
+
+	def capture_framebuffer(self, filename="frame.png", label=None, preview_downscale=None):
+		"""Queue a backbuffer capture to `filename`. With `preview_downscale=N`, also write a
+		1/N-per-axis copy as "<name>.preview<ext>" (result keys "preview"/"preview_size").
+		"""
+
+		self._check_capture_hook()
+
+		request = CaptureRequest(
+			self, "framebuffer", filename, label, preview_downscale=preview_downscale
+		)
 
 		self._capture_queue.append((request, None, GL_UNSIGNED_BYTE))
 
@@ -757,7 +871,9 @@ class ViewerREPLController(MainLoopController):
 
 	def capture_framebuffer_image(self, label=None):
 		"""Capture the next framebuffer in RAM; the result contains an ``image`` key."""
-		request = CaptureRequest("framebuffer", label=label, include_image=True)
+		self._check_capture_hook()
+
+		request = CaptureRequest(self, "framebuffer", label=label, include_image=True)
 
 		self._capture_queue.append((request, None, GL_UNSIGNED_BYTE))
 
@@ -776,9 +892,18 @@ class ViewerREPLController(MainLoopController):
 		texture,
 		filename="texture.png",
 		data_type=GL_UNSIGNED_BYTE,
-		label=None
+		label=None,
+		preview_downscale=None
 	):
-		request = CaptureRequest("texture", filename, label)
+		"""Queue a texture capture to `filename`; `preview_downscale` as in
+		capture_framebuffer().
+		"""
+
+		self._check_capture_hook()
+
+		request = CaptureRequest(
+			self, "texture", filename, label, preview_downscale=preview_downscale
+		)
 
 		self._capture_queue.append((request, texture, data_type))
 
@@ -816,6 +941,44 @@ class ViewerREPLController(MainLoopController):
 			"pixel_format": image.pixelFormat,
 			"data_type": image.dataType if image.dataType else data_type,
 		}
+
+def headless_viewer(width=640, height=480, samples=None):
+	"""Return an osgViewer.Viewer rendering into an offscreen EGL pbuffer (Linux, requires osgx
+	built with OSGX_WITH_EGL). No window is created and no X server is needed; captures read
+	the pbuffer. The camera gets a viewport and a default perspective projection; set its
+	viewMatrix (or a cameraManipulator) before rendering.
+
+	Like a windowed viewer, the GL context version/profile/flags and MSAA sample count come
+	from osg.DisplaySettings.instance (and so from OSG_GL_CONTEXT_VERSION,
+	OSG_GL_CONTEXT_PROFILE_MASK, OSG_MULTI_SAMPLES, ...); `samples` overrides the latter.
+	"""
+
+	import osgx
+
+	if not hasattr(osgx.platform, "createEGLWindow"):
+		raise RuntimeError("osgx was built without OSGX_WITH_EGL; headless rendering unavailable")
+
+	traits = osg.GraphicsContext.Traits(osg.DisplaySettings.instance)
+	traits.width = width
+	traits.height = height
+	traits.pbuffer = True
+
+	if samples is not None:
+		traits.sampleBuffers = 1 if samples else 0
+		traits.samples = samples
+
+	gc = osgx.platform.createEGLWindow(traits)
+
+	if not gc.valid():
+		raise RuntimeError("EGL pbuffer context could not be created")
+
+	viewer = osgViewer.Viewer()
+
+	viewer.camera.graphicsContext = gc
+	viewer.camera.viewport = (0, 0, width, height)
+	viewer.camera.projectionMatrix = osg.Matrixd.perspective(30.0, width / height, 1.0, 10000.0)
+
+	return viewer
 
 def repl(viewer, namespace=None, frame_callback=None):
 	"""Drive *viewer* alongside terminal IPython or ipykernel.

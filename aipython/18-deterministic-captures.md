@@ -75,8 +75,10 @@ In a tmux-backed `pyosg_repl.py` session, freeze the effect, then use the
 controller's queued capture (not a top-level `readPixels()`):
 
 ```python
+ctl = _osg_repl_controller
+
 set_age(effect, 1.2)
-await _osg_repl_controller.capture_framebuffer("/tmp/effect-age-1.2.png")
+ctl.complete(ctl.capture_framebuffer("/tmp/effect-age-1.2.png"))
 ```
 
 If a person may be at the same keyboard/mouse while this runs, wrap it in
@@ -86,9 +88,9 @@ effect can land on the same frame as `set_age()`/the capture, unfreezing the
 very state being inspected:
 
 ```python
-with _osg_repl_controller.locked_input():
+with ctl.locked_input():
 	set_age(effect, 1.2)
-	await _osg_repl_controller.capture_framebuffer("/tmp/effect-age-1.2.png")
+	ctl.complete(ctl.capture_framebuffer("/tmp/effect-age-1.2.png"))
 ```
 
 To prove determinism rather than just eyeball a screenshot, capture the same
@@ -96,11 +98,13 @@ frozen frame twice after letting realtime frames advance in between, then
 compare the files outside the REPL:
 
 ```python
-with _osg_repl_controller.locked_input():
+import time
+
+with ctl.locked_input():
 	set_age(effect, 1.2)
-	await _osg_repl_controller.capture_framebuffer("/tmp/effect-a.png")
-	await asyncio.sleep(0.5)
-	await _osg_repl_controller.capture_framebuffer("/tmp/effect-b.png")
+	ctl.complete(ctl.capture_framebuffer("/tmp/effect-a.png"))
+	time.sleep(0.5) # realtime advances; the next frame's simulation time does too
+	ctl.complete(ctl.capture_framebuffer("/tmp/effect-b.png"))
 ```
 
 ```bash

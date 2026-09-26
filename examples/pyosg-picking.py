@@ -15,9 +15,8 @@ scene under it and keeping its view/projection synced to the main camera every
 frame (osgx.PickCameraSync).
 """
 
-# Import side effect: fills in OSG_WINDOW/OSG_THREADING/OSG_GL_* env var defaults (see
-# pyosg_example.py). Deliberately before `from OpenSceneGraph import *`, matching every other
-# example - these need to land before OSG's DisplaySettings reads them.
+# Also applies the shared example defaults (see pyosg_example.py): OSG_WINDOW/SingleThreaded,
+# the GL 4.6 core-profile context, and the osgx.Library.
 from pyosg_example import window_size
 
 from OpenSceneGraph import *

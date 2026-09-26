@@ -160,6 +160,12 @@ void bind_GraphicsContext(py::module_& m) {
 		.def_readwrite("pbuffer", &osg::GraphicsContext::Traits::pbuffer,
 			"Request an offscreen pbuffer surface instead of a window."
 		)
+		.def_readwrite("sampleBuffers", &osg::GraphicsContext::Traits::sampleBuffers,
+			"Number of multisample buffers (1 enables MSAA together with samples)."
+		)
+		.def_readwrite("samples", &osg::GraphicsContext::Traits::samples,
+			"Requested MSAA samples per pixel; 0 disables multisampling."
+		)
 		.def_readwrite("glContextVersion", &osg::GraphicsContext::Traits::glContextVersion,
 			"Requested \"major.minor\" GL context version string."
 		)

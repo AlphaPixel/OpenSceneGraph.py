@@ -157,7 +157,8 @@ Do not use bare `Image.readPixels()` from the prompt. Queue the capture on
 the REPL controller instead:
 
 ```python
-await _osg_repl_controller.capture_framebuffer("/tmp/pbr-sphere.png")
+ctl = _osg_repl_controller
+ctl.complete(ctl.capture_framebuffer("/tmp/pbr-sphere.png"))
 ```
 
 The sphere should show the environment reflected across its surface.

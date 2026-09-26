@@ -73,17 +73,9 @@ import pathlib
 import sys
 
 os.environ.setdefault("OSG_WINDOW", "50 50 1000 400")
-os.environ.setdefault("OSG_THREADING", "SingleThreaded")
-os.environ.setdefault("OSG_GL_CONTEXT_PROFILE_MASK", "1")
-os.environ.setdefault("OSG_GL_VERSION", "4.6")
-os.environ.setdefault("OSG_GL_CONTEXT_VERSION", "4.6")
-os.environ.setdefault(
-	"OSG_LIBRARY_PATH", ":".join((
-		"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/plugins/ktx2",
-		"/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/plugins/gltf"
-	))
-)
 
+# Also applies the shared example defaults: SingleThreaded, the GL 4.6 core-profile context, and
+# the osgx.Library.
 from pyosg_example import label
 
 from OpenSceneGraph import *
