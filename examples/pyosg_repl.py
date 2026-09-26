@@ -958,74 +958,8 @@ class ViewerREPLController(MainLoopController):
 			"data_type": image.dataType if image.dataType else data_type,
 		}
 
-def _egl_window_factory():
-	try:
-		import osgx
-
-	except ImportError:
-		return None
-
-	return getattr(osgx.platform, "createEGLWindow", None)
-
-def headless_viewer(width=640, height=480, samples=None, backend=None):
-	"""Return an osgViewer.Viewer rendering into an offscreen pbuffer; no window is shown and
-	captures read the pbuffer. The camera gets a viewport and a default perspective projection;
-	set its viewMatrix (or a cameraManipulator) before rendering.
-
-	`backend` picks the offscreen context:
-
-	- "egl": osgx.platform.createEGLWindow (Linux, osgx built with OSGX_WITH_EGL). Truly
-	  display-less: no X server or window system session is needed at all.
-	- "native": OSG's own per-platform pbuffer via osg.GraphicsContext.createGraphicsContext
-	  (WGL on Windows, Cocoa on macOS, GLX on Linux - which needs an X display).
-	- None: "egl" when available, otherwise "native".
-
-	Like a windowed viewer, the GL context version/profile/flags and MSAA sample count come
-	from osg.DisplaySettings.instance (and so from OSG_GL_CONTEXT_VERSION,
-	OSG_GL_CONTEXT_PROFILE_MASK, OSG_MULTI_SAMPLES, ...); `samples` overrides the latter.
-	"""
-
-	if backend not in (None, "egl", "native"):
-		raise ValueError(f"unknown headless backend {backend!r} (expected 'egl' or 'native')")
-
-	create_egl_window = _egl_window_factory() if backend != "native" else None
-
-	if backend == "egl" and create_egl_window is None:
-		raise RuntimeError("the 'egl' backend requires osgx built with OSGX_WITH_EGL")
-
-	traits = osg.GraphicsContext.Traits(osg.DisplaySettings.instance)
-	traits.width = width
-	traits.height = height
-	traits.pbuffer = True
-
-	# Pbuffers are single-buffered here, as in the EGL path, so reads see what was drawn.
-	traits.doubleBuffer = False
-
-	if samples is not None:
-		traits.sampleBuffers = 1 if samples else 0
-		traits.samples = samples
-
-	if create_egl_window is not None:
-		gc = create_egl_window(traits)
-
-	else:
-		# The X11 implementation targets hostName:displayNum.screenNum; elsewhere this is unused.
-		traits.readDISPLAY()
-
-		gc = osg.GraphicsContext.createGraphicsContext(traits)
-
-	if gc is None or not gc.valid():
-		kind = "EGL" if create_egl_window is not None else "native"
-
-		raise RuntimeError(f"{kind} pbuffer context could not be created")
-
-	viewer = osgViewer.Viewer()
-
-	viewer.camera.graphicsContext = gc
-	viewer.camera.viewport = (0, 0, width, height)
-	viewer.camera.projectionMatrix = osg.Matrixd.perspective(30.0, width / height, 1.0, 10000.0)
-
-	return viewer
+# Offscreen viewers live in pyosg_headless (no aipython dependency), shared with pyosg_example.
+from pyosg_headless import headless_viewer
 
 def repl(viewer, namespace=None, frame_callback=None):
 	"""Drive *viewer* alongside terminal IPython or ipykernel.

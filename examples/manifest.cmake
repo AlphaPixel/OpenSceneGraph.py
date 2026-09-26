@@ -34,6 +34,7 @@ set(PYOSG_OFFICIAL_EXAMPLES
 	"pyosg_example.py=pyosg_example.py"
 	"pyosg_visitor.py=pyosg_visitor.py"
 	"pyosg_repl.py=pyosg_repl.py"
+	"pyosg_headless.py=pyosg_headless.py"
 	"pyosg_async.py=pyosg_async.py"
 	"pyosg-blur.py=blur.py"
 	"pyosg-mrt.py=mrt.py"

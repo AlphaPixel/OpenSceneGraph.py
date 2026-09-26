@@ -2,6 +2,7 @@
 
 import os
 import pathlib
+import sys
 
 # Importing this module applies the examples' shared defaults: the OSG_WINDOW/OSG_THREADING
 # environment defaults below and the GL 4.6 core-profile context defaults further down. Set
@@ -70,6 +71,20 @@ if APPLY_DEFAULTS:
 
 	if "OSG_GL_CONTEXT_PROFILE_MASK" not in os.environ:
 		_settings.glContextProfileMask = 1
+
+# --headless [egl|native] (or PYOSG_HEADLESS=egl|native|1): every osgViewer.Viewer the example
+# creates renders into a window_size() pbuffer instead of a window, writes its last frame to a PNG
+# and ends the example's frame loop. See pyosg_headless.py for the options; they are removed from
+# sys.argv here, before the example parses its own arguments.
+import pyosg_headless
+
+_headless, _backend, _frames, _out = pyosg_headless.parse_argv(sys.argv)
+
+if _headless:
+	pyosg_headless.install(_backend, _frames, _out, window_size())
+
+# True when every osgViewer.Viewer renders offscreen, whether installed above or by a runner.
+HEADLESS = pyosg_headless.installed()
 
 # This module installs at the top level of the wheel (OpenSceneGraph/examples/pyosg_example.py),
 # a sibling of both `assets/` and the `lighting/` subpackage - so this is the one place a plain

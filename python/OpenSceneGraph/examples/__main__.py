@@ -10,6 +10,7 @@ this module's build_scene()/configure_viewer() contract (yet).
 
 import argparse
 import importlib
+import os
 import pkgutil
 import sys
 
@@ -99,6 +100,30 @@ def run(name, width=800, height=600, extra_argv=()):
 
 	run_module(module, width, height, extra_argv, name=name)
 
+def _pop_headless_options(argv):
+	"""Remove --headless/--headless-frames/--headless-out from `argv` (either side of "--") so they
+	never reach the example's own argument parsing; returns (pyosg_headless, backend, frames, out),
+	or None when headless mode wasn't requested (by option or PYOSG_HEADLESS).
+	"""
+
+	requested = any(arg.startswith("--headless") for arg in argv)
+
+	if not requested and os.environ.get("PYOSG_HEADLESS", "0") == "0":
+		return None
+
+	try:
+		import pyosg_headless
+
+	except ImportError:
+		sys.exit("error: --headless needs pyosg_headless.py (installed with openscenegraph-examples)")
+
+	full = ["pyosg", *argv]
+	enabled, backend, frames, out = pyosg_headless.parse_argv(full)
+
+	argv[:] = full[1:]
+
+	return (pyosg_headless, backend, frames, out) if enabled else None
+
 def main():
 	parser = argparse.ArgumentParser(
 		prog="pyosg",
@@ -123,6 +148,7 @@ def main():
 	# two-pass parse could remove the need for "--" in the common case; not attempted, needs real
 	# testing against the SAME argparse quirk documented above first.
 	argv = sys.argv[1:]
+	headless = _pop_headless_options(argv)
 
 	if "--" in argv:
 		i = argv.index("--")
@@ -132,6 +158,13 @@ def main():
 		own_argv, extra_argv = argv, []
 
 	args = parser.parse_args(own_argv)
+
+	if headless is not None:
+		pyosg_headless, backend, frames, out = headless
+
+		out = out or f"{args.name}-headless.png"
+
+		pyosg_headless.install(backend, frames, out, (args.width, args.height))
 
 	run(args.name, args.width, args.height, extra_argv)
 
