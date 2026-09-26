@@ -151,6 +151,15 @@ void bind_GraphicsContext(py::module_& m) {
 		.def_readwrite("y", &osg::GraphicsContext::Traits::y, "Window/surface Y position in pixels.")
 		.def_readwrite("width", &osg::GraphicsContext::Traits::width, "Surface width in pixels.")
 		.def_readwrite("height", &osg::GraphicsContext::Traits::height, "Surface height in pixels.")
+		.def_readwrite("windowDecoration", &osg::GraphicsContext::Traits::windowDecoration,
+			"Request window-manager decoration (title bar, borders)."
+		)
+		.def_readwrite("doubleBuffer", &osg::GraphicsContext::Traits::doubleBuffer,
+			"Request a double-buffered surface."
+		)
+		.def_readwrite("pbuffer", &osg::GraphicsContext::Traits::pbuffer,
+			"Request an offscreen pbuffer surface instead of a window."
+		)
 		.def_readwrite("glContextVersion", &osg::GraphicsContext::Traits::glContextVersion,
 			"Requested \"major.minor\" GL context version string."
 		)

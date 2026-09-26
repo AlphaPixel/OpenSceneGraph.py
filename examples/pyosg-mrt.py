@@ -106,38 +106,28 @@ void main() {
 # ALL of the actual lighting HERE instead of in the geometry pass - the same
 # cel-shaded diffuse + rim light as pyosg-rtt.py, just computed from the
 # G-buffer instead of inline per-vertex/per-fragment during the geometry
-# pass. View-space position is reconstructed from depth + the inverse
-# projection matrix (the same reconstruction technique a real SSAO/SSR pass
-# needs the depth buffer for).
+# pass. View-space position is reconstructed from depth + the inverse of the
+# projection the G-buffer camera rendered with (the same reconstruction
+# technique a real SSAO/SSR pass needs the depth buffer for).
 COMPOSITE_FRAGMENT_SHADER = """
 #version 330 core
+
+// osgx_LinearizeDepth(depth, projection): depth buffer value -> camera-space Z distance.
+// osgx_ViewPositionFromDepth(uv, depth, inverseProjection): screen UV + depth -> view space.
+#pragma osgx::projection DEPTH, VIEW_POSITION
 
 uniform sampler2D colorTex;
 uniform sampler2D normalTex;
 uniform sampler2D depthTex;
-uniform mat4 invProjectionMatrix;
-uniform float znear;
-uniform float zfar;
 uniform int visualizeMode; // 0=lit composite, 1=color, 2=depth, 3=normal
+
+// The projection the G-buffer camera actually rendered with, and its inverse (see build_scene()).
+uniform mat4 osgx_depthProjection;
+uniform mat4 osgx_depthProjectionInverse;
 
 in vec2 uv;
 
 out vec4 fragColor;
-
-// Convert depth buffer value -> camera-space Z distance.
-float linearizeDepth(float d, float near, float far) {
-	float z = d * 2.0 - 1.0;
-
-	return (2.0 * near * far) / (far + near - z * (far - near));
-}
-
-// Reconstruct view-space position from a screen UV + depth-buffer sample.
-vec3 reconstructViewPos(vec2 uv, float d) {
-	vec4 clip = vec4(vec3(uv, d) * 2.0 - 1.0, 1.0);
-	vec4 viewPos = invProjectionMatrix * clip;
-
-	return viewPos.xyz / viewPos.w;
-}
 
 void main() {
 	vec4 albedo = texture(colorTex, uv);
@@ -152,7 +142,10 @@ void main() {
 	}
 
 	if (visualizeMode == 2) {
-		float lin = linearizeDepth(d, znear, zfar);
+		// Depth 0/1 linearize to exactly the near/far planes.
+		float znear = osgx_LinearizeDepth(0.0, osgx_depthProjection);
+		float zfar = osgx_LinearizeDepth(1.0, osgx_depthProjection);
+		float lin = osgx_LinearizeDepth(d, osgx_depthProjection);
 		float t = clamp((lin - znear) / (zfar - znear), 0.0, 1.0);
 
 		fragColor = vec4(vec3(t), 1.0);
@@ -195,7 +188,7 @@ void main() {
 	float ambient = 0.25;
 	float light = ambient + diffuse;
 
-	vec3 viewPos = reconstructViewPos(uv, d);
+	vec3 viewPos = osgx_ViewPositionFromDepth(uv, d, osgx_depthProjectionInverse);
 	vec3 viewDir = normalize(-viewPos);
 	float rim = pow(1.0 - clamp(dot(N, viewDir), 0.0, 1.0), rimPower);
 	vec3 rimLight = rim * (vec3(rimBase) + rimColor * rimTint);
@@ -218,11 +211,11 @@ void main() {
 	float dU = texture(depthTex, uv + vec2(0.0, texel.y)).r;
 	float dD = texture(depthTex, uv + vec2(0.0, -texel.y)).r;
 
-	float z  = linearizeDepth(d,  znear, zfar);
-	float zL = linearizeDepth(dL, znear, zfar);
-	float zR = linearizeDepth(dR, znear, zfar);
-	float zU = linearizeDepth(dU, znear, zfar);
-	float zD = linearizeDepth(dD, znear, zfar);
+	float z  = osgx_LinearizeDepth(d,  osgx_depthProjection);
+	float zL = osgx_LinearizeDepth(dL, osgx_depthProjection);
+	float zR = osgx_LinearizeDepth(dR, osgx_depthProjection);
+	float zU = osgx_LinearizeDepth(dU, osgx_depthProjection);
+	float zD = osgx_LinearizeDepth(dD, osgx_depthProjection);
 
 	float edgeH = abs(zL - zR);
 	float edgeV = abs(zU - zD);
@@ -363,7 +356,7 @@ def create_hud_camera(color_tex, normal_tex, depth_tex):
 
 	p = osg.Program(name="compositeProgram", shaders=(
 		osg.Shader(osg.Shader.VERTEX, FULLSCREEN_VERTEX_SHADER),
-		osg.Shader(osg.Shader.FRAGMENT, COMPOSITE_FRAGMENT_SHADER)
+		osg.Shader(osg.Shader.FRAGMENT, osgx.resolveShaderLibs(COMPOSITE_FRAGMENT_SHADER))
 	))
 
 	# g.stateSet.setAttributeAndModes(p)
@@ -413,43 +406,20 @@ def build_scene(w, h):
 
 	gbuffer_cam.children.append(create_scene())
 
-	znear_u = osg.Uniform("znear", 0.0)
-	zfar_u = osg.Uniform("zfar", 0.0)
-	inv_proj_u = osg.Uniform("invProjectionMatrix", osg.Matrixf.identity())
 	visualize_mode_u = osg.Uniform("visualizeMode", 0)
 
-	hud_cam.stateSet.uniforms.extend((znear_u, zfar_u, inv_proj_u, visualize_mode_u))
+	# OSG recomputes the G-buffer camera's near/far every frame (on its own private copy of the
+	# projection), so depth linearization and view-space reconstruction both need the matrix that
+	# camera actually rendered with this frame. osgx.DepthProjectionCallback records it (and its
+	# inverse) right after the G-buffer camera draws; see pyosg-rtt.py for the same wiring.
+	depth_projection = osgx.DepthProjectionCallback()
 
-	# Same idea as pyosg-rtt.py's update_uniforms: OSG recomputes znear/zfar every frame
-	# based on the CameraManipulator, so depth linearization and view-space reconstruction
-	# both need fresh values every frame, not just at startup.
-	#
-	# ri.state.projectionMatrix is a SHARED per-context value, not scoped to whichever
-	# camera's callback reads it - it reflects whatever was last applied to the GL state,
-	# not necessarily this camera's own matrix. gbuffer_cam is PRE_RENDER (draws FIRST each
-	# frame), so its preDrawCallback fires before anything THIS frame has applied a fresh
-	# projection - it read a STALE leftover from the END of the PREVIOUS frame instead:
-	# hud_cam's own identity projectionMatrix (hud_cam draws last). That silently broke
-	# znear/zfar (decomposing an identity matrix as a perspective gives garbage near/far,
-	# killing the depth/normal-edge outline) and invProjectionMatrix (inverse(identity) =
-	# identity, breaking reconstructViewPos() and blowing out the rim-light term instead).
-	# Confirmed visually 2026-08-19: outline vanished, image washed out toward rimColor's
-	# orange/yellow.
-	#
-	# hud_cam is POST_RENDER (draws LAST), so by the time ITS preDrawCallback fires, the
-	# real viewer camera has already drawn in between (PRE_RENDER -> viewer's own NESTED_RENDER
-	# -> POST_RENDER) and applied its real, this-frame-fresh projection - the same timing
-	# guarantee the original code got directly from attaching to the caller's own
-	# v.camera.preDrawCallback, without build_scene() needing a viewer reference at all.
-	def update_uniforms(ri):
-		pm = ri.state.projectionMatrix
-		fovy, aspect, near, far = pm.getPerspective()
-
-		znear_u.value = float(near)
-		zfar_u.value = float(far)
-		inv_proj_u.value = osg.Matrixf(osg.Matrix.inverse(pm))
-
-	hud_cam.preDrawCallback = update_uniforms
+	gbuffer_cam.postDrawCallback = depth_projection
+	hud_cam.stateSet.uniforms.extend((
+		depth_projection.projection,
+		depth_projection.projectionInverse,
+		visualize_mode_u
+	))
 
 	root = osg.Group()
 	root.children.extend((gbuffer_cam, hud_cam, label("1 color | 2 depth | 3 normal | 0 default", w, h)))

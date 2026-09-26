@@ -7,12 +7,13 @@ in some checkouts.
 
 ## What this is
 
-`osgx::pbr::LightSet` (C++: `src/osgx/PBR.hpp`/`src/PBR.cpp`, Python:
+`osgx::LightSet` (C++: `src/osgx/Light.hpp`/`src/Light.cpp`, Python:
 `osgx.LightSet`) is a typed direct-light rig. Per-light data
 (`osgx.MAX_LIGHTS` == 6 slots) lives in a single `std140` uniform block
 (`osgx_LightBuffer`/`osgx_lights[]`, at the `osgx::light` UBO binding slot —
-`lib.binding("osgx::light")`) plus one
-`osgx_lightCount` uniform — not parallel flat uniform arrays. Three real
+`lib.binding("osgx::light")`) — not parallel flat uniform arrays. Every slot
+starts disabled; `setPoint`/`setDirectional`/`setSpot` configure and enable one,
+`setEnabled(i, on)` toggles it, and shaders skip disabled slots. Three real
 types — Point, Directional, Spot — plus a "Sphere" light that is NOT a
 fourth type: it's `setPoint(..., sourceRadius>0)`, see below.
 
@@ -46,15 +47,14 @@ exactly one place instead of being hand-copied into every consumer's
 depth-tested marker geometry for point/sphere/spot, plus a non-depth-tested
 overlay for directional (which has no position to place a marker at). Both
 take a live `osgx.LightSet` directly and read it through its typed
-accessors (`getCount`/`getType`/`getPosIntensity`/`getColor`/`getDirection`/
+accessors (`getEnabled`/`getType`/`getPosIntensity`/`getColor`/`getDirection`/
 `getSpotAngles`/`getSourceRadius`).
 
 ## Minimal live REPL setup
 
 ```python
-lights = osgx.LightSet.create(root.stateSet)  # allocates the uniform-block buffer (size MAX_LIGHTS, zero-initialized) + osgx_lightCount on root.stateSet
-
-lights.setCount(1)  # how many of the 6 slots osgx_DirectLighting()'s loop actually reads this frame
+lights = osgx.LightSet()  # MAX_LIGHTS slots, all disabled
+root.stateSet.attributes.append(lights)
 
 # Point -- inverse-square falloff, ideal (zero-size) specular highlight
 lights.setPoint(0, osg.Vec3(2.5, -2.5, 6.0), osg.Vec3(0.85, 0.55, 0.30), 12.0)
@@ -79,30 +79,19 @@ lights.setPoint(0, osg.Vec3(2.5, -2.5, 6.0), osg.Vec3(0.85, 0.55, 0.30), 12.0, s
 lights.getType(0), lights.getPosIntensity(0), lights.getColor(0), lights.getSourceRadius(0)
 ```
 
-`LightSet.create()` REPLACES the uniform-block buffer + `osgx_lightCount` on that
-StateSet — don't call it twice on the same live StateSet if you've already
-populated lights there, or you'll zero it out. To WRAP an already-populated
-StateSet's LightSet instead, construct `osgx.LightSet()` and set `.ss`
-directly — `LightSet` has exactly one field (`ss`); the setters/getters
-mutate the buffer/uniforms that `ss` already carries, there is no separate
-`.lights` handle to assign:
-
-```python
-lights = osgx.LightSet()
-lights.ss = already_populated_stateset
-```
+`LightSet` is a `StateAttribute`: attach one instance to any number of StateSets
+to share the same lights, and mutate it live through the setters.
 
 A rig-building helper (`pyosg-match4-dice.py`'s `add_torch_rig()`):
 
 ```python
 def add_torch_rig(stateset, torches):
 	"""Build an osgx.LightSet on `stateset` from (position, intensity, color) tuples."""
-	lights = osgx.LightSet.create(stateset)
+	lights = osgx.LightSet()
+	stateset.attributes.append(lights)
 
 	for i, (pos, intensity, color) in enumerate(torches):
 		lights.setPoint(i, osg.Vec3(*pos), osg.Vec3(*color), intensity)
-
-	lights.setCount(len(torches))
 
 	return lights
 ```
@@ -157,7 +146,7 @@ sliders scoped per section:
 ```python
 import math
 
-active_slot = 0  # the ONLY light -- lightCount stays 0 until a section is Activated
+active_slot = 0  # the ONLY light -- disabled until a section is Activated
 
 class LightsState:
 	def __init__(self):
@@ -171,9 +160,8 @@ state = LightsState()
 
 def apply_state():
 	if state.active_demo is None:
-		lights.setCount(0)
+		lights.setEnabled(active_slot, False)
 		return
-	lights.setCount(1)
 	if state.active_demo == "Point":
 		lights.setPoint(active_slot, osg.Vec3(*state.point_position), osg.Vec3(*state.point_color), state.point_intensity)
 	# ... Directional -> setDirectional, Sphere -> setPoint(..., sourceRadius=...), Spot -> setSpot(...)
@@ -197,7 +185,8 @@ def point_section(ri):  # addSection()'s callback always takes one osg.RenderInf
 # Cone (deg), Source Radius, and clamps inner < outer so GLSL's
 # smoothstep(cos(outer), cos(inner), ...) stays well-formed).
 
-lights = osgx.LightSet.create(root.stateSet)
+lights = osgx.LightSet()
+root.stateSet.attributes.append(lights)
 gizmos = osgx.LightGizmos(lights, root, 0.4, 10.0)
 root.children.append(gizmos)
 

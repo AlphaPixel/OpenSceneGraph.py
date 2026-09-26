@@ -784,6 +784,25 @@ class ViewerREPLController(MainLoopController):
 
 		return request
 
+	def complete(self, request, max_frames=10):
+		"""Render frames synchronously until *request* resolves, then return its result.
+
+		Use this instead of `await request` under the ipykernel backend: the kernel's GUI
+		integration only renders between shell messages, so a cell awaiting a capture blocks
+		the very frames that would fulfill it. Works identically under terminal IPython.
+		"""
+
+		for _ in range(max_frames):
+			if request.done:
+				break
+
+			self._step_once()
+
+		if not request.done:
+			raise TimeoutError(f"capture not fulfilled after {max_frames} frames")
+
+		return request.result()
+
 	def _capture_metadata(self, request, image, data_type):
 		frame_stamp = self.viewer.frameStamp
 

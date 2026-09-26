@@ -1018,12 +1018,6 @@ def build_scene(w, h):
 	lights = osgx.LightSet()
 	lighting_cam.stateSet.attributes.append(lights)
 
-	if args.lights:
-		lights.count = 1
-
-	else:
-		lights.count = 0
-
 	light_orbit = LightOrbit(
 		lights, shadow_map, shadow_options, bound_center, bound_radius, KEY_LIGHT_COLOR, KEY_LIGHT_INTENSITY
 	) if args.lights else None

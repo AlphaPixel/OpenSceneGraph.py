@@ -220,24 +220,14 @@ def build_scene(w, h):
 	main_group = osg.Group()
 	mg_ss = main_group.stateSet
 
-	# LightSet must live on the SAME StateSet as the Program that actually calls
-	# osgx_DirectLighting() (model's own StateSet, wired by PBRScene.create() below - not
-	# main_group, an ancestor) - osgx::LightSet::apply() pushes osgx_lightCount to whatever
-	# Program is CURRENTLY bound at the moment it runs, so attaching it on an ancestor pushes to
-	# whatever (stale/unrelated) program was bound before this subtree even started descending.
-	# Confirmed root cause + osgx-level fix 2026-09-03 (see 08-shadows.py's own history); the
-	# floor's Program gets the same shared `lights` object attached to ITS OWN StateSet below.
+	# One LightSet, shared by the model's StateSet here and the floor's below.
 	lights = osgx.LightSet()
 	model.stateSet.attributes.append(lights)
 
 	if args.lights:
-		lights.count = 3
 		lights.setPoint(0, KEY_LIGHT_POS, osg.Vec3(1.0, 0.9, 0.7), 1.6)
 		lights.setPoint(1, FILL_LIGHT_POS_0, osg.Vec3(0.3, 0.5, 1.0), 1.2)
 		lights.setPoint(2, FILL_LIGHT_POS_1, osg.Vec3(1.0, 0.5, 0.2), 1.0)
-
-	else:
-		lights.count = 0
 
 	# --- Shadow map (Step 8's rig, unchanged) ---------------------------------- #
 	# Only built when there's a light to cast it - with --no-lights there's no direct-light term

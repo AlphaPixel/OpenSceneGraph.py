@@ -99,21 +99,18 @@ void main() {
 HUD_FRAGMENT_SHADER = """
 #version 330 core
 
+// osgx_LinearizeDepth(depth, projection): depth buffer value -> camera-space Z distance.
+#pragma osgx::projection DEPTH
+
 uniform sampler2D colorTex;
 uniform sampler2D depthTex;
-uniform float znear;
-uniform float zfar;
+
+// The projection the RTT camera actually rendered its depth with (see build_scene()).
+uniform mat4 osgx_depthProjection;
 
 in vec2 uv;
 
 out vec4 color;
-
-// Convert depth buffer value -> camera-space Z distance.
-float linearizeDepth(float d, float near, float far) {
-	float z = d * 2.0 - 1.0;
-
-	return (2.0 * near * far) / (far + near - z * (far - near));
-}
 
 void main() {
 	vec4 c = texture(colorTex, uv);
@@ -129,11 +126,11 @@ void main() {
 	float dD = texture(depthTex, uv + vec2(0.0, -texel.y)).r;
 
 	// Linearize them all so edges are consistent across depth range
-	float z = linearizeDepth(d, znear, zfar);
-	float zL = linearizeDepth(dL, znear, zfar);
-	float zR = linearizeDepth(dR, znear, zfar);
-	float zU = linearizeDepth(dU, znear, zfar);
-	float zD = linearizeDepth(dD, znear, zfar);
+	float z = osgx_LinearizeDepth(d, osgx_depthProjection);
+	float zL = osgx_LinearizeDepth(dL, osgx_depthProjection);
+	float zR = osgx_LinearizeDepth(dR, osgx_depthProjection);
+	float zU = osgx_LinearizeDepth(dU, osgx_depthProjection);
+	float zD = osgx_LinearizeDepth(dD, osgx_depthProjection);
 
 	// Sobel-ish edge detection on linearized depth
 	float edgeH = abs(zL - zR);
@@ -273,7 +270,7 @@ def create_hud_camera(cb, db):
 	# and each object's constructor chooses which key/value pairs are appropriate for it.
 	p = osg.Program(name="hudProgram", shaders=(
 		osg.Shader(osg.Shader.VERTEX, HUD_VERTEX_SHADER),
-		osg.Shader(osg.Shader.FRAGMENT, HUD_FRAGMENT_SHADER)
+		osg.Shader(osg.Shader.FRAGMENT, osgx.resolveShaderLibs(HUD_FRAGMENT_SHADER))
 	))
 
 	g.stateSet.attributes.append(p)
@@ -291,37 +288,17 @@ def build_scene(w, h):
 	# This is how the RTT camera "knows" what to render...
 	rttCam.children.append(create_scene())
 
-	znear = osg.Uniform("znear", 0.0)
-	zfar = osg.Uniform("zfar", 0.0)
+	# OSG recomputes each camera's near/far every frame (based on what it culls) so the depth range
+	# has as much precision as possible, and it does so on the RTT camera's own private copy of the
+	# projection - neither the viewer camera's projectionMatrix nor the HUD camera's own
+	# osg_ProjectionMatrix is the matrix the depth was written with. osgx.DepthProjectionCallback,
+	# run right after the RTT camera draws, records that exact matrix into a uniform the HUD pass
+	# reads (osgx_depthProjection above). MANY post-processing techniques rely on linearizing depth
+	# correctly, so it's important to use the projection that actually produced it.
+	depth_projection = osgx.DepthProjectionCallback()
 
-	hudCam.stateSet.uniforms.extend((znear, zfar))
-
-	# Injects the proper near/far Z values into our `Program` state every frame. OSG
-	# recomputes the znear/zfar every frame (based on its `CameraManipulator`) so that the
-	# resultant depth range has as much precision as possible. MANY post-processing
-	# techniques rely on being able to properly query and/or "linearize" depth values, so
-	# it's important that you're always working with accurate values.
-	#
-	# state.projectionMatrix (osg::State::getProjectionMatrix()) is a SHARED per-context
-	# value, not scoped to whichever camera's callback reads it - it reflects whatever was
-	# LAST applied to the GL state, not necessarily this camera's own matrix. rttCam is
-	# PRE_RENDER (draws FIRST each frame), so attaching this callback there would read a
-	# STALE value left over from the END of the previous frame (hudCam's own identity
-	# projectionMatrix, since hudCam draws last) - confirmed the hard way on pyosg-mrt.py's
-	# equivalent gbuffer_cam (see [[project_pyosg_examples_runner]] memory): garbage
-	# near/far, and inverse(identity) breaking anything relying on invProjectionMatrix.
-	# hudCam is POST_RENDER (draws LAST), so by the time ITS preDrawCallback fires, the real
-	# viewer camera has already drawn in between and applied its real, this-frame-fresh
-	# projection - the same timing guarantee this used to get directly from the caller's own
-	# v.camera.preDrawCallback, without build_scene() needing a viewer reference at all.
-	def update_uniforms(ri):
-		pm = ri.state.projectionMatrix
-		fovy, aspect, near, far = pm.getPerspective()
-
-		hudCam.stateSet.uniforms["znear"] = float(near)
-		hudCam.stateSet.uniforms["zfar"] = float(far)
-
-	hudCam.preDrawCallback = update_uniforms
+	rttCam.postDrawCallback = depth_projection
+	hudCam.stateSet.uniforms.append(depth_projection.projection)
 
 	root = osg.Group()
 	root.children.extend((rttCam, hudCam))
@@ -331,6 +308,9 @@ def build_scene(w, h):
 if __name__ == "__main__":
 	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)
 
+	# osgx's shader libraries (osgx.resolveShaderLibs()) need a live osgx.Library; keep it
+	# referenced until the viewer is done.
+	lib = osgx.initialize()
 	v = osgViewer.Viewer()
 
 	v.sceneData = build_scene(800, 600)
