@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-"""Offscreen (pbuffer) rendering for the examples, with no dependency beyond OpenSceneGraph itself
-(osgx optional, for EGL). Two entry points:
+"""Offscreen (pbuffer) rendering for the examples, using osgx.headless for context creation. Two
+entry points:
 
 - headless_viewer(): an osgViewer.Viewer already rendering into a pbuffer (pyosg_repl re-exports it
   for aipython sessions).
@@ -30,15 +30,6 @@ BACKEND_ALIASES = {"glx": "native", "wgl": "native", "cocoa": "native", "auto": 
 DEFAULT_FRAMES = 10
 GL_VENDOR, GL_RENDERER, GL_VERSION = 0x1F00, 0x1F01, 0x1F02
 
-def _egl_window_factory():
-	try:
-		import osgx
-
-	except ImportError:
-		return None
-
-	return getattr(osgx.platform, "createEGLWindow", None)
-
 def resolve_backend(backend):
 	"""Normalize a backend name (aliases included) to "egl", "native" or None (auto)."""
 
@@ -54,10 +45,9 @@ def resolve_backend(backend):
 def create_context(width, height, samples=None, backend=None):
 	"""Create a pbuffer GraphicsContext; returns (gc, backend actually used).
 
-	`backend` is "egl" (osgx.platform.createEGLWindow: Linux, osgx built with OSGX_WITH_EGL, no
-	display or window system needed), "native" (OSG's per-platform pbuffer via
-	osg.GraphicsContext.createGraphicsContext: WGL on Windows, Cocoa on macOS, GLX on Linux - which
-	needs an X display) or None ("egl" when available, otherwise "native").
+	`backend` is "egl" (osgx built with OSGX_WITH_EGL, no display or window system needed), "native"
+	(OSG's per-platform pbuffer: WGL on Windows, Cocoa on macOS, GLX on Linux - which needs an X
+	display) or None ("egl" when available, otherwise "native").
 
 	The GL context version/profile/flags and MSAA sample count come from osg.DisplaySettings.instance
 	(and so from OSG_GL_CONTEXT_VERSION, OSG_GL_CONTEXT_PROFILE_MASK, OSG_MULTI_SAMPLES, ...), as for a
@@ -65,47 +55,25 @@ def create_context(width, height, samples=None, backend=None):
 	"""
 
 	backend = resolve_backend(backend)
-	create_egl_window = _egl_window_factory() if backend != "native" else None
 
-	if backend == "egl" and create_egl_window is None:
-		raise RuntimeError("the 'egl' backend requires osgx built with OSGX_WITH_EGL")
+	try:
+		import osgx
 
-	traits = osg.GraphicsContext.Traits(osg.DisplaySettings.instance)
-	traits.width = width
-	traits.height = height
-	traits.pbuffer = True
+	except ImportError:
+		raise RuntimeError("pyosg_headless requires the osgx Python bindings") from None
 
-	# Single-buffered, so reads see what was drawn.
-	traits.doubleBuffer = False
+	backends = {
+		None: osgx.headless.Backend.Auto,
+		"egl": osgx.headless.Backend.EGL,
+		"native": osgx.headless.Backend.Native,
+	}
+	context = osgx.headless.createContext(width, height, samples, backends[backend])
+	actual = {
+		osgx.headless.Backend.EGL: "egl",
+		osgx.headless.Backend.Native: "native",
+	}[context.backend]
 
-	if samples is not None:
-		traits.sampleBuffers = 1 if samples else 0
-		traits.samples = samples
-
-	if create_egl_window is not None:
-		backend = "egl"
-		gc = create_egl_window(traits)
-
-	else:
-		backend = "native"
-
-		# The X11 implementation targets hostName:displayNum.screenNum; elsewhere this is unused.
-		traits.readDISPLAY()
-
-		gc = osg.GraphicsContext.createGraphicsContext(traits)
-
-	if gc is None or not gc.valid():
-		hint = ""
-
-		if backend == "native" and os.name == "nt":
-			hint = " (needs WGL_ARB_pbuffer - Microsoft's GDI Generic GL 1.1 has none)"
-
-		elif backend == "native" and sys.platform.startswith("linux"):
-			hint = " (GLX needs an X display - is DISPLAY set? The 'egl' backend doesn't)"
-
-		raise RuntimeError(f"{backend} pbuffer context could not be created{hint}")
-
-	return gc, backend
+	return context.graphicsContext, actual
 
 def _setup_camera(camera, gc, width, height):
 	camera.graphicsContext = gc

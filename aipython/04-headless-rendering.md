@@ -9,9 +9,12 @@ Sibling doc: [`03-headless-frames.md`](03-headless-frames.md) covers testing
 callbacks/events with **no GL context at all**. Use this doc when the thing
 under test needs cull + draw + pixels.
 
-Requirements: Linux, `osgx` built with `OSGX_WITH_EGL` (check
-`hasattr(osgx.platform, "createEGLWindow")`), an EGL driver with the device
-platform (verified on NVIDIA; Mesa should work but is unverified).
+Requirements: Linux, current `osgx` Python bindings with
+`osgx.headless.createContext()` and `OSGX_WITH_EGL`, plus an EGL driver with
+the device platform (verified on NVIDIA; Mesa should work but is unverified).
+`createContext()` owns pbuffer/backend selection; it prefers EGL, so no X
+server or `DISPLAY` is needed. The `native` backend remains available for the
+platform pbuffer path (GLX on Linux, which does need X).
 
 ## The recipe (identical on kernel and tmux backends)
 
@@ -22,9 +25,11 @@ os.environ["OSG_THREADING"] = "SingleThreaded"
 sys.path[:0] = ["/abs/.../BUILD-g++-13.3.0-NOASAN", "/abs/.../OpenSceneGraph.py/examples"]
 
 from OpenSceneGraph import *
+import osgx
 import pyosg_repl
 
-viewer = pyosg_repl.headless_viewer(640, 480)  # EGL pbuffer, viewport + perspective set
+assert hasattr(osgx, "headless") and hasattr(osgx.headless, "createContext")
+viewer = pyosg_repl.headless_viewer(640, 480)  # osgx EGL pbuffer, viewport + perspective set
 viewer.sceneData = scene
 viewer.camera.viewMatrix = osg.Matrixd.lookAt(eye, center, up)  # or a cameraManipulator
 
@@ -40,6 +45,12 @@ result = ctl.complete(ctl.capture_framebuffer("/abs/path/check.png", label="what
 
 …and Read `/abs/path/check.png`. `result` has `size`, `frame_number`,
 `label`, etc. Use absolute paths — the session's cwd is not yours.
+
+`pyosg_headless` keeps the Python-specific viewer replacement, frame loop,
+and PNG capture, but its `create_context()` delegates to
+`osgx.headless.createContext()`. That is the same native/EGL selection used by
+the lower-level osgX API; `headless_viewer()` still returns the ordinary OSG
+viewer configured with the resulting graphics context.
 
 The canonical, test-proven version of this setup is
 `test/aipython_scene.py:setup_source()`; `test/osg_aipython_kernel.py` and
@@ -170,11 +181,11 @@ are not. Pick the cheapest check that actually answers the question:
 - **Time-driven effects**: freeze them before capturing
   (`18-deterministic-captures.md`); with no vsync, headless frames run
   uncapped and "N frames later" means very little wall time.
-- **Build vs installed libs** still apply (osgx `aipython/00-index.md`):
-  a stale `~/local` `libosgxd.so` without the pbuffer path ignores
-  `traits.pbuffer`, tries (and, with `DISPLAY` unset, fails) to open an X11
-  window, and `headless_viewer()` raises "EGL pbuffer context could not be
-  created".
+- **Build vs installed libs** still apply (osgx `aipython/00-index.md`): a
+  stale `~/local` Python module may lack `osgx.headless` or its
+  `createContext()` binding. Put the current osgX build first on `sys.path`;
+  `pyosg_headless` then fails early with a binding error instead of silently
+  taking a separate context-creation path.
 
 ## When NOT to render
 

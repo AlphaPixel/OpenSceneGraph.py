@@ -146,4 +146,6 @@ before accepting it on the root.
   GL state.
 
 Headless simulation covers event and update traversal only — it is not fake
-rendering.
+rendering. For the latter, use the binding-backed pbuffer recipe in
+[`04-headless-rendering.md`](04-headless-rendering.md): `pyosg_headless` gets
+the context from `osgx.headless.createContext()`.

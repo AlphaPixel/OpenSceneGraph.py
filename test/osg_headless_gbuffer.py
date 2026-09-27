@@ -19,6 +19,9 @@ from .aipython_scene import EXAMPLES, build_dir
 
 osgx = pytest.importorskip("osgx")
 
+if not hasattr(osgx, "headless") or not hasattr(osgx.headless, "createContext"):
+	pytest.skip("osgx built without the osgx.headless Python binding", allow_module_level=True)
+
 if not hasattr(osgx.platform, "createEGLWindow"):
 	pytest.skip("osgx built without OSGX_WITH_EGL", allow_module_level=True)
 
