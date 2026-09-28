@@ -4,7 +4,7 @@
 it works with an ordinary `osg.ShapeDrawable`, provided the drawable carries
 an `osgx.Material` (see [`29-material.md`](29-material.md)) — a real
 `StateAttribute` whose buffer (`osgx_materialInputs`) the renderer reads. The
-light sources are all optional, passed in `osgx.PBRSceneOptions`: an
+light sources are all optional, passed in `osgx.PBRScene.Options`: an
 `osgx.Environment` (image-based light: specular + diffuse cubemaps + BRDF LUT,
 owned by the caller and shareable between scenes), an `osgx.ShadowMap`, plus
 whatever `osgx.LightSet` direct lights the scene graph carries. Without an
@@ -32,7 +32,7 @@ environment = osgx.gltf.loadEnvironment(
 if environment is None:
 	raise RuntimeError("failed to load PBR/IBL environment")
 
-pbr = osgx.PBRScene.create(geode, osgx.PBRSceneOptions(environment=environment))
+pbr = osgx.PBRScene.create(geode, osgx.PBRScene.Options(environment=environment))
 
 if not pbr.valid():
 	raise RuntimeError("PBR/IBL setup failed")
@@ -90,7 +90,7 @@ environment = osgx.gltf.loadEnvironment(
 if environment is None:
 	raise RuntimeError("failed to load PBR/IBL environment")
 
-pbr = osgx.PBRScene.create(geode, osgx.PBRSceneOptions(environment=environment))
+pbr = osgx.PBRScene.create(geode, osgx.PBRScene.Options(environment=environment))
 
 if not pbr.valid():
 	raise RuntimeError("failed to apply PBR/IBL environment")
@@ -108,7 +108,7 @@ The material attached to `drawable` does not need to be rebuilt.
 
 ## Extra `PBRScene.create()` options
 
-`osgx.PBRSceneOptions(environment=None, shadowMap=None, hooks={}, diagnostics=False)`:
+`osgx.PBRScene.Options(environment=None, shadowMap=None, hooks={}, diagnostics=False)`:
 
 - `diagnostics=True` builds `pbr.debugMode` for switching between
   combined/diffuse/specular/normal/roughness/diffuse-IBL-only visualizations
@@ -128,7 +128,7 @@ The material attached to `drawable` does not need to be rebuilt.
 There is also a deferred, G-buffer-split path for scenes with many lights —
 `PBRGBuffer.create(node, width, height)` (material-only geometry pass) →
 `PBRLightingPass.create(gbuffer, mainCamera,
-osgx.PBRLightingPassOptions(environment=environment, ...))` (lighting pass
+osgx.PBRLightingPass.Options(environment=environment, ...))` (lighting pass
 reading the G-buffer) — see [`12-gbuffer.md`](12-gbuffer.md); reach for it only
 once a scene's light count/overdraw makes the single-pass `PBRScene` genuinely
 too expensive.

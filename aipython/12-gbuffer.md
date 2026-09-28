@@ -24,7 +24,7 @@ an FBO camera.
    specialized wrapper around `osgx.GBuffer`. It owns the same RTT geometry
    pass but writes the fixed PBR material layout. Feed it to
    `PBRLightingPass.create(gbuffer, mainCamera, options)` (the environment goes in
-   `osgx.PBRLightingPassOptions(environment=...)`) for
+   `osgx.PBRLightingPass.Options(environment=...)`) for
    the terminal fullscreen PBR/IBL pass. The example selects this path when
    `--env manifest.gltf` or `--hdr environment.hdr` is present; with neither,
    it demonstrates the generic path. This path's shaders require the

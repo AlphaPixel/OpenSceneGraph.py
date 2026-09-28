@@ -289,7 +289,7 @@ def build_scene(w, h):
 		raise RuntimeError(f"failed to prepare PBR IBL resources for {environment_description}")
 
 	pbr = osgx.PBRScene.create(
-		model, osgx.PBRSceneOptions(environment=environment, diagnostics=diagnostics)
+		model, osgx.PBRScene.Options(environment=environment, diagnostics=diagnostics)
 	)
 
 	if not pbr.valid():

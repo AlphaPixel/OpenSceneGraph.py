@@ -13,10 +13,10 @@
 # specular cubemap all LIVE from one equirectangular .hdr, via a handful of PRE_RENDER passes
 # added to the scene graph (environment.bakeRoot). No .ktx2 pre-bake step needed.
 #
-# osgx.PBRScene.create(node, osgx.PBRSceneOptions(environment=..., shadowMap=...)) - wires the
+# osgx.PBRScene.create(node, osgx.PBRScene.Options(environment=..., shadowMap=...)) - wires the
 # whole thing (material + IBL + optional direct lights + optional shadow) onto node's own StateSet
 # with one call. Direct lights still come from osgx.LightSet exactly as Step 8 introduced; passing
-# a shadowMap here is the same osgx.ShadowMap Step 8 built, just handed to PBRSceneOptions instead
+# a shadowMap here is the same osgx.ShadowMap Step 8 built, just handed to PBRScene.Options instead
 # of wired by hand.
 #
 # The floor is NOT glTF - it's still a hand-rolled osgx_Material + osgx_DirectLighting() call
@@ -242,7 +242,7 @@ def build_scene(w, h):
 		shadow_map.camera.children.append(model)
 
 	# --- glTF PBR/IBL scene ---------------------------------------------------- #
-	pbr = osgx.PBRScene.create(model, osgx.PBRSceneOptions(
+	pbr = osgx.PBRScene.create(model, osgx.PBRScene.Options(
 		environment=environment,
 		shadowMap=shadow_map,
 		diagnostics=args.diagnostics

@@ -250,7 +250,7 @@ def build_sweep_scene(args):
 	# the Program PBRScene.create() attaches here coexist on the same StateSet without
 	# conflict - different StateAttribute::Type/member slots (LightSet is Type.CAPABILITY
 	# member=1, Material is member=0, Program is its own Type entirely).
-	pbr = osgx.PBRScene.create(shapes, osgx.PBRSceneOptions(environment=environment))
+	pbr = osgx.PBRScene.create(shapes, osgx.PBRScene.Options(environment=environment))
 
 	if not pbr.valid():
 		raise RuntimeError("failed to apply PBR/IBL environment")

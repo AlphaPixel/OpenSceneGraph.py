@@ -14,7 +14,7 @@
 # is comparing tonemap curves live, which doesn't fit the (link-time-only) osgx_Tonemap() hook. SSAO
 # itself is a SECOND, smaller pivot (2026-08-21, after osgx.SSAO shipped, ported straight
 # from this file's own proven-live hand-rolled version) - no longer hand-rolled Python either, see
-# the "--- SSAO ---" section below and PBRLightingPassOptions.aoTexture's own doc comment.
+# the "--- SSAO ---" section below and PBRLightingPass.Options.aoTexture's own doc comment.
 #
 # Real, human-visible tradeoffs from this pivot, called out up front rather than discovered later:
 # - The 0-9 raw-channel/lighting-term debug views are gone, replaced by a smaller 0-6 set (see
@@ -944,7 +944,7 @@ def build_scene(w, h):
 
 	# --- Shadow map (Step 8's rig, now orthographic/depth-only-override/repositionable) --- #
 	shadow_map = None
-	shadow_options = osgx.ShadowMapOptions()
+	shadow_options = osgx.ShadowMap.Options()
 
 	if args.floor:
 		# A room needs the shadow frustum to cover more than the model's own casting bound, or
@@ -980,7 +980,7 @@ def build_scene(w, h):
 		sys.exit("Failed to build the SSAO pass")
 
 	# --- Deferred lighting pass -------------------------------------------------- #
-	lighting_options = osgx.PBRLightingPassOptions()
+	lighting_options = osgx.PBRLightingPass.Options()
 
 	lighting_options.tonemap = False # bloom needs pre-tonemap linear HDR; final_cam tonemaps
 	lighting_options.shadowMap = shadow_map

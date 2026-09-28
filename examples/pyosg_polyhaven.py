@@ -583,14 +583,14 @@ def configure_hdr(viewer, root, args):
 		f"({args.prefilter_size}x{args.prefilter_size}, {args.samples} samples)..."
 	)
 
-	options = osgx.GGXPrefilterOptions()
+	options = osgx.GGXPrefilter.Options()
 
 	options.prefilterSize = args.prefilter_size
 	options.sampleCount = args.samples
 	options.maxFrames = args.max_frames
 	options.readbackFrame = 2
 
-	bake_scene = osgx.GGXPrefilterScene.create(image, options)
+	bake_scene = osgx.GGXPrefilter.create(image, options)
 
 	root.children.append(bake_scene.root)
 	viewer.camera.postDrawCallback = bake_scene.readback

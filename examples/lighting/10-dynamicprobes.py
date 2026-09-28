@@ -14,7 +14,7 @@
 # Since specular here is ALWAYS procedural (the very first frame already fires a repaint - see
 # ProbeRebaker below), baking a real GGX-prefiltered specular cubemap from --hdr at startup would
 # be pure waste: real work thrown away before a single frame ever samples it. So --hdr builds the
-# Environment with EnvironmentBakeOptions.bakeSpecular = False - diffuse irradiance and the BRDF
+# Environment with Environment.BakeOptions.bakeSpecular = False - diffuse irradiance and the BRDF
 # LUT still bake for real, specular starts as an unbaked placeholder and is immediately replaced
 # by the first procedural repaint. --env
 # (a fully pre-baked manifest) has no such waste to avoid - its specular is a cheap KTX2 load,
@@ -27,7 +27,7 @@
 # real HDR to contribute there either. This is what lets --env work stand alone, with no local
 # .hdr file needed at all.
 #
-# This is sync/stalling (GGXPrefilterOptions.syncReadback, still the only mode implemented), not
+# This is sync/stalling (GGXPrefilter.Options.syncReadback, still the only mode implemented), not
 # an async capture-from-live-scene mode - per the user, "it's enough to show that it CAN change
 # dynamically, even if it's not perfect or async."
 #
@@ -255,13 +255,13 @@ class ProbeRebaker(osgGA.GUIEventHandler):
 		baked_image = paint_random_faces(self.base_image, self.color_source)
 
 		if self.scene is None:
-			options = osgx.GGXPrefilterOptions()
+			options = osgx.GGXPrefilter.Options()
 			options.prefilterSize = self.prefilter_size
 			options.maxFrames = 8
 			options.readbackFrame = 2
 			self.options = options
 
-			self.scene = osgx.GGXPrefilterScene.create(baked_image, options)
+			self.scene = osgx.GGXPrefilter.create(baked_image, options)
 			self.scene.root.nodeMask = 0
 			self.root.children.append(self.scene.root)
 
@@ -450,7 +450,7 @@ def build_scene(w, h):
 			sys.exit(f"Cannot find HDR {args.hdr!r} - check OSG_FILE_PATH")
 
 		# bakeSpecular=False: specular comes from ProbeRebaker's live bakes, not the HDR.
-		options = osgx.EnvironmentBakeOptions()
+		options = osgx.Environment.BakeOptions()
 		options.bakeSpecular = False
 
 		environment = osgx.Environment(osgDB.readImageFile(str(hdr_path)), options)
@@ -499,7 +499,7 @@ def build_scene(w, h):
 		shadow_map.camera.children.append(model)
 
 	# --- glTF PBR/IBL scene ---------------------------------------------------- #
-	pbr = osgx.PBRScene.create(model, osgx.PBRSceneOptions(
+	pbr = osgx.PBRScene.create(model, osgx.PBRScene.Options(
 		environment=environment,
 		shadowMap=shadow_map
 	))

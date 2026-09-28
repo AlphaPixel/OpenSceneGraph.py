@@ -25,7 +25,7 @@ the gradient itself visibly shifts too, that's a real bug in the "rotation never
 up/down" invariant, not a rendering quirk.
 
 Deliberately bypasses osgx's real bake pipeline (computeLambertianCubeMap/
-GGXPrefilterScene.create both take an equirectangular osg.Image, not a cubemap already
+GGXPrefilter.create both take an equirectangular osg.Image, not a cubemap already
 in face-space) - this hand-fills 6 gradient faces directly (see direction_for_face(),
 the standard per-face inverse-cubemap-projection formulas), wraps it in an osgx.Environment
 (as both specular and diffuse map), and samples it with a plain mirror reflection (no

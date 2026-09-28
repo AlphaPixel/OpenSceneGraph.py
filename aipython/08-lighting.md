@@ -102,7 +102,7 @@ environment = osgx.gltf.loadEnvironment("papermill.gltf")
 if environment is None:
 	raise RuntimeError("failed to load PBR/IBL environment")
 
-scene = osgx.PBRScene.create(model, osgx.PBRSceneOptions(environment=environment))
+scene = osgx.PBRScene.create(model, osgx.PBRScene.Options(environment=environment))
 
 if not scene.valid():
 	raise RuntimeError("PBR/IBL setup failed")
