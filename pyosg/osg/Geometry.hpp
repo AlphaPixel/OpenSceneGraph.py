@@ -183,6 +183,40 @@ namespace detail {
 			);
 		}
 	};
+
+	// Shared by every DrawElements{UByte,UShort,UInt} binding, mirroring bind_Array<T>'s shape
+	// (Array.hpp) for the same reason: one generic buffer-backed constructor instead of three
+	// near-identical hand-written ones. The (mode, count, ptr) constructor every DrawElements
+	// subclass already defines is what makes this work with no DrawElements-level virtual
+	// needed, and no manual resize()+copy on our end - OSG's own ctor does that.
+	template<typename T>
+	auto bind_DrawElements(py::module_& m, const char* name) {
+		using ElementT = typename T::vector_type::value_type;
+
+		return py::class_<T, osg::PrimitiveSet, osg::ref_ptr<T>>(
+			m,
+			name,
+			"A PrimitiveSet that draws explicit vertex indices rather than a contiguous run."
+		)
+			.def(py::init<GLenum>(), "mode"_a=0, "Create an empty set with the given draw mode.")
+			.def(py::init([](GLenum mode, py::buffer data) {
+				py::buffer_info info = data.request();
+
+				if(info.format != py::format_descriptor<ElementT>::format()) throw py::type_error(
+					"Expected a buffer of " + std::to_string(sizeof(ElementT)) + "-byte elements"
+				);
+
+				size_t count = 1;
+
+				for(auto dim : info.shape) count *= static_cast<size_t>(dim);
+
+				return new T(mode, static_cast<unsigned int>(count), static_cast<const ElementT*>(info.ptr));
+			}), "mode"_a, "data"_a,
+				"Create a set with the given draw mode, copying every index from a buffer "
+				"(e.g. a numpy array, flat or (N, k)-shaped) matching this type's index width."
+			)
+		;
+	}
 }
 
 void bind_Geometry(py::module_& m);

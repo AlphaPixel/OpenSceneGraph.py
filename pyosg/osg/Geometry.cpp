@@ -163,6 +163,10 @@ void bind_Geometry(py::module_& m) {
 		)
 	;
 
+	detail::bind_DrawElements<osg::DrawElementsUByte>(m, "DrawElementsUByte");
+	detail::bind_DrawElements<osg::DrawElementsUShort>(m, "DrawElementsUShort");
+	detail::bind_DrawElements<osg::DrawElementsUInt>(m, "DrawElementsUInt");
+
 	// virtual void setUseVertexBufferObjects(bool flag);
 	auto geom = py::class_<osg::Geometry, osg::Drawable, osg::ref_ptr<osg::Geometry>>(
 		m,
