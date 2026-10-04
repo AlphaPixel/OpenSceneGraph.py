@@ -766,9 +766,10 @@ class LightOrbit:
 	already validated live, just driven by ImGui sliders here instead of SliderFloat3.
 	"""
 
-	def __init__(self, lights, shadow_map, shadow_options, bound_center, bound_radius, color, intensity):
+	def __init__(self, lights, shadow_map, shadow_set, shadow_options, bound_center, bound_radius, color, intensity):
 		self.lights = lights
 		self.shadow_map = shadow_map
+		self.shadow_set = shadow_set
 		self.shadow_options = shadow_options
 		self.bound_center = bound_center
 		self.bound_radius = bound_radius
@@ -793,8 +794,9 @@ class LightOrbit:
 		self.lights.setDirectional(0, direction, self.color, self.intensity)
 
 		self.shadow_map.reposition(
-			direction, self.bound_center, self.bound_radius, self.shadow_options
+			direction, osgx.ShadowMap.Coverage(self.bound_center, self.bound_radius), self.shadow_options
 		)
+		self.shadow_set.sync()
 
 # Set by build_scene(), read by configure_viewer() - args and everything the ImGui panel /
 # per-frame update callback close over (lighting, ssao, shadow_map, ...) aren't retrievable from
@@ -951,12 +953,17 @@ def build_scene(w, h):
 		# the floor/walls' sample coordinates fall outside it and read as unshadowed.
 		shadow_options.extent = max(bound_radius * shadow_options.margin, args.floor_size)
 
+	shadow_set = None
+
 	if args.lights:
 		shadow_map = osgx.ShadowMap.create(
-			KEY_LIGHT_DIR, bound_center, bound_radius, shadow_options
+			KEY_LIGHT_DIR, osgx.ShadowMap.Coverage(bound_center, bound_radius), shadow_options
 		)
 
 		shadow_map.camera.children.append(model)
+
+		shadow_set = osgx.ShadowSet.create()
+		shadow_set.add(shadow_map)
 
 	# --- SSAO ---------------------------------------------------------------------------- #
 	# Built BEFORE lighting_options/PBRLightingPass.create() specifically so aoTexture can be
@@ -983,7 +990,7 @@ def build_scene(w, h):
 	lighting_options = osgx.PBRLightingPass.Options()
 
 	lighting_options.tonemap = False # bloom needs pre-tonemap linear HDR; final_cam tonemaps
-	lighting_options.shadowMap = shadow_map
+	lighting_options.shadowSet = shadow_set
 	lighting_options.aoTexture = ssao.aoTexture
 
 	lighting_options.environment = environment
@@ -1018,7 +1025,8 @@ def build_scene(w, h):
 	lighting_cam.stateSet.attributes.append(lights)
 
 	light_orbit = LightOrbit(
-		lights, shadow_map, shadow_options, bound_center, bound_radius, KEY_LIGHT_COLOR, KEY_LIGHT_INTENSITY
+		lights, shadow_map, shadow_set, shadow_options, bound_center, bound_radius,
+		KEY_LIGHT_COLOR, KEY_LIGHT_INTENSITY
 	) if args.lights else None
 
 	# --- Bloom ----------------------------------------------------------------------------- #
@@ -1154,6 +1162,7 @@ def build_scene(w, h):
 		"gbuffer": gbuffer,
 		"grid_panels": grid_panels,
 		"shadow_map": shadow_map,
+		"shadow_set": shadow_set,
 		"shadow_options": shadow_options,
 		"ssao": ssao,
 		"ssao_projection_u": ssao_projection_u,
@@ -1197,6 +1206,7 @@ def configure_viewer(viewer, root):
 	model = state["model"]
 	grid_panels = state["grid_panels"]
 	shadow_map = state["shadow_map"]
+	shadow_set = state["shadow_set"]
 	gbuffer = state["gbuffer"]
 	ssao = state["ssao"]
 	ssao_projection_u = state["ssao_projection_u"]
@@ -1378,13 +1388,17 @@ def configure_viewer(viewer, root):
 					"Shadow Strength", shadow_map.strength.value, 0.0, 1.0
 				)
 
-				if changed: shadow_map.strength.value = value
+				if changed:
+					shadow_map.strength.value = value
+					shadow_set.sync()
 
 				changed, value = osgx.imgui.slider_float(
 					"Shadow Bias", shadow_map.bias.value, 0.0, 0.02, "%.4f"
 				)
 
-				if changed: shadow_map.bias.value = value
+				if changed:
+					shadow_map.bias.value = value
+					shadow_set.sync()
 
 			gui.addSection("Shadow", draw_shadow_knobs, closed_section)
 

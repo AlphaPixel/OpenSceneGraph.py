@@ -98,10 +98,10 @@ void main() {
 # Only material reading (baseColor/normal/ORM/emissive) and the TBN reconstruction are
 # hand-rolled here - that's Step 4/5/6 material, already taught. Direct lighting is one call:
 # osgx_DirectLighting(N, V, worldPos, mat), declared by DIRECT_LIGHTING_DECL and DEFINED by a
-# separate shader object added in __main__ below (osgx.makeShadowedDirectLightingHookShader()
-# instead of osgx's unshadowed default - same call site either way, see PBR.hpp's
-# DIRECT_LIGHTING_DECL/DIRECT_LIGHTING_HOOK_DEFAULT comment for why that swap needs nothing else
-# to change here).
+# separate shader object added in __main__ below (osgx.makeDirectLightingHookShader() - always
+# the same unshadowed-looking definition now; "shadowed or not" is a SEPARATE shader object
+# defining osgx_ShadowFactorForLight(), which osgx_DirectLighting() calls internally - see
+# osgx.ShadowSet and Shadow.hpp's own comment for why that split exists).
 FRAGMENT_SHADER = """
 #version 460 core
 
@@ -274,15 +274,20 @@ def build_scene(w, h):
 
 	model = osgDB.readNodeFile(path)
 
-	# One shader object defines osgx_DirectLighting() for BOTH programs below (model and floor)
-	# - osg.Shader objects can be shared/attached to more than one Program, same as any other
-	# osgx hook shader.
-	hook_shader = osgx.makeShadowedDirectLightingHookShader()
+	# Two shader objects now (osgx_DirectLighting() is unconditionally the plain default; "shadowed
+	# or not" is the separate Hook.ShadowFactor slot) for BOTH programs below (model and floor) -
+	# osg.Shader objects can be shared/attached to more than one Program, same as any other osgx
+	# hook shader. shadow_set.create() builds its `shader` immediately (content never varies with
+	# how many maps are add()ed later) - shadow_map itself isn't built until further down, add()ed
+	# there once it exists.
+	direct_lighting_shader = osgx.makeDirectLightingHookShader()
+	shadow_set = osgx.ShadowSet.create()
 
 	p = osg.Program(name="pbr_shadow", shaders=(
 		osg.Shader(osg.Shader.VERTEX, VERTEX_SHADER),
 		osg.Shader(osg.Shader.FRAGMENT, osgx.resolveShaderLibs(FRAGMENT_SHADER)),
-		hook_shader
+		direct_lighting_shader,
+		shadow_set.shader
 	))
 	p.bindAttribLocation["osg_Tangent"] = 7
 
@@ -314,7 +319,8 @@ def build_scene(w, h):
 		floor_p = osg.Program(name="floor_shadow", shaders=(
 			osg.Shader(osg.Shader.VERTEX, FLOOR_VERTEX),
 			osg.Shader(osg.Shader.FRAGMENT, osgx.resolveShaderLibs(FLOOR_FRAGMENT)),
-			hook_shader
+			direct_lighting_shader,
+			shadow_set.shader
 		))
 		floor_geode.stateSet.attributes.append(floor_p)
 
@@ -335,7 +341,8 @@ def build_scene(w, h):
 	# LightSet attached to model's/floor's own StateSet (not main_group's, an ancestor) --
 	# matches every working osgx example (osgx-lights.cpp, osgx-shadow.cpp, 11-sketchfab.py's
 	# lighting_cam), which all keep LightSet and the Program that reads it on the exact same
-	# StateSet. Shared across both model and floor, same as hook_shader already is.
+	# StateSet. Shared across both model and floor, same as direct_lighting_shader/shadow_set.shader
+	# already are.
 	lights = osgx.LightSet()
 	ss.attributes.append(lights)
 
@@ -354,15 +361,12 @@ def build_scene(w, h):
 	bound = model.bound
 	light_dir = (bound.center - KEY_LIGHT_POS).normalized()
 
-	shadow_map = osgx.ShadowMap.create(light_dir, bound.center, bound.radius)
+	shadow_map = osgx.ShadowMap.create(light_dir, osgx.ShadowMap.Coverage(bound.center, bound.radius))
 
 	shadow_map.camera.children.append(model)
 
-	mg_ss.textureAttributes[4] = shadow_map.depthTexture
-	mg_ss.uniforms["osgx_shadowMap"] = 4
-	mg_ss.uniforms.extend((
-		shadow_map.shadowMatrix, shadow_map.bias, shadow_map.strength, shadow_map.casterIndex
-	))
+	shadow_set.add(shadow_map)
+	shadow_set.apply(mg_ss)
 
 	root = osg.Group()
 

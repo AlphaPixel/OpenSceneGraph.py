@@ -35,6 +35,7 @@ Read the others situationally:
 | [`29-material.md`](29-material.md) | Setting a PBR material (base color/roughness/metallic/maps) on any Drawable via `osgx.Material` — a real `osg.StateAttribute`. Read before `30-pbr.md` if you just need factors on a shape, no full IBL renderer. |
 | [`30-pbr.md`](30-pbr.md) | Applying `osgx.PBRScene` (forward PBR, optional environment/shadow light sources) to ordinary OSG geometry such as `ShapeDrawable`. |
 | [`40-typed-lights-gizmos.md`](40-typed-lights-gizmos.md) | Adding typed direct/punctual lights (`osgx.LightSet` — Point/Directional/Spot/Sphere) and their debug gizmos (`osgx.LightGizmos`/`osgx.LightMarkers`) to a live scene; also documents the `osgx_DirectLighting()` hook contract every direct-lit shader should call into. |
+| [`41-shadows.md`](41-shadows.md) | Shadowing a light (`osgx.ShadowMap`/`osgx.ShadowSet`) — directional/spot/point, any combination simultaneously, and wiring the separate `Hook.ShadowFactor` shader contract. Read before adding `shadowSet=` to `osgx.PBRScene.Options`/`osgx.PBRLightingPass.Options`, or before any live light-repositioning code (`ShadowSet.sync()` gotcha). |
 
 ## Why this exists as `aipython/*.md` and not a Claude Code skill
 

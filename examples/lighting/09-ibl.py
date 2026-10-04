@@ -13,11 +13,11 @@
 # specular cubemap all LIVE from one equirectangular .hdr, via a handful of PRE_RENDER passes
 # added to the scene graph (environment.bakeRoot). No .ktx2 pre-bake step needed.
 #
-# osgx.PBRScene.create(node, osgx.PBRScene.Options(environment=..., shadowMap=...)) - wires the
+# osgx.PBRScene.create(node, osgx.PBRScene.Options(environment=..., shadowSet=...)) - wires the
 # whole thing (material + IBL + optional direct lights + optional shadow) onto node's own StateSet
-# with one call. Direct lights still come from osgx.LightSet exactly as Step 8 introduced; passing
-# a shadowMap here is the same osgx.ShadowMap Step 8 built, just handed to PBRScene.Options instead
-# of wired by hand.
+# with one call. Direct lights still come from osgx.LightSet exactly as Step 8 introduced; the
+# shadowSet here is an osgx.ShadowSet wrapping the same osgx.ShadowMap Step 8 built, just handed to
+# PBRScene.Options instead of wired by hand.
 #
 # The floor is NOT glTF - it's still a hand-rolled osgx_Material + osgx_DirectLighting() call
 # (identical shape to Step 8's floor), since PBRScene.create() is specifically the glTF-material
@@ -232,19 +232,23 @@ def build_scene(w, h):
 	# Only built when there's a light to cast it - with --no-lights there's no direct-light term
 	# for a shadow to darken, so the extra PRE_RENDER depth pass would be pure waste.
 	shadow_map = None
+	shadow_set = None
 
 	if args.lights:
 		bound = model.bound
 		light_dir = (bound.center - KEY_LIGHT_POS).normalized()
 
-		shadow_map = osgx.ShadowMap.create(light_dir, bound.center, bound.radius)
+		shadow_map = osgx.ShadowMap.create(light_dir, osgx.ShadowMap.Coverage(bound.center, bound.radius))
 
 		shadow_map.camera.children.append(model)
+
+		shadow_set = osgx.ShadowSet.create()
+		shadow_set.add(shadow_map)
 
 	# --- glTF PBR/IBL scene ---------------------------------------------------- #
 	pbr = osgx.PBRScene.create(model, osgx.PBRScene.Options(
 		environment=environment,
-		shadowMap=shadow_map,
+		shadowSet=shadow_set,
 		diagnostics=args.diagnostics
 	))
 
@@ -262,11 +266,15 @@ def build_scene(w, h):
 		floor_geode = osg.Geode()
 		floor_geode.drawables.append(floor_quad)
 
-		hook_shader = osgx.makeShadowedDirectLightingHookShader()
+		direct_lighting_shader = osgx.makeDirectLightingHookShader()
+		shadow_factor_shader = (
+			shadow_set.shader if shadow_set is not None else osgx.makeShadowFactorNoneHookShader()
+		)
 		floor_p = osg.Program(name="floor_ibl", shaders=(
 			osg.Shader(osg.Shader.VERTEX, FLOOR_VERTEX),
 			osg.Shader(osg.Shader.FRAGMENT, osgx.resolveShaderLibs(FLOOR_FRAGMENT)),
-			hook_shader
+			direct_lighting_shader,
+			shadow_factor_shader
 		))
 		floor_geode.stateSet.attributes.append(floor_p)
 		floor_geode.stateSet.attributes.append(lights)
@@ -275,12 +283,8 @@ def build_scene(w, h):
 	# Shadow uniforms/texture live on main_group's StateSet so the hand-rolled floor shader sees
 	# them by inheritance - PBRScene.create() already wired them directly onto model's own
 	# StateSet above, so this is redundant (but harmless) for the model itself.
-	if shadow_map is not None:
-		mg_ss.textureAttributes[4] = shadow_map.depthTexture
-		mg_ss.uniforms["osgx_shadowMap"] = 4
-		mg_ss.uniforms.extend((
-			shadow_map.shadowMatrix, shadow_map.bias, shadow_map.strength, shadow_map.casterIndex
-		))
+	if shadow_set is not None:
+		shadow_set.apply(mg_ss)
 
 	main_group.children.append(model)
 

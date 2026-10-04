@@ -231,8 +231,7 @@ def apply_gltf_fallback_pbr(
 # gl_VertexID-indexed unit cube (36 verts, hard per-face normals via
 # gl_VertexID / 6) - no CPU-side vertex/normal arrays or index buffer at
 # all, matching the fully-procedural technique already proven out in
-# pyosg-instanced.py/pyosg-instanced-ssbo.py (DrawElementsUInt isn't exposed
-# to Python in this binding, only DrawArrays - this sidesteps needing it).
+# pyosg-instanced.py/pyosg-instanced-ssbo.py.
 VOXEL_VERTEX_SHADER = """
 #version 430 core
 

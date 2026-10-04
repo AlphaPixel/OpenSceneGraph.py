@@ -373,8 +373,8 @@ def download_polyhaven_hdr(slug, res="2k"):
 # --------------------------------------------------------------------------- #
 
 # 6 quads in NDC, arranged as a horizontal cross (4 cols x 3 rows), unindexed
-# (2 triangles/6 verts per face) - osg.DrawElementsUInt isn't exposed to
-# Python in this binding, only osg.DrawArrays, so there's no index buffer.
+# (2 triangles/6 verts per face) - indexing wouldn't share anything here anyway, since each
+# face's corners carry their own `dir` vector even where positions coincide across faces.
 #
 # [+Y] row 2
 # [-X] [+Z] [+X] [-Z] row 1

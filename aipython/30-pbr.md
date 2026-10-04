@@ -6,9 +6,9 @@ an `osgx.Material` (see [`29-material.md`](29-material.md)) — a real
 `StateAttribute` whose buffer (`osgx_materialInputs`) the renderer reads. The
 light sources are all optional, passed in `osgx.PBRScene.Options`: an
 `osgx.Environment` (image-based light: specular + diffuse cubemaps + BRDF LUT,
-owned by the caller and shareable between scenes), an `osgx.ShadowMap`, plus
-whatever `osgx.LightSet` direct lights the scene graph carries. Without an
-environment, the environment term is zero.
+owned by the caller and shareable between scenes), an `osgx.ShadowSet` (see
+[`41-shadows.md`](41-shadows.md)), plus whatever `osgx.LightSet` direct lights
+the scene graph carries. Without an environment, the environment term is zero.
 
 ## Minimal live REPL setup
 
@@ -108,15 +108,15 @@ The material attached to `drawable` does not need to be rebuilt.
 
 ## Extra `PBRScene.create()` options
 
-`osgx.PBRScene.Options(environment=None, shadowMap=None, hooks={}, diagnostics=False)`:
+`osgx.PBRScene.Options(environment=None, shadowSet=None, hooks={}, diagnostics=False)`:
 
 - `diagnostics=True` builds `pbr.debugMode` for switching between
   combined/diffuse/specular/normal/roughness/diffuse-IBL-only visualizations
   (`examples/pyosg-khronos-viewer.py`'s `Diagnostics` event handler cycles
   it with number keys).
-- `shadowMap` accepts an `osgx.ShadowMap` (see
-  [`10-rtt.md`](10-rtt.md)) to shadow the light at `LightSet` index
-  `shadowMap.casterIndex`; omit it for unshadowed direct light.
+- `shadowSet` accepts an `osgx.ShadowSet` (see
+  [`41-shadows.md`](41-shadows.md)) aggregating one or more `osgx.ShadowMap`s;
+  omit it for unshadowed direct light.
 - `hooks` is a dict of `{osgx.Hook: osg.Shader}` (or a list of pairs)
   substituting one of this Program's built-in shader slots (`osgx.Hook.Skinning`,
   `osgx.Hook.Tonemap`). Each hook *replaces* the built-in definition (GLSL

@@ -1,6 +1,16 @@
 import pytest
+import numpy as np
 
-from OpenSceneGraph.osg import Array, Geometry, Vec2Array, Vec3Array, DrawArrays, PrimitiveSet, Vec3
+from OpenSceneGraph.osg import (
+	Array, Geometry, Vec2Array, Vec3Array, DrawArrays, PrimitiveSet, Vec3,
+	DrawElementsUByte, DrawElementsUShort, DrawElementsUInt,
+)
+
+DRAW_ELEMENTS_DTYPES = (
+	(DrawElementsUByte, np.uint8),
+	(DrawElementsUShort, np.uint16),
+	(DrawElementsUInt, np.uint32),
+)
 
 
 def test_construction_kwargs():
@@ -136,3 +146,44 @@ def test_geometry_has_no_add_primitive_set_method():
 	# addPrimitiveSet() was removed once .primitiveSets (SequenceProxy) existed - use
 	# `.primitiveSets.append(...)` instead.
 	assert not hasattr(Geometry(), "addPrimitiveSet")
+
+@pytest.mark.parametrize("cls,dtype", DRAW_ELEMENTS_DTYPES)
+def test_draw_elements_mode_only(cls, dtype):
+	de = cls(PrimitiveSet.TRIANGLES)
+
+	assert de.mode == PrimitiveSet.TRIANGLES
+	assert de.numIndices == 0
+
+@pytest.mark.parametrize("cls,dtype", DRAW_ELEMENTS_DTYPES)
+def test_draw_elements_from_flat_buffer(cls, dtype):
+	data = np.array([0, 1, 2, 2, 1, 3], dtype=dtype)
+	de = cls(PrimitiveSet.TRIANGLES, data)
+
+	assert de.numIndices == len(data)
+	assert [de.index(i) for i in range(len(data))] == list(data)
+
+@pytest.mark.parametrize("cls,dtype", DRAW_ELEMENTS_DTYPES)
+def test_draw_elements_from_2d_buffer(cls, dtype):
+	# (numTriangles, 3) - the shape slughorn.tessellate.Mesh2D.indices comes back as.
+	data = np.array([[0, 1, 2], [2, 1, 3]], dtype=dtype)
+	de = cls(PrimitiveSet.TRIANGLES, data)
+
+	assert de.numIndices == data.size
+	assert [de.index(i) for i in range(data.size)] == list(data.ravel())
+
+@pytest.mark.parametrize("cls,dtype", DRAW_ELEMENTS_DTYPES)
+def test_draw_elements_wrong_dtype_raises(cls, dtype):
+	with pytest.raises(TypeError):
+		cls(PrimitiveSet.TRIANGLES, np.array([0, 1, 2], dtype=np.float32))
+
+def test_draw_elements_uint_in_geometry_primitive_sets():
+	verts = Vec3Array([Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0), Vec3(1, 1, 0)])
+	idx = np.array([0, 1, 2, 2, 1, 3], dtype=np.uint32)
+
+	g = Geometry(
+		vertexArray=verts,
+		primitiveSets=(DrawElementsUInt(PrimitiveSet.TRIANGLES, idx),),
+	)
+
+	assert len(g.primitiveSets) == 1
+	assert g.primitiveSets[0].numIndices == len(idx)

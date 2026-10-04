@@ -489,19 +489,23 @@ def build_scene(w, h):
 
 	# --- Shadow map (Step 8's rig, unchanged) ---------------------------------- #
 	shadow_map = None
+	shadow_set = None
 
 	if args.lights:
 		bound = model.bound
 		light_dir = (bound.center - KEY_LIGHT_POS).normalized()
 
-		shadow_map = osgx.ShadowMap.create(light_dir, bound.center, bound.radius)
+		shadow_map = osgx.ShadowMap.create(light_dir, osgx.ShadowMap.Coverage(bound.center, bound.radius))
 
 		shadow_map.camera.children.append(model)
+
+		shadow_set = osgx.ShadowSet.create()
+		shadow_set.add(shadow_map)
 
 	# --- glTF PBR/IBL scene ---------------------------------------------------- #
 	pbr = osgx.PBRScene.create(model, osgx.PBRScene.Options(
 		environment=environment,
-		shadowMap=shadow_map
+		shadowSet=shadow_set
 	))
 
 	if not pbr.valid():
@@ -518,11 +522,15 @@ def build_scene(w, h):
 		floor_geode = osg.Geode()
 		floor_geode.drawables.append(floor_quad)
 
-		hook_shader = osgx.makeShadowedDirectLightingHookShader()
+		direct_lighting_shader = osgx.makeDirectLightingHookShader()
+		shadow_factor_shader = (
+			shadow_set.shader if shadow_set is not None else osgx.makeShadowFactorNoneHookShader()
+		)
 		floor_p = osg.Program(name="floor_ibl", shaders=(
 			osg.Shader(osg.Shader.VERTEX, FLOOR_VERTEX),
 			osg.Shader(osg.Shader.FRAGMENT, osgx.resolveShaderLibs(FLOOR_FRAGMENT)),
-			hook_shader
+			direct_lighting_shader,
+			shadow_factor_shader
 		))
 		floor_geode.stateSet.attributes.append(floor_p)
 		floor_geode.stateSet.attributes.append(lights)
@@ -531,12 +539,8 @@ def build_scene(w, h):
 	# Shadow uniforms/texture live on main_group's StateSet so the hand-rolled floor shader sees
 	# them by inheritance - PBRScene.create() already wired them directly onto model's own
 	# StateSet above, so this is redundant (but harmless) for the model itself.
-	if shadow_map is not None:
-		mg_ss.textureAttributes[4] = shadow_map.depthTexture
-		mg_ss.uniforms["osgx_shadowMap"] = 4
-		mg_ss.uniforms.extend((
-			shadow_map.shadowMatrix, shadow_map.bias, shadow_map.strength, shadow_map.casterIndex
-		))
+	if shadow_set is not None:
+		shadow_set.apply(mg_ss)
 
 	main_group.children.append(model)
 

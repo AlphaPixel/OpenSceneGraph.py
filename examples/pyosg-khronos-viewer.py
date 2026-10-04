@@ -203,9 +203,6 @@ class Diagnostics(osgGA.GUIEventHandler):
 		elif event.key in (ord("r"), ord("R")):
 			self.scene.disableRoughnessMap.value = 1 - self.scene.disableRoughnessMap.value
 
-		elif event.key in (ord("d"), ord("D")):
-			self.scene.diffuseIBLMode.value = 1 - self.scene.diffuseIBLMode.value
-
 		else: return False
 
 		return True
@@ -320,7 +317,7 @@ def configure_viewer(viewer, root):
 	if args.debug is not None:
 		viewer.eventHandlers.append(Diagnostics(pbr))
 
-		osg.notice("Diagnostics: 1=combined 2=diffuse 3=specular N=normal R=roughness D=diffuse IBL")
+		osg.notice("Diagnostics: 1=combined 2=diffuse 3=specular N=normal R=roughness")
 
 	if args.camera:
 		camera_path = pathlib.Path(args.camera).expanduser()
