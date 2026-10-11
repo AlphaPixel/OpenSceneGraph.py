@@ -4,8 +4,13 @@
 OSG loads its format plugins from ``OpenSceneGraph/osgPlugins-3.6.5``.  The
 Windows loader used for that secondary load does not reliably search either
 the package root or delvewheel's top-level ``openscenegraph.libs`` directory.
-Copy the already-vendored DLLs and ktx.dll beside the plugins, then rebuild
-RECORD so pip can install the modified wheel normally.
+Copy the already-vendored DLLs and the package-root DLLs the plugins link
+(ktx.dll, osgx.dll) beside the plugins, then rebuild RECORD so pip can install
+the modified wheel normally.
+
+Windows resolves a load-time DLL dependency to an already-loaded module of the
+same name, so osgx.dll beside the plugins and osgx.dll in the package root
+still load as one module - whichever is loaded first serves both.
 """
 
 from __future__ import annotations
@@ -21,7 +26,7 @@ import zipfile
 
 PACKAGE_DIR = "OpenSceneGraph"
 PLUGIN_DIR = f"{PACKAGE_DIR}/osgPlugins-3.6.5"
-KTX_DLL = f"{PACKAGE_DIR}/ktx.dll"
+PACKAGE_DLLS = (f"{PACKAGE_DIR}/ktx.dll", f"{PACKAGE_DIR}/osgx.dll")
 
 
 def record_row(name: str, data: bytes) -> list[str]:
@@ -57,14 +62,16 @@ def repair_wheel(wheel_path: Path) -> None:
     plugin_prefix = f"{PLUGIN_DIR}/"
     if not any(name.startswith(plugin_prefix) for name in files):
         raise RuntimeError(f"No packaged osgDB plugin directory found in {wheel_path}")
-    if KTX_DLL not in files:
-        raise RuntimeError(f"Missing packaged {KTX_DLL} in {wheel_path}")
+    for dll in PACKAGE_DLLS:
+        if dll not in files:
+            raise RuntimeError(f"Missing packaged {dll} in {wheel_path}")
 
     additions: dict[str, bytes] = {}
     for name, (_, data) in files.items():
         if name.startswith(f"{libs_dir}/") and name.lower().endswith(".dll"):
             additions[f"{PLUGIN_DIR}/{Path(name).name}"] = data
-    additions[f"{PLUGIN_DIR}/ktx.dll"] = files[KTX_DLL][1]
+    for dll in PACKAGE_DLLS:
+        additions[f"{PLUGIN_DIR}/{Path(dll).name}"] = files[dll][1]
 
     files.update((name, (None, data)) for name, data in additions.items())
     files.pop(record_name)
