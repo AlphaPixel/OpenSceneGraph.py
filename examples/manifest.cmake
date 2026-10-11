@@ -62,6 +62,7 @@ set(PYOSG_OFFICIAL_EXAMPLES
 	# pyosg-msdf.py
 	"pyosg-noise.py=noise.py"
 	"pyosg-picking.py=picking.py"
+	"pyosg-planet.py=planet.py"
 	"pyosg-points.py=points.py"
 	"pyosg_polyhaven.py=polyhaven.py"
 	"pyosg-rtt.py=rtt.py"

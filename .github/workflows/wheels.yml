@@ -1,10 +1,8 @@
 name: Build wheels
 
 on:
-  push:
-    branches: [main]
-    # Release tags build the same wheels, then unlock the publish job below.
-    tags: ["v*"]
+  # All builds are manual. Dispatching against a v* release tag (with
+  # target=all) additionally unlocks the publish job below.
   workflow_dispatch:
     inputs:
       build:
@@ -319,8 +317,8 @@ jobs:
 
   publish:
     name: Publish to PyPI
-    # Pushes to `main` (and manual test runs) produce build artifacts only.
-    # Publishing requires an explicit versioned release tag, e.g. v0.1.1.
+    # Runs against branches produce build artifacts only. Publishing requires
+    # dispatching against a versioned release tag, e.g. v0.1.2.
     if: inputs.build && inputs.target == 'all' && startsWith(github.ref, 'refs/tags/v')
     needs: [linux-x86_64, linux-aarch64, windows-x86_64, sdist]
     runs-on: ubuntu-24.04

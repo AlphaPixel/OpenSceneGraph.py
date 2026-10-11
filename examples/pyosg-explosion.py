@@ -901,10 +901,10 @@ def build_multiburst(num_bursts=4, spread_radius=9.0, include_smoke=True, includ
 # --------------------------------------------------------------------------- #
 # Camera kick: a screen-space white flash (POST_RENDER HUD camera, same shape
 # as pyosg-blur.py's make_composite_hud()) plus a brief eye-space shake, now via
-# osgx.CameraManipulator/osgx.ShakeCallback (osgx/CameraIntents.hpp) instead of
+# osgx.ActionsManipulator/osgx.ShakeCallback (osgx/CameraActions.hpp) instead of
 # the EffectManipulator Python decorator this file carried as a documented dead
 # end for a while - see aipython/06-camera-effects.md for that investigation.
-# osgx.CameraManipulator<TrackballManipulator> genuinely IS a TrackballManipulator
+# osgx.ActionsManipulator<TrackballManipulator> genuinely IS a TrackballManipulator
 # (real C++ CRTP inheritance, not a Python-side wrapper forwarding events through
 # pybind11), so the GUIActionAdapter-casting crash that made EffectManipulator
 # unusable for real interaction simply doesn't exist here - normal orbiting/
@@ -992,7 +992,7 @@ def build_flash_camera(width, height, duration=0.25):
 # (a Python CameraManipulator subclass wrapping an `inner` manipulator, confirmed to
 # crash the moment the user dragged the mouse - forwarding handle()'s live
 # GUIActionAdapter through to another bound method requires an osgViewer::View ->
-# GUIActionAdapter upcast pybind11 can't do) are gone. osgx.CameraManipulator<Base>
+# GUIActionAdapter upcast pybind11 can't do) are gone. osgx.ActionsManipulator<Base>
 # solves the actual problem this was working around: real C++ CRTP inheritance means
 # there's no Python-side decorator forwarding events at all, so that whole class of
 # crash doesn't exist to work around. Full history of the dead end:
@@ -1002,7 +1002,7 @@ def camera_kick(viewer, flash_cam, shake_magnitude=3.0, shake_duration=0.3):
 
 	`shake_magnitude` is degrees (osgx.ShakeCallback's own units - max jitter
 	angle, not a translation offset like the old make_shake_effect() used).
-	Requires `viewer.cameraManipulator` to be an osgx.CameraManipulator (see
+	Requires `viewer.cameraManipulator` to be an osgx.ActionsManipulator (see
 	__main__ below) - .shake() is only bound on that subclass.
 	"""
 
@@ -1120,10 +1120,10 @@ def build_scene(w, h):
 def configure_viewer(viewer, root):
 	fire_only, explosion, explosion_smoke, explosion_smoke_embers, multiburst, flash_cam = root.children
 
-	# osgx.CameraManipulator<TrackballManipulator> genuinely IS a TrackballManipulator
+	# osgx.ActionsManipulator<TrackballManipulator> genuinely IS a TrackballManipulator
 	# (see the module comment above camera_kick()) - normal orbit/pan/zoom works exactly
 	# like plain osgGA.TrackballManipulator(), and camera_kick()'s shake composes on top.
-	viewer.cameraManipulator = osgx.CameraManipulator()
+	viewer.cameraManipulator = osgx.ActionsManipulator()
 
 	v = viewer
 

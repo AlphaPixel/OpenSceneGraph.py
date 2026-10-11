@@ -16,7 +16,7 @@ jobs:
   examples-package:
     name: Examples package / CPU asset preparation
     # This is deliberately opt-in. Run manually with:
-    # gh workflow run examples.yml -f build=true --ref 5-examples-package
+    # gh workflow run examples.yml -f build=true --ref main
     if: inputs.build
     runs-on: ubuntu-24.04
 
@@ -79,11 +79,10 @@ jobs:
 
   publish:
     name: Publish to PyPI
-    # Unlike wheels.yml, this workflow has no automatic tag-push trigger --
-    # every run is already a deliberate, manual workflow_dispatch, so that
-    # opt-in is the publish gate. There is no separate "real release" ref to
-    # distinguish it from.
-    if: inputs.build
+    # Runs against branches produce build artifacts only. Publishing requires
+    # dispatching against a versioned release tag, e.g. v0.1.2; the examples
+    # wheel pins OpenSceneGraph to the same version, so it shares the tag.
+    if: inputs.build && startsWith(github.ref, 'refs/tags/v')
     needs: [examples-package]
     runs-on: ubuntu-24.04
     environment:
