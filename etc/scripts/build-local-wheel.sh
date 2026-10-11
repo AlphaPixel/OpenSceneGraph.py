@@ -68,6 +68,7 @@ asset_tool="$native_dir/_deps/osgx-build/utils/osgx-environment"
 
 shopt -s nullglob
 osg_plugin_dirs=("$native_dir"/_deps/openscenegraph-build/lib/osgPlugins-*)
+osgx_plugin_dirs=("$native_dir"/_deps/osgx-build/osgPlugins-*)
 shopt -u nullglob
 
 if [[ ${#osg_plugin_dirs[@]} -ne 1 ]]; then
@@ -75,8 +76,13 @@ if [[ ${#osg_plugin_dirs[@]} -ne 1 ]]; then
 	exit 1
 fi
 
+if [[ ${#osgx_plugin_dirs[@]} -ne 1 ]]; then
+	echo "Could not identify the osgx build-tree plugin directory." >&2
+	exit 1
+fi
+
 osg_plugin_dir="${osg_plugin_dirs[0]}"
-ktx2_plugin_dir="$native_dir/_deps/osgx-build/plugins/ktx2"
+ktx2_plugin_dir="${osgx_plugin_dirs[0]}"
 
 if [[ ! -f "$osg_plugin_dir/osgdb_hdr.so" ]]; then
 	echo "HDR reader plugin was not built: $osg_plugin_dir/osgdb_hdr.so" >&2
