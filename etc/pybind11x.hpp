@@ -5,6 +5,7 @@
 // unpack_sequence -> "Try to unpack a py::object as an exact-length tuple of specific types."
 // unpack_one_or_many -> "Accept a dict/list of T's, or a single bare T, as one Python value."
 // unpack_list_or_args -> "Same, but for a whole py::args argument list instead of one value."
+// unpack_buffer -> "Request any buffer-protocol object as C-contiguous, type-checked scalar elements."
 // kwargs_init -> "Chain a type's constructor-kwargs handling through its actual C++ bases."
 // SlotCache -> "Don't recreate Python objects unless the underlying pointer changed."
 // ProxyStorage -> "Attach all Python views to a C++ object's lifetime."
@@ -211,6 +212,79 @@ std::vector<T> unpack_list_or_args(const py::args& args) {
 	result.reserve(args.size());
 
 	for(auto arg: args) result.push_back(py::reinterpret_borrow<py::object>(arg).template cast<T>());
+
+	return result;
+}
+
+// The result of unpack_buffer(): `data` points at `count * components` contiguous scalars and stays
+// valid for as long as `info` (which holds the producer's buffer view) is alive.
+template<typename S>
+struct PYOBJECT_INTERNAL BufferElements {
+	py::buffer_info info;
+
+	const S* data = nullptr;
+
+	size_t count = 0;
+};
+
+// Requests any buffer-protocol object (numpy array, array.array, memoryview, bytes, ...) as
+// C-contiguous scalars of type `S`, grouped into elements of `components` scalars each. Only the
+// raw buffer protocol is used, so no numpy dependency is introduced.
+//
+// - The item type must be equivalent to `S` (via buffer_info::item_type_is_equivalent_to(), which
+// also accepts platform-equivalent integer formats such as "L" for a 32-bit unsigned on Windows)
+//
+// - With `components == 1`, any shape is accepted and flattened
+//
+// - With `components > 1`, a 1D buffer must have a length divisible by `components`, and an N-D
+// buffer must have its last dimension equal to `components`
+//
+// - Strided (non-contiguous) views are rejected rather than copied incorrectly
+template<typename S>
+BufferElements<S> unpack_buffer(const py::buffer& buf, size_t components=1) {
+	BufferElements<S> result{buf.request()};
+
+	auto& info = result.info;
+
+	if(!info.template item_type_is_equivalent_to<S>()) throw py::type_error(
+		"Expected a buffer of format '"s + py::format_descriptor<S>::format() + "' (" +
+		std::to_string(sizeof(S)) + "-byte items), got '" + info.format + "' (" +
+		std::to_string(info.itemsize) + "-byte items)"
+	);
+
+	auto expected = info.itemsize;
+
+	for(auto d = info.ndim - 1; d >= 0; d--) {
+		auto i = static_cast<size_t>(d);
+
+		if(info.shape[i] > 1 && info.strides[i] != expected) throw py::value_error(
+			"Buffer must be C-contiguous (e.g. numpy.ascontiguousarray())"
+		);
+
+		expected *= info.shape[i];
+	}
+
+	size_t total = 1;
+
+	for(auto dim: info.shape) total *= static_cast<size_t>(dim);
+
+	if(components > 1) {
+		if(info.ndim == 1) {
+			if(total % components) throw py::value_error(
+				"Flat buffer length " + std::to_string(total) +
+				" is not divisible by component count " + std::to_string(components)
+			);
+		}
+
+		else if(info.ndim < 1 || static_cast<size_t>(info.shape.back()) != components) {
+			throw py::value_error(
+				"Expected a buffer whose last dimension is " + std::to_string(components)
+			);
+		}
+	}
+
+	result.data = static_cast<const S*>(info.ptr);
+	result.count = total / components;
 
 	return result;
 }

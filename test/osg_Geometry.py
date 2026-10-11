@@ -1,3 +1,5 @@
+import array
+
 import pytest
 import numpy as np
 
@@ -10,6 +12,13 @@ DRAW_ELEMENTS_DTYPES = (
 	(DrawElementsUByte, np.uint8),
 	(DrawElementsUShort, np.uint16),
 	(DrawElementsUInt, np.uint32),
+)
+
+# array.array typecodes matching each DrawElements index width (on platforms where "I" is 4 bytes).
+DRAW_ELEMENTS_TYPECODES = (
+	(DrawElementsUByte, "B"),
+	(DrawElementsUShort, "H"),
+	(DrawElementsUInt, "I"),
 )
 
 
@@ -175,6 +184,45 @@ def test_draw_elements_from_2d_buffer(cls, dtype):
 def test_draw_elements_wrong_dtype_raises(cls, dtype):
 	with pytest.raises(TypeError):
 		cls(PrimitiveSet.TRIANGLES, np.array([0, 1, 2], dtype=np.float32))
+
+@pytest.mark.parametrize("cls,dtype", DRAW_ELEMENTS_DTYPES)
+def test_draw_elements_wrong_width_raises(cls, dtype):
+	# numpy's default integer dtype (int64) never matches any index width.
+	with pytest.raises(TypeError):
+		cls(PrimitiveSet.TRIANGLES, np.array([0, 1, 2], dtype=np.int64))
+
+@pytest.mark.parametrize("cls,dtype", DRAW_ELEMENTS_DTYPES)
+def test_draw_elements_non_contiguous_raises(cls, dtype):
+	with pytest.raises(ValueError):
+		cls(PrimitiveSet.TRIANGLES, np.arange(12, dtype=dtype)[::2])
+
+@pytest.mark.parametrize("cls,dtype", DRAW_ELEMENTS_DTYPES)
+def test_draw_elements_from_empty_buffer(cls, dtype):
+	assert cls(PrimitiveSet.TRIANGLES, np.zeros(0, dtype=dtype)).numIndices == 0
+
+@pytest.mark.parametrize("cls,typecode", DRAW_ELEMENTS_TYPECODES)
+def test_draw_elements_from_array_module_buffer(cls, typecode):
+	data = array.array(typecode, [0, 1, 2, 2, 1, 3])
+	de = cls(PrimitiveSet.TRIANGLES, data)
+
+	assert [de.index(i) for i in range(de.numIndices)] == list(data)
+
+@pytest.mark.parametrize("cls,dtype", DRAW_ELEMENTS_DTYPES)
+def test_draw_elements_from_sequence(cls, dtype):
+	indices = [0, 1, 2, 2, 1, 3]
+	de = cls(PrimitiveSet.TRIANGLES, indices)
+
+	assert de.mode == PrimitiveSet.TRIANGLES
+	assert [de.index(i) for i in range(de.numIndices)] == indices
+
+@pytest.mark.parametrize("cls,dtype", DRAW_ELEMENTS_DTYPES)
+def test_draw_elements_sequence_out_of_range_raises(cls, dtype):
+	# pybind11's int caster rejects values that don't fit the index type, so no overload matches.
+	with pytest.raises(TypeError):
+		cls(PrimitiveSet.TRIANGLES, [0, 1, -1])
+
+	with pytest.raises(TypeError):
+		cls(PrimitiveSet.TRIANGLES, [0, 1, int(np.iinfo(dtype).max) + 1])
 
 def test_draw_elements_uint_in_geometry_primitive_sets():
 	verts = Vec3Array([Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0), Vec3(1, 1, 0)])

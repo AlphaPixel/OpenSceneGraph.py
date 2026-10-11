@@ -1,5 +1,7 @@
 #pragma once
 
+#include <limits>
+
 #include "../pyosg.hpp"
 
 OSGX_DISABLE_WARNINGS
@@ -199,21 +201,31 @@ namespace detail {
 			"A PrimitiveSet that draws explicit vertex indices rather than a contiguous run."
 		)
 			.def(py::init<GLenum>(), "mode"_a=0, "Create an empty set with the given draw mode.")
+			// Registered before the sequence ctor below for the same reason as bind_Array<T>'s buffer
+			// ctor: numpy integer scalars pass pybind11's no-conversion int check, so the std::vector
+			// caster would otherwise claim numpy input element by element.
 			.def(py::init([](GLenum mode, py::buffer data) {
-				py::buffer_info info = data.request();
+				auto elements = pyx::unpack_buffer<ElementT>(data);
 
-				if(info.format != py::format_descriptor<ElementT>::format()) throw py::type_error(
-					"Expected a buffer of " + std::to_string(sizeof(ElementT)) + "-byte elements"
+				if(elements.count > std::numeric_limits<unsigned int>::max()) throw py::value_error(
+					"Index count must fit in an unsigned int"
 				);
 
-				size_t count = 1;
-
-				for(auto dim : info.shape) count *= static_cast<size_t>(dim);
-
-				return new T(mode, static_cast<unsigned int>(count), static_cast<const ElementT*>(info.ptr));
+				return new T(mode, static_cast<unsigned int>(elements.count), elements.data);
 			}), "mode"_a, "data"_a,
-				"Create a set with the given draw mode, copying every index from a buffer "
-				"(e.g. a numpy array, flat or (N, k)-shaped) matching this type's index width."
+				"Create a set with the given draw mode, copying every index from a C-contiguous buffer "
+				"(e.g. a numpy array or array.array, any shape) matching this type's index width."
+			)
+			// Non-buffer input, e.g. a plain Python list of ints. Every DrawElementsU* subclass derives
+			// its vector_type (osg::MixinVector<ElementT>), so assign() is available directly.
+			.def(py::init([](GLenum mode, const std::vector<ElementT>& indices) {
+				auto d = new T(mode);
+
+				d->assign(indices.begin(), indices.end());
+
+				return d;
+			}), "mode"_a, "indices"_a,
+				"Create a set with the given draw mode, copying every index from a Python sequence."
 			)
 		;
 	}

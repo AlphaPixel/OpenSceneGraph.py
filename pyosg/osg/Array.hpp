@@ -10,6 +10,8 @@ OSGX_DISABLE_WARNINGS
 
 OSGX_ENABLE_WARNINGS
 
+#include "pybind11x.hpp"
+
 namespace pyosg {
 
 namespace detail {
@@ -86,29 +88,21 @@ namespace detail {
 		;
 	}
 
-	static std::unordered_map<
-		// decltype(std::declval<const osg::Array>().getDataType()),
-		GLenum,
-		std::pair<py::ssize_t, std::string>
-	> BufferInfo{
-		{GL_FLOAT, {sizeof(GLfloat), py::format_descriptor<GLfloat>::format()}},
-		{GL_DOUBLE, {sizeof(GLdouble), py::format_descriptor<GLdouble>::format()}},
-		// {GL_BYTE, {sizeof(GLbyte), py::format_descriptor<GLbyte>::format()}},
-		{GL_INT, {sizeof(GLint), py::format_descriptor<GLint>::format()}},
-		{GL_UNSIGNED_INT, {sizeof(GLuint), py::format_descriptor<GLuint>::format()}}
+	// Describes an osg::Array element as `components` scalars of type `scalar`; osg::Vec* types expose
+	// both directly (value_type, num_components), plain scalars (GLbyte, float) are one component.
+	template<typename E>
+	struct element_traits {
+		using scalar = E;
+
+		static constexpr size_t components = 1;
 	};
 
-	// I really HATE that this MUST EXIST! OSG, whyyyy!????
-	template<typename T>
-	inline size_t array_components() {
-		static auto comps = []{
-			osg::ref_ptr<T> tmp = new T();
+	template<typename E> requires requires { E::num_components; }
+	struct element_traits<E> {
+		using scalar = typename E::value_type;
 
-			return static_cast<size_t>(tmp->getDataSize());
-		}();
-
-		return comps;
-	}
+		static constexpr size_t components = E::num_components;
+	};
 
 	template<typename T>
 	auto bind_Array(py::module_& m, const char* name) {
@@ -131,6 +125,36 @@ namespace detail {
 
 				return new T(static_cast<unsigned int>(size));
 			}), "size"_a, "Create an array of size default-constructed elements.")
+			// Registered before the sequence ctor below: pybind11 tries overloads in order (first
+			// without implicit conversions, then with), and the std::vector caster can also accept numpy
+			// arrays by iterating them, which would skip this ctor's type and shape checks.
+			.def(py::init([](py::buffer b) {
+				using E = typename T::ElementDataType;
+				using traits = element_traits<E>;
+
+				static_assert(sizeof(E) == sizeof(typename traits::scalar) * traits::components);
+
+				auto elements = pybind11x::unpack_buffer<typename traits::scalar>(b, traits::components);
+
+				if(elements.count > std::numeric_limits<unsigned int>::max()) throw py::value_error(
+					"Array size must fit in an unsigned int"
+				);
+
+				auto a = new T(static_cast<unsigned int>(elements.count));
+
+				if(elements.count) std::memcpy(
+					const_cast<void*>(a->getDataPointer()),
+					elements.data,
+					elements.count * sizeof(E)
+				);
+
+				return a;
+			}),
+				"Create an array from a C-contiguous buffer (e.g. a numpy array or array.array) whose "
+				"items match this array's scalar type, copying its data; a 1D buffer is grouped into "
+				"elements by component count, an N-D buffer's last dimension must equal it."
+			)
+			// Non-buffer input, e.g. a plain Python list of elements.
 			.def(py::init([](const std::vector<typename T::ElementDataType>& vec) {
 				auto a = new T();
 
@@ -138,85 +162,32 @@ namespace detail {
 
 				return a;
 			}), "Create an array by copying every element from a Python sequence.")
-			.def(py::init([](py::buffer b) {
-				py::buffer_info info = b.request();
-
-				if(info.format != py::format_descriptor<float>::format()) throw py::type_error(
-					"Expected float32 buffer"
-				);
-
-				// HATE...
-				auto comps = static_cast<py::ssize_t>(array_components<T>());
-
-				if(info.ndim == 1) {
-					if(info.shape[0] % comps) throw py::value_error(
-						"Flat array size must be divisible by component count"
-					);
-				}
-
-				else if(info.ndim == 2) {
-					if(info.shape[1] != comps) throw py::value_error(
-						"Expected shape (N, " + std::to_string(comps) + ")"
-					);
-				}
-
-				else throw py::type_error("Expected 1D or 2D buffer");
-
-				auto count = static_cast<unsigned int>(
-					(info.ndim == 1) ? info.shape[0] / comps : info.shape[0]
-				);
-
-				auto a = new T();
-
-				a->resize(count);
-
-				std::memcpy(
-					const_cast<void*>(a->getDataPointer()),
-					info.ptr,
-					count * sizeof(typename T::ElementDataType)
-				);
-
-				return a;
-			}),
-				"Create an array from a float32 buffer (e.g. a numpy array), copying its data; a 1D "
-				"buffer is grouped into elements by component count, a 2D buffer must be shape "
-				"(N, components)."
-			)
 
 			// .def("append", [](T& self, const T::ElementDataType& v) { self.push_back(v); })
 
 			// https://pybind11.readthedocs.io/en/stable/advanced/pycpp/numpy.html
 			.def_buffer([](T& self) -> py::buffer_info {
+				using traits = element_traits<typename T::ElementDataType>;
+				using S = typename traits::scalar;
+
 				auto n = static_cast<py::ssize_t>(self.size());
-
-				// Number of components for each value of `n` above; for example, 1 if it's a "flat"
-				// array of floats, 2 for Vec2, 3 for Vec3, etc.
-				auto comps = static_cast<py::ssize_t>(self.getDataSize());
-
-				// TODO: Why does this code SEGFAULT when this exception is thrown!? EVERY TIME.
-				if(!BufferInfo.contains(self.getDataType())) {
-					throw std::runtime_error("Unsupported osg::Array data type");
-
-					// PyErr_SetString(PyExc_RuntimeError, "Unsupported Array data type");
-
-					// return py::buffer_info();
-				}
-
-				auto [itemsize, fmt] = BufferInfo[self.getDataType()];
+				auto itemsize = static_cast<py::ssize_t>(sizeof(S));
+				auto comps = static_cast<py::ssize_t>(traits::components);
+				auto ptr = const_cast<void*>(self.getDataPointer());
 
 				if(comps == 1) return py::buffer_info(
-					const_cast<void*>(self.getDataPointer()),
+					ptr,
 					itemsize,
-					fmt,
+					py::format_descriptor<S>::format(),
 					1,
 					{ n },
 					{ itemsize }
 				);
 
 				return py::buffer_info(
-					const_cast<void*>(self.getDataPointer()),
+					ptr,
 					itemsize,
-					fmt,
+					py::format_descriptor<S>::format(),
 					2,
 					{ n, comps },
 					{ itemsize * comps, itemsize }
