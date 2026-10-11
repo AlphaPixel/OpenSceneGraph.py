@@ -63,7 +63,7 @@ jobs:
           PYOSG_KHRONOS_ENVIRONMENTS_DIR: ${{ runner.temp }}/glTF-Sample-Environments
           PYOSG_KHRONOS_ASSETS_DIR: ${{ runner.temp }}/glTF-Sample-Assets
           PYOSG_PREPARE_CATALOG_ASSETS: "1"
-          PYOSG_PBRIBL_SOFTWARE: "1"
+          PYOSG_ENVIRONMENT_SOFTWARE: "1"
           PYOSG_BUILD_BASE_WHEEL: "0"
           PYOSG_BUILD_EXAMPLES_WHEEL: "1"
         run: |
