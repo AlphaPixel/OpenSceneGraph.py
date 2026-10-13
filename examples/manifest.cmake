@@ -42,6 +42,7 @@ set(PYOSG_OFFICIAL_EXAMPLES
 	# pyosg-async-gltf.py
 	# pyosg-async.py
 	"pyosg-cuda-points.py=cuda_points.py"
+	"pyosg-culling.py=culling.py"
 	"pyosg-dice.py=dice.py"
 	"pyosg_dice.py=pyosg_dice.py"
 	# pyosg-dynamic.py

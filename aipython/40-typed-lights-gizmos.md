@@ -34,12 +34,11 @@ program = osg.Program(name="my-shader", shaders=(
 ))
 ```
 
-This is the same "hook" pattern `osgSlug` uses: a base shader owns `main()`
-and only *declares* a fixed entry point; each consumer supplies — or accepts
-the library default for — that entry point's definition as a separate
-compiled shader object. It exists so the per-light dispatch loop lives in
-exactly one place instead of being hand-copied into every consumer's
-`main()`.
+This hook pattern has a base shader own `main()` and only *declare* a fixed
+entry point; each consumer supplies — or accepts the library default for —
+that entry point's definition as a separate compiled shader object. It keeps
+the per-light dispatch loop in exactly one place instead of hand-copying it
+into every consumer's `main()`.
 
 `osgx::LightGizmos`/`osgx::LightMarkers` (C++: `src/osgx/Gizmos.hpp`/
 `src/Gizmos.cpp`, Python: `osgx.LightGizmos`/`osgx.LightMarkers` — flat under
@@ -199,9 +198,9 @@ gui.addSection("Spot", spot_section)
 
 ## Known gaps
 
-No `HookList`-style helper (mirroring osgSlug's `HookList`) yet for composing
-multiple fragment-stage hooks on one Program — `osgx_DirectLighting()` is the
-first hook, added by hand since there's only one so far. `PBRScene.cpp`'s
+No helper yet for composing multiple fragment-stage hooks on one Program —
+`osgx_DirectLighting()` is the first hook, added by hand since there's only
+one so far. `PBRScene.cpp`'s
 `evaluateIBL()` and the final tonemap/composite step are candidates for the
 same treatment once a real second consumer needs to override one
 specifically.

@@ -292,5 +292,53 @@ exec'd into a session just works. A session that builds osgx objects without imp
 lib = osgx.initialize()  # raises if one is already alive; check osgx.Library.alive()
 ```
 
-osgSlug sessions use `osgSlug.initialize()` instead (an osgx Library subclass that also registers
-osgSlug's shader catalog); `pyosgslug_example` creates that one.
+## 14. A project's own local `aipython/` folder shadows the real package
+
+Any repo that keeps its own knowledge docs at `<repo>/aipython/*.md` (this project, `osgx`, and
+others) creates an empty Python namespace package at that path. Launching a tmux session with the
+working directory set to one of those repos makes `import aipython` resolve to that empty
+namespace package instead of the real, installed `aipython` package — `pyosg_repl`/`pyosg_example`
+then fail with `No module named 'aipython.integration'`, which reads like a broken install but
+isn't one.
+
+Fix: launch tmux sessions from a directory with no local `aipython/` folder, with the real
+package's location explicit on `PYTHONPATH`:
+
+```
+cd /tmp && PYTHONPATH=/home/cubicool/dev/aipython <command>
+```
+
+## 15. Testing a fresh/uninstalled build: installed libs win on `LD_LIBRARY_PATH` unless told otherwise
+
+A project's `BUILD-*` directory is not automatically what gets loaded — `LD_LIBRARY_PATH`
+(typically `~/local*/lib`) puts the *installed* copy of a shared library ahead of a fresh build's
+own `RUNPATH`, so testing against "the build you just compiled" silently tests the old installed
+one instead unless you force it.
+
+Each project's build dir carries its own small wrapper script for this
+(`BUILD-g++-13.3.0-NOASAN/osglibdir.sh` in `osgx`, for example) — launch through it:
+
+```
+BUILD-g++-13.3.0-NOASAN/osglibdir.sh python3 /abs/path/script.py
+```
+
+The script sets the build dir's own `LD_LIBRARY_PATH`/`OSG_LIBRARY_PATH` ahead of the installed
+ones, so built osgDB plugins (`osgPlugins-<version>/` under the build dir) win over installed
+copies too. A tmux session can be wrapped this way directly.
+
+A kernel session can't be wrapped by an external script launch — load the fresh library
+explicitly before `import`ing anything that depends on it instead:
+
+```python
+import ctypes
+ctypes.CDLL(f"{build_dir}/libosgxd.so", mode=ctypes.RTLD_GLOBAL)  # before `import osgx`
+```
+
+Verify which copy actually loaded via `/proc/self/maps` if there's any doubt.
+
+## 16. The tmux pane closes the instant the process exits — exit-time output is unrecoverable from the pane
+
+If a script prints something only right before exiting (a final summary, a traceback on a clean
+`sys.exit`), that output can vanish with the pane before it's ever read back through `capture()`.
+Check the process's actual exit code from a plain, non-tmux `Bash` run instead of trying to
+recover it from the tmux session after the fact.
