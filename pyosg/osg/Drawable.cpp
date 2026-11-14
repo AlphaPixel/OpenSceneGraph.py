@@ -153,6 +153,48 @@ void bind_Drawable(py::module_& m) {
 			"attribute arrays, instead of relying on State's shared/global VAO."
 		)
 	;
+
+	py::class_<
+		osg::DispatchCompute,
+		osg::Drawable,
+		osg::ref_ptr<osg::DispatchCompute>
+	>(
+		m,
+		"DispatchCompute",
+		"A Drawable that runs glDispatchCompute(x, y, z) with whatever compute Program its "
+		"StateSet holds, instead of drawing geometry. It issues no memory barrier of its own "
+		"(see osgx.ComputePass for one that does)."
+	)
+		.def(
+			py::init<GLint, GLint, GLint>(),
+			"numGroupsX"_a=0,
+			"numGroupsY"_a=0,
+			"numGroupsZ"_a=0,
+			"Create a dispatch of numGroupsX x numGroupsY x numGroupsZ workgroups."
+		)
+		.def_property(
+			"computeGroups",
+			[](const osg::DispatchCompute& self) {
+				GLint x = 0;
+				GLint y = 0;
+				GLint z = 0;
+
+				self.getComputeGroups(x, y, z);
+
+				return py::make_tuple(x, y, z);
+			},
+			[](osg::DispatchCompute& self, py::object obj) {
+				auto vals = pyx::unpack_sequence<GLint, GLint, GLint>(obj);
+
+				if(!vals) throw py::value_error("computeGroups requires (x, y, z)");
+
+				auto& [x, y, z] = *vals;
+
+				self.setComputeGroups(x, y, z);
+			},
+			"The (x, y, z) workgroup counts passed to glDispatchCompute()."
+		)
+	;
 }
 
 }

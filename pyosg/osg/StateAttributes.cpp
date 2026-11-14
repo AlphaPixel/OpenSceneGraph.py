@@ -6,6 +6,8 @@ OSGX_DISABLE_WARNINGS
 #include <osg/BlendFunc>
 #include <osg/Depth>
 #include <osg/BufferIndexBinding>
+#include <osg/BindImageTexture>
+#include <osg/Texture>
 
 OSGX_ENABLE_WARNINGS
 
@@ -191,6 +193,106 @@ void bind_StateAttributes(py::module_& m) {
 			"size"_a=0,
 			"Bind a UniformBufferObject to UBO binding point `index`, optionally only a "
 			"byte [offset, offset+size) range of it (size=0 binds the whole buffer)."
+		)
+	;
+
+	auto bindImage = py::class_<
+		osg::BindImageTexture,
+		osg::StateAttribute,
+		osg::ref_ptr<osg::BindImageTexture>
+	>(
+		m,
+		"BindImageTexture",
+		"A StateAttribute binding one level of a Texture to an image unit (glBindImageTexture), "
+		"for shader image load/store - e.g. a compute shader's `layout(binding = N, r8) uniform "
+		"image2D` output. One attribute per image unit (its member is the unit)."
+	);
+
+	py::enum_<osg::BindImageTexture::Access>(
+		bindImage,
+		"Access",
+		"How the shader accesses the image: READ_ONLY, WRITE_ONLY or READ_WRITE."
+	)
+		.value("READ_ONLY", osg::BindImageTexture::READ_ONLY)
+		.value("WRITE_ONLY", osg::BindImageTexture::WRITE_ONLY)
+		.value("READ_WRITE", osg::BindImageTexture::READ_WRITE)
+		.export_values()
+	;
+
+	bindImage
+		.def(
+			py::init([](
+				GLuint imageUnit,
+				osg::Texture* texture,
+				osg::BindImageTexture::Access access,
+				GLenum format,
+				int level,
+				bool layered,
+				int layer
+			) {
+				return new osg::BindImageTexture(
+					imageUnit,
+					texture,
+					access,
+					format,
+					level,
+					layered ? GL_TRUE : GL_FALSE,
+					layer
+				);
+			}),
+			"imageUnit"_a=0,
+			"texture"_a=nullptr,
+			"access"_a=osg::BindImageTexture::READ_ONLY,
+			"format"_a=GL_RGBA8,
+			"level"_a=0,
+			"layered"_a=false,
+			"layer"_a=0,
+			"Bind mip `level` of `texture` to image unit `imageUnit`. `format` is the GL internal "
+			"format the shader's image declaration uses (e.g. GL_R8 for `r8`), which must be "
+			"size-compatible with the texture's own. `layered`/`layer` select all layers or one "
+			"layer of an array/3D/cube texture."
+		)
+		.def_property(
+			"imageUnit",
+			&osg::BindImageTexture::getImageUnit,
+			&osg::BindImageTexture::setImageUnit,
+			"The image unit (the shader's `layout(binding = N)`)."
+		)
+		.def_property(
+			"texture",
+			[](osg::BindImageTexture& self) { return self.getTexture(); },
+			&osg::BindImageTexture::setTexture,
+			"The bound Texture."
+		)
+		.def_property(
+			"access",
+			&osg::BindImageTexture::getAccess,
+			&osg::BindImageTexture::setAccess,
+			"The BindImageTexture.Access mode."
+		)
+		.def_property(
+			"format",
+			&osg::BindImageTexture::getFormat,
+			&osg::BindImageTexture::setFormat,
+			"The GL internal format the shader reads/writes the image as."
+		)
+		.def_property(
+			"level",
+			&osg::BindImageTexture::getLevel,
+			&osg::BindImageTexture::setLevel,
+			"The bound mip level."
+		)
+		.def_property(
+			"layered",
+			[](const osg::BindImageTexture& self) { return self.getIsLayered() != GL_FALSE; },
+			[](osg::BindImageTexture& self, bool layered) { self.setIsLayered(layered ? GL_TRUE : GL_FALSE); },
+			"True binds every layer of an array/3D/cube texture; False binds only `layer`."
+		)
+		.def_property(
+			"layer",
+			&osg::BindImageTexture::getLayer,
+			&osg::BindImageTexture::setLayer,
+			"The bound layer when `layered` is False."
 		)
 	;
 }

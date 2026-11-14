@@ -94,6 +94,7 @@ namespace osg {
 	class Camera;
 	class Texture;
 	class Texture2D;
+	class Texture3D;
 	class Geometry;
 }
 
@@ -125,6 +126,7 @@ namespace pybind11x {
 	template<> struct kwargs_base<osg::Camera> { using type = osg::Transform; };
 	template<> struct kwargs_base<osg::Texture> { using type = osg::StateAttribute; };
 	template<> struct kwargs_base<osg::Texture2D> { using type = osg::Texture; };
+	template<> struct kwargs_base<osg::Texture3D> { using type = osg::Texture; };
 	template<> struct kwargs_base<osg::Geometry> { using type = osg::Drawable; };
 
 	template<> void kwargs_init_own(osg::Object& self, const py::kwargs& kwargs);
@@ -140,6 +142,7 @@ namespace pybind11x {
 	template<> void kwargs_init_own(osg::Camera& self, const py::kwargs& kwargs);
 	template<> void kwargs_init_own(osg::Texture& self, const py::kwargs& kwargs);
 	template<> void kwargs_init_own(osg::Texture2D& self, const py::kwargs& kwargs);
+	template<> void kwargs_init_own(osg::Texture3D& self, const py::kwargs& kwargs);
 	template<> void kwargs_init_own(osg::Geometry& self, const py::kwargs& kwargs);
 }
 

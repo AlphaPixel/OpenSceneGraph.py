@@ -51,6 +51,23 @@ namespace pybind11x {
 			kwargs["numMipmapLevels"].cast<unsigned int>()
 		);
 	}
+
+	template<>
+	void kwargs_init_own(osg::Texture3D& self, const py::kwargs& kwargs) {
+		if(kwargs.contains("size")) {
+			auto vals = unpack_sequence<int, int, int>(kwargs["size"]);
+
+			if(!vals) throw py::value_error("size requires (width, height, depth)");
+
+			auto& [width, height, depth] = *vals;
+
+			self.setTextureSize(width, height, depth);
+		}
+
+		if(kwargs.contains("numMipmapLevels")) self.setNumMipmapLevels(
+			kwargs["numMipmapLevels"].cast<unsigned int>()
+		);
+	}
 }
 
 namespace pyosg {
@@ -358,6 +375,73 @@ void bind_Texture(py::module_& m) {
 			&osg::Texture2D::apply,
 			"Bind and upload this texture's current state to the GL context (normally "
 			"called internally by OSG's State, rarely by user code)."
+		)
+	;
+
+	py::class_<
+		osg::Texture3D,
+		osg::Texture,
+		osg::ref_ptr<osg::Texture3D>
+	>(
+		m,
+		"Texture3D",
+		"A 3D (volume) GL texture: width x height x depth texels, e.g. a volume, a 3D noise or a "
+		"3D lookup table."
+	)
+		.def(
+			py::init<>(),
+			"Create an empty Texture3D with no size or image set."
+		)
+		.def(py::init([](size_t width, size_t height, size_t depth) {
+			auto* t = new osg::Texture3D();
+
+			t->setTextureSize(
+				static_cast<int>(width),
+				static_cast<int>(height),
+				static_cast<int>(depth)
+			);
+
+			return t;
+		}),
+			"Create a Texture3D pre-sized to (width, height, depth) with no image data."
+		)
+		.def(
+			py::init(pyx::kwargs_ctor<osg::Texture3D>()),
+			"Create a Texture3D from keyword arguments matching its properties (wrap, filter, "
+			"internalFormat, image, size, numMipmapLevels, ...)."
+		)
+		.def_property(
+			"size",
+			[](osg::Texture3D& self) {
+				return py::make_tuple(
+					self.getTextureWidth(),
+					self.getTextureHeight(),
+					self.getTextureDepth()
+				);
+			},
+			[](osg::Texture3D& self, py::object obj) {
+				auto vals = pyx::unpack_sequence<int, int, int>(obj);
+
+				if(!vals) throw py::value_error("size requires (width, height, depth)");
+
+				auto& [width, height, depth] = *vals;
+
+				self.setTextureSize(width, height, depth);
+			},
+			"The texture's (width, height, depth) in texels; write calls setTextureSize (no "
+			"reallocation happens until apply())."
+		)
+		.def_property(
+			"numMipmapLevels",
+			&osg::Texture3D::getNumMipmapLevels,
+			&osg::Texture3D::setNumMipmapLevels,
+			"Explicit mipmap level count used when useHardwareMipMapGeneration is off."
+		)
+		.def(
+			"apply",
+			&osg::Texture3D::apply,
+			"Bind and upload this texture's current state to the GL context (normally called "
+			"internally by OSG's State, rarely by user code)."
 		)
 	;
 

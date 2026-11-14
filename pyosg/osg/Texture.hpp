@@ -5,6 +5,7 @@
 OSGX_DISABLE_WARNINGS
 
 #include <osg/Texture2D>
+#include <osg/Texture3D>
 #include <osg/TextureCubeMap>
 
 OSGX_ENABLE_WARNINGS

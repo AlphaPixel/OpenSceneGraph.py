@@ -4,6 +4,7 @@
 
 OSGX_DISABLE_WARNINGS
 
+#include <osg/DispatchCompute>
 #include <osg/Drawable>
 
 OSGX_ENABLE_WARNINGS
