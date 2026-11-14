@@ -22,6 +22,13 @@ void bind(py::module_& m) {
 			"erase"_a=false,
 			"Return the process-wide ReaderWriter registry singleton."
 		)
+		.def(
+			"addFileExtensionAlias",
+			&osgDB::Registry::addFileExtensionAlias,
+			"extension"_a,
+			"pluginExtension"_a,
+			"Map a file extension to a ReaderWriter plugin extension."
+		)
 		.def("getReaderWriterForExtension", &osgDB::Registry::getReaderWriterForExtension,
 			"Return the plugin registered for a filename extension."
 		)
