@@ -1,7 +1,7 @@
 import pytest
 
-from OpenSceneGraph.osg import Image, Texture, Texture2D
-from OpenSceneGraph.GL import GL_RGBA, GL_UNSIGNED_BYTE
+from OpenSceneGraph.osg import Image, Texture, Texture2D, Texture3D
+from OpenSceneGraph.GL import GL_R16UI, GL_RGBA, GL_UNSIGNED_BYTE
 
 def test_construction():
 	t = Texture2D()
@@ -114,4 +114,36 @@ def test_construction_kwargs():
 	assert t.sourceType == GL_UNSIGNED_BYTE
 	assert t.image is img
 	assert t.useHardwareMipMapGeneration == False
+	assert t.numMipmapLevels == 1
+
+def test_texture3d():
+	t = Texture3D()
+
+	assert t.size == (0, 0, 0)
+
+	t = Texture3D(4, 5, 6)
+
+	assert t.size == (4, 5, 6)
+	assert isinstance(t, Texture)
+
+	t.size = (8, 8, 2)
+
+	assert t.size == (8, 8, 2)
+
+	with pytest.raises(ValueError):
+		t.size = (8, 8)
+
+def test_texture3d_kwargs():
+	t = Texture3D(
+		size=(16, 16, 4),
+		wrap=Texture.CLAMP_TO_EDGE,
+		filter=(Texture.NEAREST, Texture.NEAREST),
+		internalFormat=GL_R16UI,
+		numMipmapLevels=1
+	)
+
+	assert t.size == (16, 16, 4)
+	assert t.wrap == (Texture.CLAMP_TO_EDGE, Texture.CLAMP_TO_EDGE, Texture.CLAMP_TO_EDGE)
+	assert t.filter == (Texture.NEAREST, Texture.NEAREST)
+	assert t.internalFormat == GL_R16UI
 	assert t.numMipmapLevels == 1

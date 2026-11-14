@@ -1269,6 +1269,10 @@ def configure_viewer(viewer, root):
 		gui_opts = osgx.imgui.Options()
 		gui_opts.dock = osgx.imgui.Dock.LEFT
 		gui_opts.dock_width = 320.0
+		# Overlay the full-window scene instead of shrinking the master viewport: the deferred
+		# passes' own cameras set fixed full-window viewports (0, 0, w, h), which a shrunk master
+		# viewport would no longer match.
+		gui_opts.dock_reserve = False
 
 		# Pin ImGui after both final_cam/debug_cam and the optional gizmo overlay. In particular,
 		# raw-channel visualization masks final_cam, so it cannot serve as the --no-lights fallback.
@@ -1458,7 +1462,7 @@ def configure_viewer(viewer, root):
 		gui.addSection("Post FX", draw_post_fx_knobs, closed_section)
 
 		gui.addStatsSection(viewer)
-		gui.addProfilerSection(viewer, root, default_open=False)
+		gui.addProfilerSection(viewer, default_open=False)
 
 if __name__ == "__main__":
 	W, H = window_size(default=(1169, 768))

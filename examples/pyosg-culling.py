@@ -13,10 +13,9 @@ Proves two things as you look around with WASD + mouse look:
      drives it. Watch them appear/disappear at the edges of the view.
 
   2. The GPU really does stall by close to the requested amount: the osgx.imgui "Profiler"
-     section shows live per-drawable GPU ms (osgx.debug.ProfilerVisitor under the hood), so
-     each chunk's stall reads out individually, and culled chunks simply stop reporting -
-     turn to bring progressively more (and heavier, redder) chunks into view and watch it
-     climb.
+     section shows live per-drawable GPU time, so each chunk's stall reads out individually,
+     and culled chunks are dimmed - turn to bring progressively more (and heavier, redder)
+     chunks into view and watch it climb.
 
 Each chunk's proxy sphere is colored/sized green->red, small->large by its assigned
 duration, so "heavier" chunks are visually obvious before you even check the stats. Each
@@ -198,7 +197,7 @@ def configure_viewer(viewer, root):
 	gui = osgx.imgui.Widget(viewer)
 
 	gui.addStatsSection(viewer, default_open=True)
-	gui.addProfilerSection(viewer, root, default_open=True)
+	gui.addProfilerSection(viewer, default_open=True)
 
 def parse_args():
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

@@ -1,6 +1,8 @@
 from .conftest import refcmp
 
-from OpenSceneGraph.osg import BoundingBox, Drawable, Vec3f
+import pytest
+
+from OpenSceneGraph.osg import BoundingBox, DispatchCompute, Drawable, Vec3f
 
 def test_construction():
 	d = Drawable()
@@ -58,3 +60,20 @@ def test_drawcallback():
 	d.drawCallback = None
 
 	assert d.drawCallback is None
+
+def test_dispatchcompute():
+	d = DispatchCompute()
+
+	assert isinstance(d, Drawable)
+	assert d.computeGroups == (0, 0, 0)
+
+	d = DispatchCompute(8, 4, 1)
+
+	assert d.computeGroups == (8, 4, 1)
+
+	d.computeGroups = (2, 3, 4)
+
+	assert d.computeGroups == (2, 3, 4)
+
+	with pytest.raises(ValueError):
+		d.computeGroups = (2, 3)

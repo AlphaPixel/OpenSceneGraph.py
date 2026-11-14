@@ -575,8 +575,37 @@ if(NOT PYOSG_EMBEDDED)
 			INSTALL_RPATH "$ORIGIN/.."
 		)
 
+		# OSG's own SETUP_LIBRARY macro (and ktx's CMakeLists) set VERSION to the
+		# full project version and SOVERSION to a separate, shorter value (e.g.
+		# osg: VERSION 3.6.5, SOVERSION 161). install(TARGETS) normally turns that
+		# into 3 files per library on Unix - the real file (.so.VERSION), a SONAME
+		# symlink (.so.SOVERSION), and an unversioned devel symlink (.so) - but a
+		# wheel is a zip archive, and the step that packs it dereferences symlinks
+		# into full copies instead of preserving them. That tripled the on-disk
+		# size of every one of these libraries for no reason: nothing in this
+		# wheel links against the unversioned "-lfoo" devel name post-install,
+		# every consumer's DT_NEEDED already points at the SONAME. Collapsing
+		# VERSION to equal SOVERSION merges the real-file and SONAME tiers into
+		# one physical file; NAMELINK_SKIP below drops the remaining unversioned
+		# symlink, leaving exactly one real file per library.
+		foreach(PYOSG_VERSIONED_LIB IN LISTS PYOSG_OSG_LIBRARIES)
+			get_target_property(PYOSG_VERSIONED_LIB_SOVERSION "${PYOSG_VERSIONED_LIB}" SOVERSION)
+
+			if(PYOSG_VERSIONED_LIB_SOVERSION)
+				set_target_properties("${PYOSG_VERSIONED_LIB}" PROPERTIES
+					VERSION "${PYOSG_VERSIONED_LIB_SOVERSION}"
+				)
+			endif()
+		endforeach()
+
+		get_target_property(PYOSG_KTX_SOVERSION ktx SOVERSION)
+
+		if(PYOSG_KTX_SOVERSION)
+			set_target_properties(ktx PROPERTIES VERSION "${PYOSG_KTX_SOVERSION}")
+		endif()
+
 		install(TARGETS ${PYOSG_OSG_LIBRARIES} osgx osgx_python ktx
-			LIBRARY DESTINATION "OpenSceneGraph"
+			LIBRARY DESTINATION "OpenSceneGraph" NAMELINK_SKIP
 			RUNTIME DESTINATION "OpenSceneGraph"
 			ARCHIVE DESTINATION "OpenSceneGraph"
 		)

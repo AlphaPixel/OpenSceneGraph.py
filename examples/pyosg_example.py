@@ -55,9 +55,11 @@ def window_size(default=(800, 600)):
 # os.environ.setdefault() block above runs (see that block's own comment), and this module gets
 # imported by every example specifically so those defaults land before ITS OWN internal osg
 # import, let alone the caller's later `from OpenSceneGraph import *`.
-from OpenSceneGraph import osg
+from OpenSceneGraph import osg, osgDB
 from OpenSceneGraph.GL import GL_DEPTH_TEST
 import osgx
+
+osgDB.Registry.instance().addFileExtensionAlias("glb", "gltf")
 
 # GL 4.6 core-profile context defaults. Applied to the DisplaySettings singleton that every
 # windowed and headless context is seeded from, not to os.environ: nothing is inherited by child
