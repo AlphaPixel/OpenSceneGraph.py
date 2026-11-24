@@ -303,9 +303,9 @@ void main() {{
 
 # --hdr/--env resolution shared by every consumer that binds FRAGMENT_SHADER_IBL --
 # pyosg-dice.py's dice, pyosg-match4-dice.py's dice AND (already, separately) its
-# --scene backdrop. Same contract/candidate paths as pyosg-khronos-viewer.py's own
-# resolve_asset()/resolve_environment_manifest(), just generalized off of a single model
-# file's directory since this module has no one asset directory of its own.
+# --scene backdrop. --env goes through osgx.gltf.findEnvironment() (the name as given, else
+# env/<stem>.gltf on OSG_FILE_PATH) with no bundled fallback: this module has no asset directory
+# of its own.
 def resolve_hdr(value):
 	path = pathlib.Path(value).expanduser()
 
@@ -320,12 +320,7 @@ def resolve_hdr(value):
 	raise FileNotFoundError(f"Cannot find HDR environment {value!r}")
 
 def resolve_environment_manifest(value):
-	path = pathlib.Path(value).expanduser()
-
-	if path.is_file():
-		return path
-
-	resolved = osgx.findDataFile(value, ("env/{}.gltf",))
+	resolved = osgx.gltf.findEnvironment(str(pathlib.Path(value).expanduser()))
 
 	if resolved:
 		return pathlib.Path(resolved)

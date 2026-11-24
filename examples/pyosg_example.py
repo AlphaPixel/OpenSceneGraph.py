@@ -129,24 +129,127 @@ def resolve_model(value):
 
 	return str(path) if path.is_file() else None
 
-# HDR/manifest assets: osgx.findDataFile() (OSG_FILE_PATH) first, then this wheel's own bundled
-# `assets/env/`. Only pre-baked manifests (.gltf) are ever bundled there, so a raw --hdr lookup
-# (suffix="hdr") still falls through to the caller's own "clone glTF-Sample-Environments" error --
-# correct, this wheel never ships the raw floating-point HDR sources, only baked env/ manifests.
+# Data files such as a raw --hdr: the path as given, else osgx.findDataFile() (OSG_FILE_PATH),
+# accepting only `suffix`. None if neither has it. Environment manifests use resolve_environment().
 def resolve_asset(value, suffix):
 	path = pathlib.Path(value).expanduser()
 
 	if path.is_file():
 		return str(path)
 
-	found = osgx.findDataFile(value, (), suffix)
+	return osgx.findDataFile(value, (), suffix) or None
+
+# osgx_environment manifests (--env): osgx.gltf.findEnvironment() (the name as given, else
+# env/<stem>.gltf, through the working directory and OSG_FILE_PATH, where osgx-environment bakes
+# live, e.g. OpenSceneGraph-Data/env), then this wheel's bundled `assets/env/`. The bundled bakes
+# are reduced-size (wheel-sized), so that fallback warns. None if nothing matches.
+def resolve_environment(value):
+	path = pathlib.Path(value).expanduser()
+	found = osgx.gltf.findEnvironment(str(path))
 
 	if found:
 		return found
 
-	path = PACKAGE_ASSET_DIR / "env" / f"{path.stem}.{suffix}"
+	bundled = PACKAGE_ASSET_DIR / "env" / f"{path.stem}.gltf"
 
-	return str(path) if path.is_file() else None
+	if not bundled.is_file():
+		return None
+
+	print(
+		f"pyosg_example: WARNING: no {path.stem!r} environment on OSG_FILE_PATH (env/{path.stem}.gltf); "
+		f"using the bundled reduced-size bake {bundled}",
+		file=sys.stderr,
+	)
+
+	return str(bundled)
+
+def _vec3d(text):
+	"""argparse type for an "X,Y,Z" argument."""
+
+	import argparse
+
+	try:
+		x, y, z = (float(v) for v in text.split(","))
+
+	except ValueError:
+		raise argparse.ArgumentTypeError(f"expected X,Y,Z, got {text!r}")
+
+	return osg.Vec3d(x, y, z)
+
+# The initial-camera options: osgx's C++ examples' (osgx-example.hpp) --camera-eye/--camera-center/
+# --camera-up, plus --camera. Pair with apply_camera().
+def add_camera_arguments(parser):
+	"""Add --camera FILE and --camera-eye/--camera-center/--camera-up X,Y,Z to an argparse parser."""
+
+	group = parser.add_argument_group("initial camera")
+
+	group.add_argument(
+		"--camera",
+		metavar="FILE",
+		help="glTF camera (osgx.gltf.loadCamera(), e.g. a Khronos glTF-Sample-Viewer export): its "
+			"pose and vertical field of view",
+	)
+	group.add_argument("--camera-eye", type=_vec3d, metavar="X,Y,Z", help="initial camera eye")
+	group.add_argument("--camera-center", type=_vec3d, metavar="X,Y,Z", help="initial camera look-at center")
+	group.add_argument("--camera-up", type=_vec3d, metavar="X,Y,Z", help="initial camera up vector")
+
+# Applies add_camera_arguments()'s options to `viewer` (manipulator and its node already set, not
+# yet realized). The pose starts from the manipulator's computed home position (or the camera's
+# view matrix without a manipulator), then --camera replaces it, then each --camera-eye/center/up
+# replaces its one value. With a manipulator the result becomes its fixed home position, so
+# home() (space) returns to it.
+#
+# A --camera pose's center is moved to the point on its view ray nearest the home center, since a
+# glTF camera stores no focus distance and an orbit manipulator pivots about the center. Only its
+# fovy is applied to the projection: the aspect ratio stays the window's, and near/far stay OSG's
+# per-frame computation.
+def apply_camera(viewer, args):
+	"""Apply add_camera_arguments()'s options to a viewer; exits if --camera cannot be loaded."""
+
+	if not (args.camera or args.camera_eye or args.camera_center or args.camera_up):
+		return
+
+	camera = viewer.camera
+	manipulator = viewer.cameraManipulator
+
+	if manipulator is not None:
+		if manipulator.autoComputeHomePosition and manipulator.node is not None:
+			manipulator.computeHomePosition(camera)
+
+		eye, center, up = manipulator.homePosition
+
+	else:
+		eye, center, up = camera.viewMatrix.getLookAt()
+
+	if args.camera:
+		exported = osgx.gltf.loadCamera(str(pathlib.Path(args.camera).expanduser()))
+
+		if exported is None:
+			sys.exit(f"Failed to load camera: {args.camera}")
+
+		pose = exported.viewpoint.withPivot(center)
+		eye, center, up = pose.eye, pose.center, pose.up
+
+		_, aspect, near, far = camera.projectionMatrix.getPerspective()
+
+		camera.projectionMatrix = osg.Matrixd.perspective(exported.fovy, aspect, near, far)
+
+	if args.camera_eye:
+		eye = args.camera_eye
+
+	if args.camera_center:
+		center = args.camera_center
+
+	if args.camera_up:
+		up = args.camera_up
+
+	if manipulator is not None:
+		manipulator.autoComputeHomePosition = False
+		manipulator.homePosition = (eye, center, up)
+		manipulator.home(0.0)
+
+	else:
+		camera.viewMatrix = osg.Matrixd.lookAt(eye, center, up)
 
 # Same technique as pyosg_async.py's ProgressBar._build_label()/_position_label() - a plain
 # child of an identity-view/projection POST_RENDER Camera, hand-composed translate*scale*translate

@@ -15,11 +15,12 @@ namespace pyx = pybind11x;
 namespace pyosg {
 
 namespace detail {
-	using NodeSlots = pyx::PropertySlots<osg::Node, 2>;
+	using NodeSlots = pyx::PropertySlots<osg::Node, 3>;
 	using NodeStorage = pyx::ProxyStorageOSG<osg::Node, NodeSlots>;
 
 	constexpr size_t UpdateCallbackSlot = 0;
 	constexpr size_t EventCallbackSlot = 1;
+	constexpr size_t CullCallbackSlot = 2;
 
 	using UpdateCallbackType = osg::NodeCallback;
 	using UpdateCallbackWrapper = CallableCallback<
@@ -28,7 +29,7 @@ namespace detail {
 		true
 	>;
 
-	// NOTE: setUpdateCallback/setEventCallback are each overloaded with a member TEMPLATE
+	// NOTE: setUpdateCallback/setEventCallback/setCullCallback are each overloaded with a member TEMPLATE
 	// (setX(const ref_ptr<T>&), for convenience) alongside the plain setX(Callback*) - that
 	// template poisons plain `auto` deduction (and overload_cast) for the whole set, same as
 	// Bound.hpp's expandBy/expandRadiusBy; static_cast's explicit target type is what lets the
@@ -40,6 +41,10 @@ namespace detail {
 	constexpr auto EventCallbackGetter = py::overload_cast<>(&osg::Node::getEventCallback);
 	constexpr auto EventCallbackSetter =
 		static_cast<void(osg::Node::*)(osg::Callback*)>(&osg::Node::setEventCallback)
+	;
+	constexpr auto CullCallbackGetter = py::overload_cast<>(&osg::Node::getCullCallback);
+	constexpr auto CullCallbackSetter =
+		static_cast<void(osg::Node::*)(osg::Callback*)>(&osg::Node::setCullCallback)
 	;
 
 	// Slot-backed callback setter. We canonicalize the stored pointer via the getter so SlotCache
@@ -83,6 +88,16 @@ namespace detail {
 			EventCallbackSlot,
 			EventCallbackSetter,
 			EventCallbackGetter,
+			osg::Callback,
+			UpdateCallbackWrapper
+		>();
+	}
+
+	inline auto node_cull_callback_property_setter() {
+		return node_callback_property_setter<
+			CullCallbackSlot,
+			CullCallbackSetter,
+			CullCallbackGetter,
 			osg::Callback,
 			UpdateCallbackWrapper
 		>();

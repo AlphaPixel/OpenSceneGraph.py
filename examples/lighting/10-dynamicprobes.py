@@ -48,7 +48,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 # Also applies the shared example defaults (see pyosg_example.py): OSG_WINDOW/SingleThreaded,
 # the GL 4.6 core-profile context, and the osgx.Library.
-from pyosg_example import window_size, resolve_model, resolve_asset
+from pyosg_example import window_size, resolve_model, resolve_asset, resolve_environment
 
 import numpy as np
 
@@ -417,7 +417,7 @@ def build_scene(w, h):
 	args = ap.parse_args()
 
 	# --env, not --hdr: only pre-baked manifests are ever bundled in the openscenegraph-
-	# examples wheel (see resolve_asset()'s own comment in pyosg_example.py) - a bare
+	# examples wheel (see resolve_environment() in pyosg_example.py) - a bare
 	# invocation with neither flag must work out of the box against a plain `pip install`,
 	# not require OSG_FILE_PATH pointed at a real glTF-Sample-Environments checkout.
 	if not args.hdr and not args.env:
@@ -457,7 +457,7 @@ def build_scene(w, h):
 		environment.rotation = osgx.gltf.KHRONOS_ENVIRONMENT_ROTATION
 
 	else:
-		env_path = resolve_asset(args.env, "gltf")
+		env_path = resolve_environment(args.env)
 
 		if not env_path:
 			sys.exit(f"Cannot find environment manifest {args.env!r}")

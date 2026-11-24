@@ -17,6 +17,11 @@ namespace pybind11x {
 			kwargs["eventCallback"]
 		);
 
+		if(kwargs.contains("cullCallback")) pyosg::detail::node_cull_callback_property_setter()(
+			self,
+			kwargs["cullCallback"]
+		);
+
 		if(kwargs.contains("cullingActive")) self.setCullingActive(
 			kwargs["cullingActive"].cast<bool>()
 		);
@@ -30,14 +35,14 @@ void bind_Node(py::module_& m) {
 		m,
 		"Node",
 		"Base class for every element of the scene graph - leaf Drawables and the Group "
-		"nodes that hold them alike. .updateCallback/.eventCallback each accept either a "
+		"nodes that hold them alike. .updateCallback/.eventCallback/.cullCallback each accept either a "
 		"NodeCallback subclass instance or a plain Python callable, in place of OSG's "
 		"traditional set*Callback()/get*Callback() methods."
 	)
 		.def(py::init<>(), "Create a Node with default state (no name, all-visible nodeMask, no callbacks).")
 		.def(
 			py::init(pyx::kwargs_ctor<osg::Node>()),
-			"Create a Node, setting any of nodeMask/updateCallback/eventCallback/cullingActive "
+			"Create a Node, setting any of nodeMask/updateCallback/eventCallback/cullCallback/cullingActive "
 			"from keyword arguments."
 		)
 		.def_property(
@@ -53,6 +58,15 @@ void bind_Node(py::module_& m) {
 			detail::node_event_callback_property_setter(),
 			"Callback (NodeCallback subclass instance or plain callable) invoked once per "
 			"event traversal that visits this node."
+		)
+		.def_property(
+			"cullCallback",
+			detail::NodeSlots::getter<detail::CullCallbackSlot>(detail::CullCallbackGetter),
+			detail::node_cull_callback_property_setter(),
+			"Callback (NodeCallback subclass instance or plain callable) invoked once per "
+			"cull traversal that visits this node. A plain callable continues into the "
+			"children unless it returns False. Runs on the cull thread under multithreaded "
+			"viewers."
 		)
 		.def("accept", [](osg::Node& self, osg::NodeVisitor* nv) { self.accept(*nv); },
 			"Dispatch a NodeVisitor into this node, invoking the visitor's apply() and, if "

@@ -76,7 +76,7 @@ os.environ.setdefault("OSG_WINDOW", "50 50 1000 400")
 
 # Also applies the shared example defaults: SingleThreaded, the GL 4.6 core-profile context, and
 # the osgx.Library.
-from pyosg_example import label
+from pyosg_example import label, resolve_environment
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -138,28 +138,6 @@ def resolve_asset(value, suffix, candidates=()):
 		return pathlib.Path(resolved)
 
 	raise FileNotFoundError(f"Cannot find {value!r}")
-
-# OSG_FILE_PATH doesn't cover osgx's own build-tree env/ manifests - see
-# pyosg-metal-sphere.py's identical helper for why OSGX_ENV_DIR is needed as a fallback.
-OSGX_ENV_DIR = pathlib.Path("/home/cubicool/dev/osgx/BUILD-g++-13.3.0-NOASAN/env")
-
-def resolve_environment_manifest(value):
-	path = pathlib.Path(value).expanduser()
-
-	if path.is_file():
-		return path
-
-	resolved = osgx.findDataFile(value, ("env/{}.gltf",))
-
-	if resolved:
-		return pathlib.Path(resolved)
-
-	candidate = OSGX_ENV_DIR / f"{value}.gltf"
-
-	if candidate.is_file():
-		return candidate
-
-	raise FileNotFoundError(f"Cannot find environment manifest {value!r}")
 
 # One shape per (metallic, roughness) combo - a SEPARATE mesh, SEPARATE StateSet, SEPARATE
 # osgx.Material each, not one mesh with per-face/per-vertex variation (that's what the glitter
@@ -238,8 +216,12 @@ def build_sweep_scene(args):
 		environment.rotation = osgx.gltf.KHRONOS_ENVIRONMENT_ROTATION
 
 	else:
-		env_path = resolve_environment_manifest(args.env)
-		environment = osgx.gltf.loadEnvironment(str(env_path))
+		env_path = resolve_environment(args.env)
+
+		if env_path is None:
+			raise FileNotFoundError(f"Cannot find environment manifest {args.env!r}")
+
+		environment = osgx.gltf.loadEnvironment(env_path)
 
 	if environment is None:
 		raise RuntimeError(f"failed to prepare PBR IBL resources for {args.hdr or args.env}")

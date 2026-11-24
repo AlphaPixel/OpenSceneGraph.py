@@ -63,7 +63,7 @@ coverage.center = osg.Vec3(0.0, 0.0, 0.0)
 coverage.radius = 2.5
 
 shadow_map = osgx.ShadowMap.create(direction, coverage)
-shadow_map.casterIndex.set(0)  # which LightSet index this map shadows
+shadow_map.casterIndex.value = 0  # which LightSet index this map shadows
 
 shadow_map.camera.children.append(casters)  # casters: an osg.Group/Geode subgraph
 
@@ -103,7 +103,7 @@ via `shadow_map.cubeCapture.root`:
 
 ```python
 shadow_map = osgx.ShadowMap.createPoint(position, coverage)
-shadow_map.casterIndex.set(1)
+shadow_map.casterIndex.value = 1
 shadow_map.casters.children.append(casters)
 
 shadow_set.add(shadow_map)
@@ -156,7 +156,7 @@ data:
 shadow_map.reposition(new_direction, coverage)
 shadow_set.sync()  # <-- easy to forget; shadow silently stops tracking the light otherwise
 
-shadow_map.bias.set(0.002)
+shadow_map.bias.value = 0.002
 shadow_set.sync()
 ```
 

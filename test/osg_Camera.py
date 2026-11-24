@@ -8,7 +8,7 @@ def test_construction_defaults():
 
 	assert c.allowEventFocus == True
 	assert c.nearFarRatio == 0.0005
-	assert c.renderOrder == Camera.RenderOrder.POST_RENDER
+	assert c.renderOrder == (Camera.RenderOrder.POST_RENDER, 0)
 	assert c.referenceFrame == Transform.ReferenceFrame.RELATIVE_RF
 	assert refcmp(c, 1, 1)
 
@@ -37,7 +37,7 @@ def test_construction_kwargs():
 	assert c.computeNearFarMode == Camera.ComputeNearFarMode.DO_NOT_COMPUTE_NEAR_FAR
 	assert c.nearFarRatio == 0.001
 	assert (c.viewport.x, c.viewport.y, c.viewport.width, c.viewport.height) == (0, 0, 800, 600)
-	assert c.renderOrder == Camera.RenderOrder.PRE_RENDER
+	assert c.renderOrder == (Camera.RenderOrder.PRE_RENDER, 3)
 	assert c.renderTargetImplementation[0] == Camera.RenderTargetImplementation.PIXEL_BUFFER
 	assert c.referenceFrame == Transform.ReferenceFrame.ABSOLUTE_RF
 
@@ -55,13 +55,21 @@ def test_viewport_property_both_forms():
 def test_renderorder_property_both_forms():
 	c = Camera()
 
-	c.renderOrder = Camera.RenderOrder.PRE_RENDER
-
-	assert c.renderOrder == Camera.RenderOrder.PRE_RENDER
-
 	c.renderOrder = (Camera.RenderOrder.NESTED_RENDER, 1)
 
-	assert c.renderOrder == Camera.RenderOrder.NESTED_RENDER
+	assert c.renderOrder == (Camera.RenderOrder.NESTED_RENDER, 1)
+
+	# A bare RenderOrder resets order_num to 0, as osg::Camera::setRenderOrder() does.
+	c.renderOrder = Camera.RenderOrder.PRE_RENDER
+
+	assert c.renderOrder == (Camera.RenderOrder.PRE_RENDER, 0)
+
+	# Reads back in a form the setter accepts.
+	other = Camera()
+
+	other.renderOrder = c.renderOrder
+
+	assert other.renderOrder == c.renderOrder
 
 def test_rendertargetimplementation_property_both_forms():
 	c = Camera()

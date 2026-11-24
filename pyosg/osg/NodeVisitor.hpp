@@ -4,6 +4,7 @@
 
 OSGX_DISABLE_WARNINGS
 
+#include <osg/ComputeBoundsVisitor>
 #include <osg/Group>
 
 OSGX_ENABLE_WARNINGS

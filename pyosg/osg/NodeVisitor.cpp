@@ -130,6 +130,30 @@ void bind_NodeVisitor(py::module_& m) {
 			"The NodePath from the traversal's root down to the node currently being visited."
 		)
 	;
+
+	py::class_<
+		osg::ComputeBoundsVisitor,
+		osg::NodeVisitor,
+		osg::ref_ptr<osg::ComputeBoundsVisitor>
+	>(
+		m,
+		"ComputeBoundsVisitor",
+		"Accumulates the world-space BoundingBox of every Drawable it visits, applying each "
+		"Transform on the way down (unlike Node.bound, which is a loose sphere). Use as "
+		"node.accept(visitor), then read visitor.boundingBox."
+	)
+		.def(
+			py::init<osg::NodeVisitor::TraversalMode>(),
+			"traversalMode"_a=osg::NodeVisitor::TRAVERSE_ALL_CHILDREN,
+			"Create a visitor that traverses with the given mode (all children by default)."
+		)
+		.def_property_readonly(
+			"boundingBox",
+			[](osg::ComputeBoundsVisitor& self) { return self.getBoundingBox(); },
+			"The box accumulated so far (a copy); invalid if nothing was visited."
+		)
+		.def("reset", &osg::ComputeBoundsVisitor::reset, "Clear the accumulated box for reuse.")
+	;
 }
 
 }

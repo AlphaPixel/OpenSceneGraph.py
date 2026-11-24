@@ -53,7 +53,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 # Also applies the shared example defaults (see pyosg_example.py): OSG_WINDOW/SingleThreaded,
 # the GL 4.6 core-profile context, and the osgx.Library.
-from pyosg_example import window_size, resolve_model, resolve_asset
+from pyosg_example import window_size, resolve_model, resolve_asset, resolve_environment
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -800,10 +800,8 @@ class LightOrbit:
 
 # Set by build_scene(), read by configure_viewer() - args and everything the ImGui panel /
 # per-frame update callback close over (lighting, ssao, shadow_map, ...) aren't retrievable from
-# the returned root, and build_scene() never receives the live viewer (see the placeholder_camera
-# comment below for why one call in the middle of scene construction needs special handling
-# because of that). Same "no other channel exists" reasoning as pyosg-khronos-viewer.py's own
-# _args/_pbr stash.
+# the returned root, and build_scene() never receives the live viewer. Same "no other channel
+# exists" reasoning as pyosg-khronos-viewer.py's own _args/_pbr stash.
 _args = None
 _state = None
 
@@ -852,7 +850,7 @@ def build_scene(w, h):
 	args = ap.parse_args()
 
 	# --env, not --hdr: only pre-baked manifests are ever bundled in the openscenegraph-
-	# examples wheel (see resolve_asset()'s own comment in pyosg_example.py) - a bare
+	# examples wheel (see resolve_environment() in pyosg_example.py) - a bare
 	# invocation with neither flag must work out of the box against a plain `pip install`,
 	# not require OSG_FILE_PATH pointed at a real glTF-Sample-Environments checkout.
 	if not args.hdr and not args.env:
@@ -873,16 +871,6 @@ def build_scene(w, h):
 		sys.exit("Cannot find model - clone glTF-Sample-Assets into your OSG_FILE_PATH checkout")
 
 	model = osgDB.readNodeFile(path)
-
-	# PBRLightingPass.create() needs a real osg.Camera* to seed its initial view-matrix
-	# uniforms from - but build_scene() never receives the live viewer (the runner constructs it
-	# AFTER calling this), unlike the standalone __main__ block's old shape, which built `v` this
-	# early specifically to have one. A throwaway placeholder is enough: PBRLightingPass::create()
-	# (PBRDeferred.cpp) only ever READS it, once, via its own update() at the end of construction --
-	# it stores no reference to it. configure_viewer()'s update_per_frame() callback (wired below,
-	# once the real viewer exists) supplies the real camera on every subsequent frame, which is the
-	# only copy that ever actually matters for rendering.
-	placeholder_camera = osg.Camera()
 
 	bound = model.bound
 	bound_center = bound.center
@@ -916,7 +904,7 @@ def build_scene(w, h):
 		environment.rotation = osgx.gltf.KHRONOS_ENVIRONMENT_ROTATION
 
 	else:
-		env_path = resolve_asset(args.env, "gltf")
+		env_path = resolve_environment(args.env)
 
 		if not env_path:
 			sys.exit(f"Cannot find environment manifest {args.env!r}")
@@ -994,7 +982,7 @@ def build_scene(w, h):
 	lighting_options.aoTexture = ssao.aoTexture
 
 	lighting_options.environment = environment
-	lighting = osgx.PBRLightingPass.create(gbuffer, placeholder_camera, lighting_options)
+	lighting = osgx.PBRLightingPass.create(gbuffer, lighting_options)
 
 	if not lighting.valid():
 		sys.exit("Failed to build the lighting pass")
@@ -1195,10 +1183,9 @@ def build_scene(w, h):
 
 	return root
 
-# The live viewer.camera (for update_per_frame()'s per-frame matrix refresh, and the
+# The live viewer.camera (for update_per_frame()'s per-frame SSAO projection refresh, and the
 # cameraManipulator/ImGui setup below) doesn't exist until the runner constructs it AFTER
-# build_scene() returns - everything here needs it directly, unlike build_scene()'s own
-# placeholder_camera workaround for PBRLightingPass.create().
+# build_scene() returns - everything here needs it directly.
 def configure_viewer(viewer, root):
 	args = _args
 	state = _state
@@ -1233,17 +1220,14 @@ def configure_viewer(viewer, root):
 	color_gain_u = state["color_gain_u"]
 	post_enabled_u = state["post_enabled_u"]
 
-	# Combined per-frame update: the lighting pass's view-matrix uniforms (PBRLightingPass.update())
-	# plus SSAO's own forward projection matrix (see ssao_projection_u's own comment - neither is
-	# meaningfully established until well after the cameras that need them are built). Installed on
-	# whichever camera is the FIRST PRE_RENDER camera in this scene graph (add-order breaks the tie
-	# between shadow_map.camera and gbuffer.gbuffer.camera, both default order 0) - see
-	# PBRLightingPass.update()'s own comment for why it must NOT be viewer.camera's own
-	# preDrawCallback or application code after viewer.frame() returns, both of which hand the
-	# lighting pass a one-frame-stale matrix relative to what the geometry pass just rendered with.
+	# Per-frame update of SSAO's forward projection matrix (see ssao_projection_u's own comment -
+	# it is not meaningfully established until well after the cameras that need it are built).
+	# Installed on whichever camera is the FIRST PRE_RENDER camera in this scene graph (add-order
+	# breaks the tie between shadow_map.camera and gbuffer.gbuffer.camera, both default order 0):
+	# every PRE_RENDER camera draws before viewer.camera's own preDrawCallback fires, so anything
+	# later hands SSAO last frame's matrix. (The lighting pass's view matrix needs no wiring:
+	# gbuffer.view captures it during cull.)
 	def update_per_frame(ri):
-		lighting.update(viewer.camera)
-
 		ssao_projection_u.value = osg.Matrixf(viewer.camera.projectionMatrix)
 
 	if shadow_map is not None:

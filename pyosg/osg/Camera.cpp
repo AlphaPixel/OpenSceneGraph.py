@@ -230,10 +230,13 @@ void bind_Camera(py::module_& m) {
 		)
 		.def_property(
 			"renderOrder",
-			&osg::Camera::getRenderOrder,
+			[](const osg::Camera& self) {
+				return py::make_tuple(self.getRenderOrder(), self.getRenderOrderNum());
+			},
 			detail::camera_render_order_property_setter(),
-			"Set as (RenderOrder, order_num) to also set the secondary sort key among "
-			"PRE_RENDER/POST_RENDER cameras, or just a RenderOrder to keep order_num at 0."
+			"Read as (RenderOrder, order_num), order_num being the secondary sort key among "
+			"PRE_RENDER/POST_RENDER cameras; settable from that tuple or from just a RenderOrder "
+			"(order_num 0)."
 		)
 		.def_property(
 			"clearMask",
@@ -388,6 +391,15 @@ void bind_Camera(py::module_& m) {
 			"multisampleColorSamples"_a=0
 		)
 		.def("detach", &osg::Camera::detach, "Remove any attachment previously set on the given BufferComponent.")
+		.def(
+			"resize",
+			[](osg::Camera& self, int width, int height) { self.resize(width, height); },
+			"width"_a,
+			"height"_a,
+			"Resize the viewport and every attached texture or image to width x height, rebuilding "
+			"the FBO on the next draw (osg::Camera::RESIZE_DEFAULT; the projection matrix is left "
+			"unchanged). Attachments already at that size are left untouched."
+		)
 
 		.def_property(
 			"renderTargetImplementation",

@@ -215,3 +215,22 @@ def test_graphicsoperation_super_call_is_abstract():
 
 	with pytest.raises(NotImplementedError):
 		Op("op", False)(None)
+
+def test_node_cull_callback_property():
+	calls = []
+	n = Node()
+	cb = RecordingNodeCallback(calls)
+
+	assert n.cullCallback is None
+
+	n.cullCallback = cb
+
+	assert n.cullCallback is cb
+
+	n.cullCallback = None
+
+	assert n.cullCallback is None
+
+	m = Node(cullCallback=cb)
+
+	assert m.cullCallback is cb

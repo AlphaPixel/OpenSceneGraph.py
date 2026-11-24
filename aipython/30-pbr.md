@@ -1,8 +1,8 @@
 # Forward PBR (osgx.PBRScene) for ordinary OSG geometry
 
-`osgx.PBRScene.create()` is not limited to glTF-loaded nodes —
+`osgx.PBRScene.create()` is not limited to glTF-loaded nodes -
 it works with an ordinary `osg.ShapeDrawable`, provided the drawable carries
-an `osgx.Material` (see [`29-material.md`](29-material.md)) — a real
+an `osgx.Material` (see [`29-material.md`](29-material.md)) - a real
 `StateAttribute` whose buffer (`osgx_materialInputs`) the renderer reads. The
 light sources are all optional, passed in `osgx.PBRScene.Options`: an
 `osgx.Environment` (image-based light: specular + diffuse cubemaps + BRDF LUT,
@@ -121,22 +121,23 @@ The material attached to `drawable` does not need to be rebuilt.
   substituting one of this Program's built-in shader slots (`osgx.Hook.Skinning`,
   `osgx.Hook.Tonemap`). Each hook *replaces* the built-in definition (GLSL
   allows one body per function; adding a second is a link error, not an
-  override) — `osgx.SKINNING_HOOK_LINEAR_BLEND` (wrapped in
+  override) - `osgx.SKINNING_HOOK_LINEAR_BLEND` (wrapped in
   `osgx.resolveShaderLibs()`) enables real joint-matrix skinning
   in place of the identity-passthrough default.
 
-There is also a deferred, G-buffer-split path for scenes with many lights —
-`PBRGBuffer.create(node, width, height)` (material-only geometry pass) →
-`PBRLightingPass.create(gbuffer, mainCamera,
+There is also a deferred, G-buffer-split path for scenes with many lights -
+`PBRGBuffer.create(node, width, height)` (material-only geometry pass) -
+`PBRLightingPass.create(gbuffer,
 osgx.PBRLightingPass.Options(environment=environment, ...))` (lighting pass
-reading the G-buffer) — see [`12-gbuffer.md`](12-gbuffer.md); reach for it only
+reading the G-buffer, including the view matrix `gbuffer.view` captures each
+frame - no per-frame wiring) - see [`12-gbuffer.md`](12-gbuffer.md); reach for it only
 once a scene's light count/overdraw makes the single-pass `PBRScene` genuinely
 too expensive.
 
 ## Hand-assembled shader (no `osgx.Material`)
 
 `osgx.Material` is the supported way to populate the material data (see
-[`29-material.md`](29-material.md)) — it's a real `StateAttribute`, not
+[`29-material.md`](29-material.md)) - it's a real `StateAttribute`, not
 something worth hand-rolling. A hand-written shader reads it with
 `#pragma osgx::pbr MATERIAL_INPUTS, GET_MATERIAL` (`osgx_GetMaterial(uv, uv)`);
 all material data, including emissive and alpha mode/cutoff, lives in the one

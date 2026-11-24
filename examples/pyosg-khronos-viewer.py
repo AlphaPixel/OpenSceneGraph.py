@@ -6,8 +6,6 @@ optional diagnostics, and drives an osgViewer.Viewer.
 """
 
 import argparse
-import json
-import math
 import os
 import pathlib
 import time
@@ -16,7 +14,7 @@ import time
 os.environ.setdefault("OSG_WINDOW", "50 50 1420 933") # Default on cubicool's machine
 # Also applies the shared example defaults: SingleThreaded, the GL 4.6 core-profile context, and
 # the osgx.Library.
-from pyosg_example import window_size
+from pyosg_example import resolve_environment, window_size
 
 from OpenSceneGraph import *
 from OpenSceneGraph.GL import *
@@ -87,56 +85,6 @@ def resolve_model(value):
 		return pathlib.Path(resolved)
 
 	raise FileNotFoundError(f"Cannot find glTF model {value!r}")
-
-def resolve_environment_manifest(value):
-	path = pathlib.Path(value).expanduser()
-	name = path.stem
-
-	if path.is_file():
-		return path
-
-	resolved = osgx.findDataFile(value)
-
-	if resolved:
-		return pathlib.Path(resolved)
-
-	resolved = osgx.findDataFile(path.stem, ("env/{}.gltf",))
-
-	if resolved:
-		return pathlib.Path(resolved)
-
-	path = PACKAGE_ASSET_DIR / "env" / f"{name}.gltf"
-
-	if path.is_file():
-		return path
-
-	raise FileNotFoundError(f"Cannot find environment manifest {value!r} in configured data paths")
-
-def load_camera(path):
-	"""Read a Khronos Sample Viewer camera export into OSG's Z-up basis."""
-
-	with open(path, encoding="utf-8") as stream:
-		document = json.load(stream)
-
-	perspective = document["cameras"][0]["perspective"]
-	node = next(node for node in document["nodes"] if "camera" in node)
-	matrix = node["matrix"]
-
-	def z_up(value):
-		return osg.Vec3(value[0], -value[2], value[1])
-
-	eye = z_up(matrix[12:15])
-	forward = z_up((-matrix[8], -matrix[9], -matrix[10]))
-	up = z_up(matrix[4:7])
-
-	return (
-		osg.Matrix.lookAt(eye, eye + forward, up),
-		osg.Matrix.perspective(
-			math.degrees(perspective["yfov"]),
-			perspective["aspectRatio"],
-			perspective["znear"], perspective["zfar"]
-		)
-	)
 
 class FramebufferPNG(osg.Camera.DrawCallback):
 	"""Write the current default framebuffer once after the complete scene draw."""
@@ -278,8 +226,12 @@ def build_scene(w, h):
 		environment_description = str(hdr_path)
 
 	else:
-		env_path = resolve_environment_manifest(_args.env)
-		environment = osgx.gltf.loadEnvironment(str(env_path))
+		env_path = resolve_environment(_args.env)
+
+		if env_path is None:
+			raise FileNotFoundError(f"Cannot find environment manifest {_args.env!r} in configured data paths")
+
+		environment = osgx.gltf.loadEnvironment(env_path)
 		environment_description = str(env_path)
 
 	if environment is None:
@@ -322,7 +274,13 @@ def configure_viewer(viewer, root):
 	if args.camera:
 		camera_path = pathlib.Path(args.camera).expanduser()
 		viewer.cameraManipulator = None
-		viewer.camera.viewMatrix, viewer.camera.projectionMatrix = load_camera(camera_path)
+		exported = osgx.gltf.loadCamera(str(camera_path))
+
+		if exported is None:
+			raise RuntimeError(f"cannot load camera {str(camera_path)!r}")
+
+		viewer.camera.viewMatrix = exported.getViewMatrix()
+		viewer.camera.projectionMatrix = exported.getProjectionMatrix()
 
 	else:
 		viewer.cameraManipulator = osgGA.TrackballManipulator()
