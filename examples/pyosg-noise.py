@@ -1162,12 +1162,12 @@ def configure_viewer(viewer, root):
 	# --- ImGui panel: docked left, one CollapsingHeader section per noise type plus a pinned
 	# "Overview" section holding the button that clears the selection. Selecting/deselecting a
 	# panel forces its section open/closed via setSectionOpen() - see this file's own docstring
-	# for why that needed a small osgx addition rather than SectionOptions.default_open alone. - #
+	# for why that needed a small osgx addition rather than SectionOptions.defaultOpen alone. - #
 	gui_opts = osgx.imgui.Options()
 	gui_opts.dock = osgx.imgui.Dock.LEFT
-	gui_opts.dock_width = float(PANEL_WIDTH)
+	gui_opts.dockWidth = float(PANEL_WIDTH)
 
-	# No explicit draw_camera - unlike 11-sketchfab.py, pick_cam renders into its own 1x1 FBO,
+	# No explicit drawCamera - unlike 11-sketchfab.py, pick_cam renders into its own 1x1 FBO,
 	# never the default framebuffer, so there's no downstream POST_RENDER camera to conflict
 	# with ImGui's own PostDrawCallback on the master camera; the default guess is enough here.
 	gui = osgx.imgui.Widget(viewer, options=gui_opts)
@@ -1193,7 +1193,7 @@ def configure_viewer(viewer, root):
 
 	# Forced open every frame (never toggled off) - this section IS the "Overview" button, so
 	# it has no reason to ever collapse.
-	gui.addSection("Overview", draw_overview, osgx.imgui.SectionOptions(default_open=True))
+	gui.addSection("Overview", draw_overview, osgx.imgui.SectionOptions(defaultOpen=True))
 	gui.setSectionOpen("Overview", True)
 
 	# Global panel - one set of uniforms every noiseID branch reads from a single choke point
@@ -1241,7 +1241,7 @@ def configure_viewer(viewer, root):
 		)
 		if changed: uniforms["u_animSpeed"] = value
 
-	gui.addSection("Global", draw_global_knobs, osgx.imgui.SectionOptions(default_open=True))
+	gui.addSection("Global", draw_global_knobs, osgx.imgui.SectionOptions(defaultOpen=True))
 	gui.setSectionOpen("Global", True)
 
 	# Per-noise sections - still placeholders except the families with real PARAMS/DEFAULTS
@@ -1286,7 +1286,7 @@ def configure_viewer(viewer, root):
 	for name in LEGEND:
 		draw = CUSTOM_SECTIONS.get(name, make_noise_section(name))
 
-		gui.addSection(name, draw, osgx.imgui.SectionOptions(default_open=False))
+		gui.addSection(name, draw, osgx.imgui.SectionOptions(defaultOpen=False))
 
 	# u_time/inspect-camera per-frame update - an update callback instead of a Python-side loop
 	# of its own, so this runs correctly under ANY frame-loop driver (the shared runner's generic

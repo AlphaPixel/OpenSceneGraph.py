@@ -833,8 +833,8 @@ def build_multiburst(num_bursts=4, spread_radius=9.0, include_smoke=True, includ
 	explosions side by side, not identical copies at different positions - including
 	a randomized flame hue (build_fire()'s mid_color/core_color), so some bursts read
 	as ordinary fire and others as blue/green/violet "sci-fi" flame. Plain
-	`random.uniform()`/`colorsys.hsv_to_rgb()` - no numpy (see
-	[[feedback_avoid_numpy_crutch]]).
+	`random.uniform()`/`colorsys.hsv_to_rgb()` - no numpy, which is reserved for real array or
+	RNG-heavy work.
 
 	Each burst gets its own Program/Geometry (same build_fire()/build_shockwave()/etc.
 	as everywhere else in this file) instead of sharing one draw call via a
@@ -1161,13 +1161,14 @@ def configure_viewer(viewer, root):
 		# No deferred/compositing pipeline in this file (unlike 11-sketchfab.py) --
 		# flash_cam is POST_RENDER but discard()s every pixel except during its brief
 		# 0.25s flash, so the default master-camera draw hook is fine; no drawCamera
-		# override needed (contrast [[project_osgdebug_imgui_python]]'s final_cam fix).
+		# override needed (contrast 11-sketchfab.py, which draws ImGui from a dedicated
+		# always-enabled overlay camera because its final compositing camera gets masked).
 		# Pinned to the left edge like 11-sketchfab.py: osgx's ImGui build does not
 		# include interactive docking, so this fixed sidebar keeps the controls out
 		# of the explosion's way.
 		gui_opts = osgx.imgui.Options()
 		gui_opts.dock = osgx.imgui.Dock.LEFT
-		gui_opts.dock_width = 320.0
+		gui_opts.dockWidth = 320.0
 		gui = osgx.imgui.Widget(v, v.camera, gui_opts)
 
 		# Each key binding below (1/2/3/4/5) holds its OWN build_fire()/build_shockwave()/
@@ -1194,8 +1195,8 @@ def configure_viewer(viewer, root):
 			"""Add one ImGui section with a slider_float_nudge per (uniform_name,
 			label, min, max, default) in `sliders`, reading/writing straight through
 			each node in `nodes` (every same-layer instance across keys 1-5) --
-			no rebuild needed, matches [[feedback_uniform_value_property]] (.value,
-			not .getFloat()/[0]).
+			no rebuild needed; reads and writes go through Uniform.value, not
+			.getFloat()/[0].
 
 			The slider's displayed value is read from nodes[0] alone; every change
 			is then written to ALL of them, which is what keeps every key's copy
@@ -1206,8 +1207,8 @@ def configure_viewer(viewer, root):
 			(noiseScale/scrollSpeed/warpStrength/maxAlpha) that build_fire()/
 			build_smoke() never explicitly set, which would otherwise raise on the
 			first `.value` read. Labels are prefixed per layer ("Fire Duration", not
-			"Duration") so two sliders in different sections never share an ImGui ID
-			-- see [[feedback_imgui_section_label_collision]].
+			"Duration") so two sliders in different sections never share an ImGui ID;
+			identical labels collide even across sections.
 			"""
 
 			stateSets = [n.stateSet for n in nodes]
@@ -1227,7 +1228,7 @@ def configure_viewer(viewer, root):
 							ss.uniforms[name] = value
 
 			gui.addSection(
-				section_label, draw, osgx.imgui.SectionOptions(default_open=default_open)
+				section_label, draw, osgx.imgui.SectionOptions(defaultOpen=default_open)
 			)
 
 		add_uniform_sliders("Fire", fire_nodes, [
@@ -1257,7 +1258,7 @@ def configure_viewer(viewer, root):
 				for n in fire_nodes:
 					n.stateSet.uniforms["coreColor"] = osg.Vec3(r, g, b)
 
-		gui.addSection("Fire Color", draw_fire_colors, osgx.imgui.SectionOptions(default_open=True))
+		gui.addSection("Fire Color", draw_fire_colors, osgx.imgui.SectionOptions(defaultOpen=True))
 
 		add_uniform_sliders("Shockwave", shockwave_nodes, [
 			("duration", "Shockwave Duration", 0.1, 2.0, 0.6),
@@ -1304,7 +1305,7 @@ def configure_viewer(viewer, root):
 
 					target() if callable(target) else trigger(target, v)
 
-		gui.addSection("Triggers", draw_triggers, osgx.imgui.SectionOptions(default_open=True))
+		gui.addSection("Triggers", draw_triggers, osgx.imgui.SectionOptions(defaultOpen=True))
 
 	trigger(fire_only, v)
 

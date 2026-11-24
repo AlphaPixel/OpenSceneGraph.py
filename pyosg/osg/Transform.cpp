@@ -6,41 +6,39 @@
 
 namespace pybind11x {
 	template<>
-	void kwargs_init_own(osg::Transform& self, const py::kwargs& kwargs) {
-		if(kwargs.contains("referenceFrame")) self.setReferenceFrame(
-			kwargs["referenceFrame"].cast<osg::Transform::ReferenceFrame>()
-		);
+	void kwargs_init_own(osg::Transform& self, kwargs_consumer& kwargs) {
+		if(auto v = kwargs.pop<osg::Transform::ReferenceFrame>("referenceFrame")) {
+			self.setReferenceFrame(*v);
+		}
 	}
 
 	template<>
-	void kwargs_init_own(osg::MatrixTransform& self, const py::kwargs& kwargs) {
-		if(kwargs.contains("matrix")) self.setMatrix(kwargs["matrix"].cast<osg::Matrix>());
+	void kwargs_init_own(osg::MatrixTransform& self, kwargs_consumer& kwargs) {
+		if(auto v = kwargs.pop<osg::Matrix>("matrix")) self.setMatrix(*v);
 	}
 
 	template<>
-	void kwargs_init_own(osg::PositionAttitudeTransform& self, const py::kwargs& kwargs) {
+	void kwargs_init_own(osg::PositionAttitudeTransform& self, kwargs_consumer& kwargs) {
 		// `setPosition`/`setScale`/`setPivotPoint` all take `const osg::Vec3d&` explicitly (not
 		// the generic `osg::Vec3` = `Vec3f` alias) - matching that here, not just what happens
 		// to compile, since `.position`/`.scale`/`.pivotPoint` getters return `Vec3d` too and a
 		// `Vec3f` cast silently truncates precision instead of matching them.
-		if(kwargs.contains("position")) self.setPosition(kwargs["position"].cast<osg::Vec3d>());
-		if(kwargs.contains("scale")) self.setScale(kwargs["scale"].cast<osg::Vec3d>());
-		if(kwargs.contains("pivotPoint")) self.setPivotPoint(kwargs["pivotPoint"].cast<osg::Vec3d>());
+		if(auto v = kwargs.pop<osg::Vec3d>("position")) self.setPosition(*v);
+		if(auto v = kwargs.pop<osg::Vec3d>("scale")) self.setScale(*v);
+		if(auto v = kwargs.pop<osg::Vec3d>("pivotPoint")) self.setPivotPoint(*v);
 	}
 
 	template<>
-	void kwargs_init_own(osg::AutoTransform& self, const py::kwargs& kwargs) {
+	void kwargs_init_own(osg::AutoTransform& self, kwargs_consumer& kwargs) {
 		// Same Vec3d-explicit reasoning as PositionAttitudeTransform above: position/scale/
 		// pivotPoint all getter/setter as Vec3d, not the Vec3f-aliased osg::Vec3.
-		if(kwargs.contains("position")) self.setPosition(kwargs["position"].cast<osg::Vec3d>());
-		if(kwargs.contains("scale")) self.setScale(kwargs["scale"].cast<osg::Vec3d>());
-		if(kwargs.contains("pivotPoint")) self.setPivotPoint(kwargs["pivotPoint"].cast<osg::Vec3d>());
-		if(kwargs.contains("autoRotateMode")) self.setAutoRotateMode(
-			kwargs["autoRotateMode"].cast<osg::AutoTransform::AutoRotateMode>()
-		);
-		if(kwargs.contains("autoScaleToScreen")) self.setAutoScaleToScreen(
-			kwargs["autoScaleToScreen"].cast<bool>()
-		);
+		if(auto v = kwargs.pop<osg::Vec3d>("position")) self.setPosition(*v);
+		if(auto v = kwargs.pop<osg::Vec3d>("scale")) self.setScale(*v);
+		if(auto v = kwargs.pop<osg::Vec3d>("pivotPoint")) self.setPivotPoint(*v);
+		if(auto v = kwargs.pop<osg::AutoTransform::AutoRotateMode>("autoRotateMode")) {
+			self.setAutoRotateMode(*v);
+		}
+		if(auto v = kwargs.pop<bool>("autoScaleToScreen")) self.setAutoScaleToScreen(*v);
 	}
 }
 

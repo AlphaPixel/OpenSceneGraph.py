@@ -2,18 +2,12 @@
 
 namespace pybind11x {
 	template<>
-	void kwargs_init_own(osg::Drawable& self, const py::kwargs& kwargs) {
-		if(kwargs.contains("initialBound")) self.setInitialBound(
-			kwargs["initialBound"].cast<osg::BoundingBox>()
-		);
+	void kwargs_init_own(osg::Drawable& self, kwargs_consumer& kwargs) {
+		if(auto v = kwargs.pop<osg::BoundingBox>("initialBound")) self.setInitialBound(*v);
 
-		if(kwargs.contains("useVertexBufferObjects")) self.setUseVertexBufferObjects(
-			kwargs["useVertexBufferObjects"].cast<bool>()
-		);
+		if(auto v = kwargs.pop<bool>("useVertexBufferObjects")) self.setUseVertexBufferObjects(*v);
 
-		if(kwargs.contains("useVertexArrayObject")) self.setUseVertexArrayObject(
-			kwargs["useVertexArrayObject"].cast<bool>()
-		);
+		if(auto v = kwargs.pop<bool>("useVertexArrayObject")) self.setUseVertexArrayObject(*v);
 	}
 }
 

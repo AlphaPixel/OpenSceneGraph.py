@@ -756,9 +756,8 @@ class LightOrbit:
 	fed the same normalized direction, which made them a genuinely misleading set of controls:
 	"Orbit Radius" and "Height" were not a radius and a height at all - only their RATIO did
 	anything (it set elevation), and scaling both together did nothing whatsoever. Two sliders
-	encoding one degree of freedom, plus a third direction that was a no-op. See
-	[[feedback_linear_interactive_controls]]: interactive state should be the real DOFs, so that
-	every distinct slider position is a distinct result.
+	encoding one degree of freedom, plus a third direction that was a no-op. Interactive state
+	should be the real DOFs, so that every distinct slider position is a distinct result.
 
 	Every _sync() call pushes the new direction into BOTH the live LightSet (so direct lighting
 	updates immediately) and ShadowMap.reposition() (so the shadow tracks
@@ -1252,16 +1251,16 @@ def configure_viewer(viewer, root):
 	if args.gui:
 		gui_opts = osgx.imgui.Options()
 		gui_opts.dock = osgx.imgui.Dock.LEFT
-		gui_opts.dock_width = 320.0
+		gui_opts.dockWidth = 320.0
 		# Overlay the full-window scene instead of shrinking the master viewport: the deferred
 		# passes' own cameras set fixed full-window viewports (0, 0, w, h), which a shrunk master
 		# viewport would no longer match.
-		gui_opts.dock_reserve = False
+		gui_opts.dockReserve = False
 
 		# Pin ImGui after both final_cam/debug_cam and the optional gizmo overlay. In particular,
 		# raw-channel visualization masks final_cam, so it cannot serve as the --no-lights fallback.
 		gui = osgx.imgui.Widget(viewer, imgui_overlay, gui_opts)
-		closed_section = osgx.imgui.SectionOptions(default_open=False)
+		closed_section = osgx.imgui.SectionOptions(defaultOpen=False)
 
 		def draw_visualize_mode(ri):
 			mode_labels = [label for label, _, _ in DEBUG_MODES]
@@ -1272,7 +1271,7 @@ def configure_viewer(viewer, root):
 		gui.addSection(
 			"Visualize Mode",
 			draw_visualize_mode,
-			osgx.imgui.SectionOptions(default_open=True)
+			osgx.imgui.SectionOptions(defaultOpen=True)
 		)
 
 		def draw_ibl_knobs(ri):
@@ -1446,7 +1445,7 @@ def configure_viewer(viewer, root):
 		gui.addSection("Post FX", draw_post_fx_knobs, closed_section)
 
 		gui.addStatsSection(viewer)
-		gui.addProfilerSection(viewer, default_open=False)
+		gui.addProfilerSection(viewer, defaultOpen=False)
 
 if __name__ == "__main__":
 	W, H = window_size(default=(1169, 768))

@@ -221,8 +221,8 @@ scene-graph construction is the cost.
 - `~/dev/osgx/ext/python/osgx-gltf.cpp` — `AsyncProgress` (the glTF-specific
   `PollableProgress` binding) and `readNodeFile()`.
 - `examples/pyosg_async.py` — `run()`, `run_with_progress()`, and
-  `Progress`/`ProgressBar`. Not yet part of the `OpenSceneGraph` package —
-  see `[[project_native_package_split]]`.
+  `Progress`/`ProgressBar`. Not yet part of the `OpenSceneGraph` package;
+  no pure-Python modules have moved into it yet.
 - `examples/pyosg-async.py` — push-based demo.
 - `examples/pyosg-async-gltf.py` — poll-based demo, `load()` and
   `bar.watch(progress)` as independent entries in `run()`'s task list.

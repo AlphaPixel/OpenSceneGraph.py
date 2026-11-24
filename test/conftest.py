@@ -4,8 +4,12 @@ import os
 
 import pytest
 
-sys.path.append("BUILD-g++-13.3.0-NOASAN")
-sys.path.append("BUILD-g++-15.2.1-NOASAN")
+# Resolved against the repo root (this file's parent's parent), not the current directory, so
+# pytest works when started from the repo root or from inside a BUILD dir.
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+sys.path.append(os.path.join(ROOT_DIR, "BUILD-g++-13.3.0-NOASAN"))
+sys.path.append(os.path.join(ROOT_DIR, "BUILD-g++-15.2.1-NOASAN"))
 
 os.putenv("OSG_THREADING", "SingleThreaded")
 

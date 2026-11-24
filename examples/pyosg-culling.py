@@ -196,8 +196,8 @@ def configure_viewer(viewer, root):
 
 	gui = osgx.imgui.Widget(viewer)
 
-	gui.addStatsSection(viewer, default_open=True)
-	gui.addProfilerSection(viewer, default_open=True)
+	gui.addStatsSection(viewer, defaultOpen=True)
+	gui.addProfilerSection(viewer, defaultOpen=True)
 
 def parse_args():
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

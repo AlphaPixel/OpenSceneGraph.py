@@ -28,8 +28,10 @@ namespace detail {
 		auto mat = py::class_<T>(
 			m,
 			name,
-			"A 4x4 row-major transformation matrix; manual GLSL uniform uploads need the "
-			"REVERSED multiply order vs plain GL (see feedback_osg_matrix_order)."
+			"A 4x4 row-major transformation matrix that transforms row vectors (v * M), so "
+			"transforms concatenate left-to-right (scale * rotate * translate). GLSL treats an "
+			"uploaded matrix as acting on column vectors (M * v), so shader-side products of "
+			"manually uploaded matrices use the reversed order."
 		)
 			.def(py::init<>(), "Create an uninitialized matrix (NOT identity - call makeIdentity() or use Matrix.identity()).")
 			.def(py::init<const T&>(), "Create a copy of another matrix.")

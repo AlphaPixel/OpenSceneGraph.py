@@ -476,9 +476,8 @@ def build_scene(w, h):
 
 	# LightSet must live on the SAME StateSet as the Program that actually calls
 	# osgx_DirectLighting() (model's own StateSet, wired by PBRScene.create() below - not
-	# main_group, an ancestor). See [[project_osgx_lightset_maxlights_fix]] for the full root
-	# cause; the floor's Program gets the same shared `lights` object attached to ITS OWN
-	# StateSet below.
+	# main_group, an ancestor). The floor's Program gets the same shared `lights` object
+	# attached to ITS OWN StateSet below.
 	lights = osgx.LightSet()
 	model.stateSet.attributes.append(lights)
 

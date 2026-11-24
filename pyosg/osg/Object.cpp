@@ -2,14 +2,12 @@
 
 namespace pybind11x {
 	template<>
-	void kwargs_init_own(osg::Object& self, const py::kwargs& kwargs) {
-		if(kwargs.contains("name")) self.setName(kwargs["name"].cast<std::string>());
+	void kwargs_init_own(osg::Object& self, kwargs_consumer& kwargs) {
+		if(auto v = kwargs.pop<std::string>("name")) self.setName(*v);
 
-		if(kwargs.contains("dataVariance")) self.setDataVariance(
-			kwargs["dataVariance"].cast<osg::Object::DataVariance>()
-		);
+		if(auto v = kwargs.pop<osg::Object::DataVariance>("dataVariance")) self.setDataVariance(*v);
 
-		if(kwargs.contains("debug")) pyosg::detail::LifetimeProbe::attachTo(&self, kwargs["debug"]);
+		if(auto v = kwargs.pop("debug")) pyosg::detail::LifetimeProbe::attachTo(&self, *v);
 	}
 }
 

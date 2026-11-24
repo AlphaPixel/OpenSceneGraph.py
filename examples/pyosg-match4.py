@@ -756,7 +756,7 @@ class StepAdvancer(osgGA.GUIEventHandler):
 	"""Drives the shrink -> fall -> (cascade or finish) state machine forward, one check per
 	frame, via the FRAME event osgGA dispatches to every registered eventHandler once per
 	viewer.frame() call - the same mechanism pyosg-taa.py's Controls uses for its own per-frame
-	bookkeeping (see [[project_pyosg_contract_conversion]]).
+	bookkeeping.
 
 	NOT a node updateCallback, deliberately: an EARLIER version of this attached a plain-callable
 	updateCallback directly to `scene` instead, and that froze the game after the first match --

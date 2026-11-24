@@ -2,9 +2,9 @@
 
 namespace pybind11x {
 	template<>
-	void kwargs_init_own(osg::Geode& self, const py::kwargs& kwargs) {
-		if(kwargs.contains("drawables")) {
-			for(py::handle child : kwargs["drawables"]) {
+	void kwargs_init_own(osg::Geode& self, kwargs_consumer& kwargs) {
+		if(auto drawables = kwargs.pop("drawables")) {
+			for(py::handle child : *drawables) {
 				self.addDrawable(child.cast<osg::Drawable*>());
 			}
 		}

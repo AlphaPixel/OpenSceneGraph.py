@@ -2,83 +2,62 @@
 
 namespace pybind11x {
 	template<>
-	void kwargs_init_own(osg::Camera& self, const py::kwargs& kwargs) {
-		if(kwargs.contains("viewport")) pyosg::detail::camera_viewport_property_setter()(
-			self,
-			kwargs["viewport"]
-		);
+	void kwargs_init_own(osg::Camera& self, kwargs_consumer& kwargs) {
+		if(auto v = kwargs.pop("viewport")) pyosg::detail::camera_viewport_property_setter()(self, *v);
 
-		if(kwargs.contains("clearColor")) self.setClearColor(
-			kwargs["clearColor"].cast<osg::Vec4>()
-		);
+		if(auto v = kwargs.pop<osg::Vec4>("clearColor")) self.setClearColor(*v);
 
-		if(kwargs.contains("clearMask")) self.setClearMask(
-			kwargs["clearMask"].cast<GLbitfield>()
-		);
+		if(auto v = kwargs.pop<GLbitfield>("clearMask")) self.setClearMask(*v);
 
-		if(kwargs.contains("projectionMatrix")) {
-			pyosg::detail::camera_projection_matrix_property_setter()(
-				self,
-				kwargs["projectionMatrix"]
-			);
+		if(auto v = kwargs.pop("projectionMatrix")) {
+			pyosg::detail::camera_projection_matrix_property_setter()(self, *v);
 		}
 
-		if(kwargs.contains("viewMatrix")) pyosg::detail::camera_view_matrix_property_setter()(
-			self,
-			kwargs["viewMatrix"]
-		);
-
-		if(kwargs.contains("renderOrder")) pyosg::detail::camera_render_order_property_setter()(
-			self,
-			kwargs["renderOrder"]
-		);
-
-		if(kwargs.contains("graphicsContext")) self.setGraphicsContext(
-			kwargs["graphicsContext"].cast<osg::GraphicsContext*>()
-		);
-
-		if(kwargs.contains("renderTargetImplementation")) {
-			pyosg::detail::camera_render_target_implementation_property_setter()(
-				self,
-				kwargs["renderTargetImplementation"]
-			);
+		if(auto v = kwargs.pop("viewMatrix")) {
+			pyosg::detail::camera_view_matrix_property_setter()(self, *v);
 		}
 
-		if(kwargs.contains("allowEventFocus")) self.setAllowEventFocus(
-			kwargs["allowEventFocus"].cast<bool>()
-		);
+		if(auto v = kwargs.pop("renderOrder")) {
+			pyosg::detail::camera_render_order_property_setter()(self, *v);
+		}
 
-		if(kwargs.contains("computeNearFarMode")) self.setComputeNearFarMode(
-			kwargs["computeNearFarMode"].cast<osg::CullSettings::ComputeNearFarMode>()
-		);
+		if(auto v = kwargs.pop<osg::GraphicsContext*>("graphicsContext")) self.setGraphicsContext(*v);
 
-		if(kwargs.contains("nearFarRatio")) self.setNearFarRatio(
-			kwargs["nearFarRatio"].cast<double>()
-		);
+		if(auto v = kwargs.pop("renderTargetImplementation")) {
+			pyosg::detail::camera_render_target_implementation_property_setter()(self, *v);
+		}
 
-		if(kwargs.contains("initialDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
+		if(auto v = kwargs.pop<bool>("allowEventFocus")) self.setAllowEventFocus(*v);
+
+		if(auto v = kwargs.pop<osg::CullSettings::ComputeNearFarMode>("computeNearFarMode")) {
+			self.setComputeNearFarMode(*v);
+		}
+
+		if(auto v = kwargs.pop<double>("nearFarRatio")) self.setNearFarRatio(*v);
+
+		if(auto v = kwargs.pop("initialDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
 			pyosg::detail::InitialDrawCallbackSlot,
 			pyosg::detail::InitialDrawCallbackSetter,
 			pyosg::detail::InitialDrawCallbackGetter
-		>()(self, kwargs["initialDrawCallback"]);
+		>()(self, *v);
 
-		if(kwargs.contains("preDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
+		if(auto v = kwargs.pop("preDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
 			pyosg::detail::PreDrawCallbackSlot,
 			pyosg::detail::PreDrawCallbackSetter,
 			pyosg::detail::PreDrawCallbackGetter
-		>()(self, kwargs["preDrawCallback"]);
+		>()(self, *v);
 
-		if(kwargs.contains("postDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
+		if(auto v = kwargs.pop("postDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
 			pyosg::detail::PostDrawCallbackSlot,
 			pyosg::detail::PostDrawCallbackSetter,
 			pyosg::detail::PostDrawCallbackGetter
-		>()(self, kwargs["postDrawCallback"]);
+		>()(self, *v);
 
-		if(kwargs.contains("finalDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
+		if(auto v = kwargs.pop("finalDrawCallback")) pyosg::detail::camera_draw_callback_property_setter<
 			pyosg::detail::FinalDrawCallbackSlot,
 			pyosg::detail::FinalDrawCallbackSetter,
 			pyosg::detail::FinalDrawCallbackGetter
-		>()(self, kwargs["finalDrawCallback"]);
+		>()(self, *v);
 	}
 }
 

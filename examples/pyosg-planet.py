@@ -556,7 +556,7 @@ def configure_viewer(viewer, root):
 		)
 		if changed: uniforms["uBandWarp"] = value
 
-	gui.addSection("Body", draw_body, osgx.imgui.SectionOptions(default_open=True))
+	gui.addSection("Body", draw_body, osgx.imgui.SectionOptions(defaultOpen=True))
 
 	debug_mode = [0]
 	debug_labels = ["Normal", "Raw Noise", "Derivative", "Face ID"]
@@ -569,7 +569,7 @@ def configure_viewer(viewer, root):
 
 			surface_geode.stateSet.uniforms["uDebugMode"] = idx
 
-	gui.addSection("Debug", draw_debug, osgx.imgui.SectionOptions(default_open=False))
+	gui.addSection("Debug", draw_debug, osgx.imgui.SectionOptions(defaultOpen=False))
 
 	def draw_clouds(ri):
 		uniforms = cloud_geode.stateSet.uniforms
@@ -589,7 +589,7 @@ def configure_viewer(viewer, root):
 		changed, r, g, b = osgx.imgui.color_edit3("Color##clouds", color.x, color.y, color.z)
 		if changed: uniforms["uColor"] = osg.Vec3(r, g, b)
 
-	gui.addSection("Clouds", draw_clouds, osgx.imgui.SectionOptions(default_open=True))
+	gui.addSection("Clouds", draw_clouds, osgx.imgui.SectionOptions(defaultOpen=True))
 
 	# Cloud time advance only - an update callback instead of a Python-side loop, so this runs
 	# correctly under any frame-loop driver (../pyosg-cli, this file's own __main__, or a future

@@ -2,27 +2,27 @@
 
 namespace pybind11x {
 	template<>
-	void kwargs_init_own(osg::Geometry& self, const py::kwargs& kwargs) {
-		if(kwargs.contains("vertexArray")) {
+	void kwargs_init_own(osg::Geometry& self, kwargs_consumer& kwargs) {
+		if(auto v = kwargs.pop("vertexArray")) {
 			pyosg::detail::GeometrySlots::setter<pyosg::detail::VertexArraySlot, osg::Array*>(
 				&osg::Geometry::setVertexArray
-			)(self, kwargs["vertexArray"]);
+			)(self, *v);
 		}
 
-		if(kwargs.contains("colorArray")) {
+		if(auto v = kwargs.pop("colorArray")) {
 			pyosg::detail::GeometrySlots::setter<pyosg::detail::ColorArraySlot, osg::Array*>(
 				py::overload_cast<osg::Array*>(&osg::Geometry::setColorArray)
-			)(self, kwargs["colorArray"]);
+			)(self, *v);
 		}
 
-		if(kwargs.contains("normalArray")) {
+		if(auto v = kwargs.pop("normalArray")) {
 			pyosg::detail::GeometrySlots::setter<pyosg::detail::NormalArraySlot, osg::Array*>(
 				py::overload_cast<osg::Array*>(&osg::Geometry::setNormalArray)
-			)(self, kwargs["normalArray"]);
+			)(self, *v);
 		}
 
-		if(kwargs.contains("primitiveSets")) {
-			for(py::handle ps : kwargs["primitiveSets"]) {
+		if(auto primitiveSets = kwargs.pop("primitiveSets")) {
+			for(py::handle ps : *primitiveSets) {
 				self.addPrimitiveSet(ps.cast<osg::PrimitiveSet*>());
 			}
 		}

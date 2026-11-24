@@ -105,11 +105,15 @@ namespace osg {
 // re-derive (and keep in sync) what its actual next base is. `kwargs_init_own<T>` is declared here
 // too (its real body lives next to that type's bind_X() in its own .cpp) - this header is included
 // by nearly every binding TU, which is what makes each specialization visible wherever the walk
-// might instantiate it; skipping an entry here doesn't fail to compile, it just silently falls back
-// to the no-op default in whichever TU forgot to declare it, so keep this list in sync with reality.
+// might instantiate it; skipping an entry here doesn't fail to compile, it falls back to the no-op
+// default in whichever TU forgot to declare it, leaving that type's keys unconsumed - which
+// kwargs_init() then reports as an unexpected-keyword TypeError - so keep this list in sync with
+// reality.
 namespace pybind11x {
+	class kwargs_consumer;
+
 	template<typename T> struct kwargs_base;
-	template<typename T> void kwargs_init_own(T& self, const py::kwargs& kwargs);
+	template<typename T> void kwargs_init_own(T& self, kwargs_consumer& kwargs);
 
 	template<> struct kwargs_base<osg::Node> { using type = osg::Object; };
 	template<> struct kwargs_base<osg::Group> { using type = osg::Node; };
@@ -129,21 +133,21 @@ namespace pybind11x {
 	template<> struct kwargs_base<osg::Texture3D> { using type = osg::Texture; };
 	template<> struct kwargs_base<osg::Geometry> { using type = osg::Drawable; };
 
-	template<> void kwargs_init_own(osg::Object& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Node& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Group& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Geode& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Drawable& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Program& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Transform& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::MatrixTransform& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::PositionAttitudeTransform& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::AutoTransform& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Camera& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Texture& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Texture2D& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Texture3D& self, const py::kwargs& kwargs);
-	template<> void kwargs_init_own(osg::Geometry& self, const py::kwargs& kwargs);
+	template<> void kwargs_init_own(osg::Object& self, kwargs_consumer& kwargs);
+	template<> void kwargs_init_own(osg::Node& self, kwargs_consumer& kwargs);
+	template<> void kwargs_init_own(osg::Group& self, kwargs_consumer& kwargs);
+	template<> void kwargs_init_own(osg::Geode& self, kwargs_consumer& kwargs);
+	template<> void kwargs_init_own(osg::Drawable& self, kwargs_consumer& kwargs);
+	template<> void kwargs_init_own(osg::Program& self, kwargs_consumer& kwargs);
+	template<> void kwargs_init_own(osg::Transform& self, kwargs_consumer& kwargs);
+	template<> void kwargs_init_own(osg::MatrixTransform& self, kwargs_consumer& kwargs);
+	template<> void kwargs_init_own(osg::PositionAttitudeTransform& self, kwargs_consumer& kwargs);
+	template<> void kwargs_init_own(osg::AutoTransform& self, kwargs_consumer& kwargs);
+	template<> void kwargs_init_own(osg::Camera& self, kwargs_consumer& kwargs);
+	template<> void kwargs_init_own(osg::Texture& self, kwargs_consumer& kwargs);
+	template<> void kwargs_init_own(osg::Texture2D& self, kwargs_consumer& kwargs);
+	template<> void kwargs_init_own(osg::Texture3D& self, kwargs_consumer& kwargs);
+	template<> void kwargs_init_own(osg::Geometry& self, kwargs_consumer& kwargs);
 }
 
 namespace pyosg {

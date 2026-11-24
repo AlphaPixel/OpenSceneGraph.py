@@ -2,9 +2,9 @@
 
 namespace pybind11x {
 	template<>
-	void kwargs_init_own(osg::Program& self, const py::kwargs& kwargs) {
-		if(kwargs.contains("shaders")) {
-			for(py::handle shader : kwargs["shaders"]) {
+	void kwargs_init_own(osg::Program& self, kwargs_consumer& kwargs) {
+		if(auto shaders = kwargs.pop("shaders")) {
+			for(py::handle shader : *shaders) {
 				self.addShader(shader.cast<osg::Shader*>());
 			}
 		}

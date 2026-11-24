@@ -168,8 +168,8 @@ primitive only when a concrete control is needed:
 
 Both are one-line `ImGui::` wrappers in `~/dev/osgx/src/ImGui.cpp` +
 `ext/python/osgx-imgui.cpp`, no new C++ classes. **C++-first, as always**
-(see [[feedback_cpp_first_design]]): the primitive lives in `osgx::imgui`
-proper, Python just calls it.
+(a real C++ API first, the binding second): the primitive lives in
+`osgx::imgui` proper, Python just calls it.
 
 Two sliders in *different* panel sections sharing the exact same label
 collide on the same ImGui ID — `Panel::draw()` only wraps a section in

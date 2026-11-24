@@ -92,9 +92,8 @@ HEADLESS = pyosg_headless.installed()
 # a sibling of both `assets/` and the `lighting/` subpackage - so this is the one place a plain
 # `.parent` (not `.parent.parent`) correctly reaches the bundled asset tree regardless of which
 # depth the CALLING file installs at. Deliberately kept here rather than scoped to the Lighting
-# Series specifically (see [[project_lighting_series_package_asset_backport]]) - the user wants
-# this available as general infrastructure any future example (core or official tier) can rely on
-# to "find its assets" without reinventing this lookup. Real consequence: pyosg_example.py's
+# Series specifically - it is general infrastructure any future example (core or official tier)
+# can rely on to "find its assets" without reinventing this lookup. Real consequence: pyosg_example.py's
 # public surface is now something the examples wheel can depend on, same as any other cross-package
 # API - a change here that examples/lighting/*.py relies on means bumping/republishing BOTH
 # wheels together, not just openscenegraph-examples alone.

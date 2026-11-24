@@ -2,43 +2,28 @@
 
 namespace pybind11x {
 	template<>
-	void kwargs_init_own(osg::Texture& self, const py::kwargs& kwargs) {
-		if(kwargs.contains("wrap")) pyosg::detail::texture_wrap_property_setter()(
-			self,
-			kwargs["wrap"]
-		);
+	void kwargs_init_own(osg::Texture& self, kwargs_consumer& kwargs) {
+		if(auto v = kwargs.pop("wrap")) pyosg::detail::texture_wrap_property_setter()(self, *v);
 
-		if(kwargs.contains("filter")) pyosg::detail::texture_filter_property_setter()(
-			self,
-			kwargs["filter"]
-		);
+		if(auto v = kwargs.pop("filter")) pyosg::detail::texture_filter_property_setter()(self, *v);
 
-		if(kwargs.contains("internalFormat")) self.setInternalFormat(
-			kwargs["internalFormat"].cast<GLint>()
-		);
+		if(auto v = kwargs.pop<GLint>("internalFormat")) self.setInternalFormat(*v);
 
-		if(kwargs.contains("sourceFormat")) self.setSourceFormat(
-			kwargs["sourceFormat"].cast<GLenum>()
-		);
+		if(auto v = kwargs.pop<GLenum>("sourceFormat")) self.setSourceFormat(*v);
 
-		if(kwargs.contains("sourceType")) self.setSourceType(
-			kwargs["sourceType"].cast<GLenum>()
-		);
+		if(auto v = kwargs.pop<GLenum>("sourceType")) self.setSourceType(*v);
 
-		if(kwargs.contains("image")) pyosg::detail::texture_image_property_setter()(
-			self,
-			kwargs["image"]
-		);
+		if(auto v = kwargs.pop("image")) pyosg::detail::texture_image_property_setter()(self, *v);
 
-		if(kwargs.contains("useHardwareMipMapGeneration")) self.setUseHardwareMipMapGeneration(
-			kwargs["useHardwareMipMapGeneration"].cast<bool>()
-		);
+		if(auto v = kwargs.pop<bool>("useHardwareMipMapGeneration")) {
+			self.setUseHardwareMipMapGeneration(*v);
+		}
 	}
 
 	template<>
-	void kwargs_init_own(osg::Texture2D& self, const py::kwargs& kwargs) {
-		if(kwargs.contains("size")) {
-			auto vals = unpack_sequence<int, int>(kwargs["size"]);
+	void kwargs_init_own(osg::Texture2D& self, kwargs_consumer& kwargs) {
+		if(auto size = kwargs.pop("size")) {
+			auto vals = unpack_sequence<int, int>(*size);
 
 			if(!vals) throw py::value_error("size requires (width, height)");
 
@@ -47,15 +32,13 @@ namespace pybind11x {
 			self.setTextureSize(width, height);
 		}
 
-		if(kwargs.contains("numMipmapLevels")) self.setNumMipmapLevels(
-			kwargs["numMipmapLevels"].cast<unsigned int>()
-		);
+		if(auto v = kwargs.pop<unsigned int>("numMipmapLevels")) self.setNumMipmapLevels(*v);
 	}
 
 	template<>
-	void kwargs_init_own(osg::Texture3D& self, const py::kwargs& kwargs) {
-		if(kwargs.contains("size")) {
-			auto vals = unpack_sequence<int, int, int>(kwargs["size"]);
+	void kwargs_init_own(osg::Texture3D& self, kwargs_consumer& kwargs) {
+		if(auto size = kwargs.pop("size")) {
+			auto vals = unpack_sequence<int, int, int>(*size);
 
 			if(!vals) throw py::value_error("size requires (width, height, depth)");
 
@@ -64,9 +47,7 @@ namespace pybind11x {
 			self.setTextureSize(width, height, depth);
 		}
 
-		if(kwargs.contains("numMipmapLevels")) self.setNumMipmapLevels(
-			kwargs["numMipmapLevels"].cast<unsigned int>()
-		);
+		if(auto v = kwargs.pop<unsigned int>("numMipmapLevels")) self.setNumMipmapLevels(*v);
 	}
 }
 

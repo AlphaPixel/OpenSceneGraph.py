@@ -287,7 +287,7 @@ def configure_viewer(viewer, root):
 
 	gui_opts = osgx.imgui.Options()
 	gui_opts.dock = osgx.imgui.Dock.LEFT
-	gui_opts.dock_width = 340.0
+	gui_opts.dockWidth = 340.0
 
 	gui = osgx.imgui.Widget(viewer, options=gui_opts)
 
@@ -326,16 +326,16 @@ def configure_viewer(viewer, root):
 			ss.uniforms["h2Seed"] = random.uniform(0.0, 100.0)
 			ss.uniforms["h3Seed"] = random.uniform(0.0, 100.0)
 
-	gui.addSection("Paper & Ink", draw_paper_ink, osgx.imgui.SectionOptions(default_open=True))
+	gui.addSection("Paper & Ink", draw_paper_ink, osgx.imgui.SectionOptions(defaultOpen=True))
 	gui.addSection(
 		"Lighting (PoC)",
 		make_param_section(LIGHT_DEFAULTS, LIGHT_PARAMS, "light"),
-		osgx.imgui.SectionOptions(default_open=True)
+		osgx.imgui.SectionOptions(defaultOpen=True)
 	)
 	gui.addSection(
 		"Stroke Character",
 		make_param_section(STROKE_DEFAULTS, STROKE_PARAMS, "stroke"),
-		osgx.imgui.SectionOptions(default_open=True)
+		osgx.imgui.SectionOptions(defaultOpen=True)
 	)
 	gui.addSection("Hatch 1", make_param_section(H1_DEFAULTS, H1_PARAMS, "h1"))
 	gui.addSection("Hatch 2", make_param_section(H2_DEFAULTS, H2_PARAMS, "h2"))

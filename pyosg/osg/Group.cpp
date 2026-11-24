@@ -2,9 +2,9 @@
 
 namespace pybind11x {
 	template<>
-	void kwargs_init_own(osg::Group& self, const py::kwargs& kwargs) {
-		if(kwargs.contains("children")) {
-			for(py::handle child : kwargs["children"]) {
+	void kwargs_init_own(osg::Group& self, kwargs_consumer& kwargs) {
+		if(auto children = kwargs.pop("children")) {
+			for(py::handle child : *children) {
 				self.addChild(child.cast<osg::Node*>());
 			}
 		}

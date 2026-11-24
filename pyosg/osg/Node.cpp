@@ -2,29 +2,22 @@
 
 namespace pybind11x {
 	template<>
-	void kwargs_init_own(osg::Node& self, const py::kwargs& kwargs) {
-		if(kwargs.contains("nodeMask")) self.setNodeMask(
-			kwargs["nodeMask"].cast<osg::Node::NodeMask>())
-		;
+	void kwargs_init_own(osg::Node& self, kwargs_consumer& kwargs) {
+		if(auto v = kwargs.pop<osg::Node::NodeMask>("nodeMask")) self.setNodeMask(*v);
 
-		if(kwargs.contains("updateCallback")) pyosg::detail::node_update_callback_property_setter()(
-			self,
-			kwargs["updateCallback"]
-		);
+		if(auto v = kwargs.pop("updateCallback")) {
+			pyosg::detail::node_update_callback_property_setter()(self, *v);
+		}
 
-		if(kwargs.contains("eventCallback")) pyosg::detail::node_event_callback_property_setter()(
-			self,
-			kwargs["eventCallback"]
-		);
+		if(auto v = kwargs.pop("eventCallback")) {
+			pyosg::detail::node_event_callback_property_setter()(self, *v);
+		}
 
-		if(kwargs.contains("cullCallback")) pyosg::detail::node_cull_callback_property_setter()(
-			self,
-			kwargs["cullCallback"]
-		);
+		if(auto v = kwargs.pop("cullCallback")) {
+			pyosg::detail::node_cull_callback_property_setter()(self, *v);
+		}
 
-		if(kwargs.contains("cullingActive")) self.setCullingActive(
-			kwargs["cullingActive"].cast<bool>()
-		);
+		if(auto v = kwargs.pop<bool>("cullingActive")) self.setCullingActive(*v);
 	}
 }
 

@@ -238,7 +238,7 @@ def configure_viewer(viewer, root):
 		# with interactive docking, so this reserves a stable panel instead.
 		gui_opts = osgx.imgui.Options()
 		gui_opts.dock = osgx.imgui.Dock.LEFT
-		gui_opts.dock_width = 320.0
+		gui_opts.dockWidth = 320.0
 		gui = osgx.imgui.Widget(viewer, viewer.camera, gui_opts)
 		shell_state_sets = [child.stateSet for child in root.children]
 
@@ -257,7 +257,7 @@ def configure_viewer(viewer, root):
 					for ss in shell_state_sets:
 						ss.uniforms[name] = value
 
-		gui.addSection("Motion", draw_motion, osgx.imgui.SectionOptions(default_open=True))
+		gui.addSection("Motion", draw_motion, osgx.imgui.SectionOptions(defaultOpen=True))
 
 		def draw_colors(ri):
 			for name, label in (
@@ -288,7 +288,7 @@ def configure_viewer(viewer, root):
 				if changed:
 					ss.uniforms["opacity"] = value
 
-		gui.addSection("Color", draw_colors, osgx.imgui.SectionOptions(default_open=True))
+		gui.addSection("Color", draw_colors, osgx.imgui.SectionOptions(defaultOpen=True))
 
 if __name__ == "__main__":
 	osg.setNotifyLevel(osg.NotifySeverity.NOTICE)

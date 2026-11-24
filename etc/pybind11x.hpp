@@ -6,7 +6,7 @@
 // unpack_one_or_many -> "Accept a dict/list of T's, or a single bare T, as one Python value."
 // unpack_list_or_args -> "Same, but for a whole py::args argument list instead of one value."
 // unpack_buffer -> "Request any buffer-protocol object as C-contiguous, type-checked scalar elements."
-// kwargs_init -> "Chain a type's constructor-kwargs handling through its actual C++ bases."
+// kwargs_init -> "Chain a type's constructor-kwargs handling through its actual C++ bases, rejecting unknown keys."
 // SlotCache -> "Don't recreate Python objects unless the underlying pointer changed."
 // ProxyStorage -> "Attach all Python views to a C++ object's lifetime."
 // BasicPropertySlots -> "Make fields behave like stable Python attributes."
@@ -86,13 +86,97 @@ auto n_insert_index(size_t size, py::ssize_t index) {
 	return static_cast<R>(index);
 }
 
+namespace detail {
+	// T's registered Python __qualname__ (looking through a pointer), or std::nullopt when T is not
+	// a bound class.
+	template<typename T>
+	std::optional<std::string> python_type_name() {
+		using U = std::remove_cv_t<std::remove_pointer_t<T>>;
+
+		const auto* tinfo = py::detail::get_type_info(typeid(U));
+
+		if(!tinfo) return std::nullopt;
+
+		return py::handle(reinterpret_cast<PyObject*>(tinfo->type)).attr("__qualname__").cast<std::string>();
+	}
+
+	// The name kwargs error messages put before "()": the bound class's Python name.
+	template<typename T>
+	std::string kwargs_owner_name() {
+		return python_type_name<T>().value_or("__init__");
+	}
+}
+
+// The keyword arguments a kwargs_init() call has not yet applied. Each `kwargs_init_own<T>` pop()s
+// the keys it understands; anything still present once the whole base chain has run is a key no
+// type in the chain recognizes, and kwargs_init() raises TypeError for it - the same way Python
+// itself rejects an unexpected keyword argument. Holds its own copy of the dict, so the caller's
+// kwargs are never modified.
+class PYOBJECT_INTERNAL kwargs_consumer {
+public:
+	// Produces the constructed class's name for error messages; only called when raising, so the
+	// Python-side name lookup costs nothing on the success path.
+	using owner_name_fn = std::string (*)();
+
+	kwargs_consumer(const py::kwargs& kwargs, owner_name_fn ownerName):
+	_kwargs(py::reinterpret_steal<py::dict>(PyDict_Copy(kwargs.ptr()))),
+	_owner(ownerName) {
+		if(!_kwargs) throw py::error_already_set();
+	}
+
+	// Removes `key` and returns its value cast to T, or std::nullopt if it wasn't passed. The
+	// default T=py::object returns the raw value, so an explicit `key=None` is distinguishable
+	// from an absent key. A value that can't be cast to T raises TypeError naming the key.
+	template<typename T=py::object>
+	std::optional<T> pop(const char* key) {
+		py::str k(key);
+
+		if(!_kwargs.contains(k)) return std::nullopt;
+
+		py::object value = _kwargs[k];
+
+		if(PyDict_DelItem(_kwargs.ptr(), k.ptr()) != 0) throw py::error_already_set();
+
+		try {
+			return value.cast<T>();
+		}
+
+		catch(const py::cast_error&) {
+			throw py::type_error(
+				owner() + "() keyword argument '" + key + "' got " +
+				py::type::handle_of(value).attr("__qualname__").cast<std::string>() +
+				", which can't be converted to " +
+				detail::python_type_name<T>().value_or(py::type_id<T>())
+			);
+		}
+	}
+
+	bool empty() const {
+		return _kwargs.empty();
+	}
+
+	const py::dict& remaining() const {
+		return _kwargs;
+	}
+
+	std::string owner() const {
+		return _owner();
+	}
+
+private:
+	py::dict _kwargs;
+
+	owner_name_fn _owner;
+};
+
 // Chains a type's constructor-kwargs handling through its actual C++ base classes, automatically.
 //
 // - `kwargs_base<T>::type` - T's REAL immediate base (left as `void` for the root of a chain,
 // or for any type that doesn't participate at all)
 //
-// - `kwargs_init_own<T>` - whatever kwargs T itself understands; no delegation code needed,
-// `kwargs_init<T>` walks `kwargs_base` up the chain for you
+// - `kwargs_init_own<T>` - whatever kwargs T itself understands, each pop()ed from the
+// `kwargs_consumer`; no delegation code needed, `kwargs_init<T>` walks `kwargs_base` up the chain
+// for you
 //
 // A type's binding file therefore never has to know or re-derive what its "next" base is; if that
 // base later gains its own kwargs handling, every subclass picks it up for free.
@@ -100,15 +184,45 @@ template<typename T>
 struct kwargs_base { using type = void; };
 
 template<typename T>
-void kwargs_init_own(T&, const py::kwargs&) {}
+void kwargs_init_own(T&, kwargs_consumer&) {}
 
+namespace detail {
+	template<typename T>
+	void kwargs_init_chain(T& self, kwargs_consumer& kwargs) {
+		using Base = typename kwargs_base<T>::type;
+
+		if constexpr(!std::is_void_v<Base>) kwargs_init_chain(static_cast<Base&>(self), kwargs);
+
+		kwargs_init_own(self, kwargs);
+	}
+
+	// Python's own wording: "Name() got an unexpected keyword argument 'x'".
+	inline std::string kwargs_unexpected_message(const kwargs_consumer& consumer) {
+		const py::dict& remaining = consumer.remaining();
+
+		std::string keys;
+
+		for(auto item : remaining) {
+			if(!keys.empty()) keys += ", ";
+
+			keys += py::repr(item.first).cast<std::string>();
+		}
+
+		return consumer.owner() + "() got " + (
+			remaining.size() == 1 ? "an unexpected keyword argument " : "unexpected keyword arguments "
+		) + keys;
+	}
+}
+
+// Applies every keyword in `kwargs` through T's kwargs_base chain, raising TypeError for any key
+// that no type in the chain consumed.
 template<typename T>
 void kwargs_init(T& self, const py::kwargs& kwargs) {
-	using Base = typename kwargs_base<T>::type;
+	kwargs_consumer consumer(kwargs, &detail::kwargs_owner_name<T>);
 
-	if constexpr(!std::is_void_v<Base>) kwargs_init(static_cast<Base&>(self), kwargs);
+	detail::kwargs_init_chain(self, consumer);
 
-	kwargs_init_own(self, kwargs);
+	if(!consumer.empty()) throw py::type_error(detail::kwargs_unexpected_message(consumer));
 }
 
 namespace detail {
