@@ -1540,6 +1540,16 @@ struct PYOBJECT_INTERNAL ValueMappingProxy {
 
 	size_t size() const { return traits_type::size(obj); }
 
+	// py::cast() rejects arguments that are already Python objects (a heterogeneous mapping's
+	// value_type is py::object); pass those through unchanged.
+	static py::object to_python(const value_type& v) {
+		if constexpr(std::is_base_of_v<py::handle, value_type>) {
+			return py::reinterpret_borrow<py::object>(v);
+		}
+
+		else return py::cast(v);
+	}
+
 	value_type get(key_type key) {
 		if(!contains(key)) throw py::key_error("key not found");
 
@@ -1551,7 +1561,7 @@ struct PYOBJECT_INTERNAL ValueMappingProxy {
 	py::object get(key_type key, py::object default_value) {
 		if(!contains(key)) return default_value;
 
-		return py::cast(traits_type::get(obj, key));
+		return to_python(traits_type::get(obj, key));
 	}
 
 	void set(key_type key, py::object py_obj) {
@@ -1574,11 +1584,11 @@ struct PYOBJECT_INTERNAL ValueMappingProxy {
 		);
 
 		else {
-			if(contains(key)) return py::cast(traits_type::get(obj, key));
+			if(contains(key)) return to_python(traits_type::get(obj, key));
 
 			set(key, default_value);
 
-			return py::cast(traits_type::get(obj, key));
+			return to_python(traits_type::get(obj, key));
 		}
 	}
 
@@ -1615,7 +1625,7 @@ struct PYOBJECT_INTERNAL ValueMappingProxy {
 		else {
 			if(!contains(key)) return default_value;
 
-			return py::cast(pop(key));
+			return to_python(pop(key));
 		}
 	}
 
