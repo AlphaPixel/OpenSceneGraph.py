@@ -126,18 +126,25 @@ void bind_Object(py::module_& m) {
 		)
 		// TODO: Some way to do this..
 		// .def_property("debug", ...)
-		// TODO: This will be difficult to handle properly, and will likely end up using
-		// `py::capsule`. However, it's only really useful for C++ interop, as Python itself already
-		// HAS better mechanisms for this!
-		//
-		// The implementation should look like:
-		//
-		// n = osg.Node()
-		// n.userValue(int, "val", 10)
-		// i = n.userValue(int, "val")
-		//
-		// userValue
 	;
+
+	// Not pyx::bind_proxy_property: its ProxyStorageOSG lives in the UserDataContainer it would
+	// have to create, and a pure read here must not create one. The proxy is just the Object
+	// pointer, so a fresh one per access (kept alive against its owner) is equivalent.
+	detail::UserValuesProxy::bind(obj, "_UserValues");
+
+	obj.def_property_readonly(
+		"userValues",
+		py::cpp_function(
+			[](osg::Object& self) { return detail::UserValuesProxy(&self); },
+			py::keep_alive<0, 1>()
+		),
+		"Mapping proxy over the named values getUserValue()/setUserValue() store (bool, int, "
+		"float, str, Vec2/3/4 f/d, Quat, Plane, Matrixf/d, BoundingBox/Sphere f/d). A new key "
+		"takes its type from the Python value (int -> int, float -> double); assigning to an "
+		"existing key converts to the type already stored, so C++ getUserValue<T>() keeps "
+		"working - `del` it first to change the type. Reads never create a UserDataContainer."
+	);
 
 	py::class_<
 		osg::UserDataContainer,
@@ -169,22 +176,76 @@ void bind_Object(py::module_& m) {
 		"Object.getOrCreateUserDataContainer()."
 	);
 
-	// TODO: This is a temporary debugging method; REMOVE IT (eventually).
-	obj.def("dumps", [](osg::Object& self, const std::string& ext) {
+	// The osg2 plugin maps osgt/osgx/osgb to its "fileType" option only in its filename overloads;
+	// its stream overloads write binary unless told otherwise (and cannot detect XML on read).
+	// Every other extension gets no Options at all, as osgDB's own stream calls would pass.
+	auto streamOptions = [](const std::string& ext) {
+		const char* fileType = nullptr;
+
+		if(ext == "osgt") fileType = "Ascii";
+		else if(ext == "osgx") fileType = "XML";
+		else if(ext == "osgb") fileType = "Binary";
+
+		osg::ref_ptr<osgDB::Options> options;
+
+		if(fileType) {
+			options = new osgDB::Options();
+
+			options->setPluginStringData("fileType", fileType);
+		}
+
+		return options;
+	};
+
+	auto readerWriter = [](const std::string& ext) {
 		auto* rw = osgDB::Registry::instance()->getReaderWriterForExtension(ext);
 
-		if(!rw) throw std::runtime_error("No ReaderWriter for extension: " + ext);
+		if(!rw) throw py::value_error("No ReaderWriter for extension: " + ext);
 
+		return rw;
+	};
+
+	obj.def("dumps", [streamOptions, readerWriter](osg::Object& self, const std::string& ext) {
 		std::ostringstream oss;
 
-		auto r = rw->writeObject(self, oss, nullptr);
+		auto r = readerWriter(ext)->writeObject(self, oss, streamOptions(ext).get());
 
 		if(!r.success()) throw std::runtime_error(r.message());
 
 		return py::bytes(oss.str());
 	}, "ext"_a="osg",
 		"Serialize this Object through osgDB's writer for the given plugin extension "
-		"(native/.osgt-style by default) and return the result as bytes."
+		"(e.g. osgt/osgb/osgx, or the legacy .osg format by default) and return the result as "
+		"bytes; Object.loads() reverses it."
+	);
+
+	auto loads = [streamOptions, readerWriter](const std::string& data, const std::string& ext) {
+		std::istringstream iss(data);
+
+		osg::ref_ptr<osg::Object> out;
+
+		// Scoped so the ReadResult's own ref_ptr is gone before `out` is handed to Python.
+		{
+			auto r = readerWriter(ext)->readObject(iss, streamOptions(ext).get());
+
+			if(!r.validObject()) {
+				std::string msg = "Could not read a ." + ext + " object";
+
+				if(!r.message().empty()) msg += ": " + r.message();
+
+				throw py::value_error(msg);
+			}
+
+			out = r.getObject();
+		}
+
+		return out;
+	};
+
+	obj.def_static("loads", loads, "data"_a, "ext"_a="osg",
+		"Deserialize bytes (or str) in the given plugin extension's format, as produced by "
+		"Object.dumps(); returns the concrete type that was stored (e.g. osg.Group), regardless "
+		"of the class it is called on."
 	);
 
 	obj.def("udcDebug", [](osg::Object& self) {
