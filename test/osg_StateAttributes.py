@@ -1,4 +1,4 @@
-from OpenSceneGraph.osg import BindImageTexture, StateAttribute, Texture2D
+from OpenSceneGraph.osg import BindImageTexture, BlendEquation, StateAttribute, Texture2D
 from OpenSceneGraph.GL import GL_R8, GL_RGBA8
 
 def test_bindimagetexture_defaults():
@@ -32,3 +32,31 @@ def test_bindimagetexture_properties():
 	assert b.layered == True
 	assert b.layer == 2
 	assert b.texture is None
+
+def test_blendequation_defaults():
+	b = BlendEquation()
+
+	assert isinstance(b, StateAttribute)
+	assert b.equationRGB == BlendEquation.FUNC_ADD
+	assert b.equationAlpha == BlendEquation.FUNC_ADD
+
+def test_blendequation_properties():
+	b = BlendEquation(BlendEquation.RGBA_MIN)
+
+	assert b.equation == BlendEquation.Equation.RGBA_MIN
+	assert b.equationAlpha == BlendEquation.RGBA_MIN
+
+	b = BlendEquation(BlendEquation.RGBA_MAX, BlendEquation.FUNC_ADD)
+
+	assert b.equationRGB == BlendEquation.RGBA_MAX
+	assert b.equationAlpha == BlendEquation.FUNC_ADD
+
+	b.equation = BlendEquation.FUNC_SUBTRACT
+
+	assert b.equationRGB == BlendEquation.FUNC_SUBTRACT
+	assert b.equationAlpha == BlendEquation.FUNC_SUBTRACT
+
+	b.equationAlpha = BlendEquation.RGBA_MIN
+
+	assert b.equationRGB == BlendEquation.FUNC_SUBTRACT
+	assert b.equationAlpha == BlendEquation.RGBA_MIN
