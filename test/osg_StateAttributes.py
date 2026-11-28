@@ -60,3 +60,11 @@ def test_blendequation_properties():
 
 	assert b.equationRGB == BlendEquation.FUNC_SUBTRACT
 	assert b.equationAlpha == BlendEquation.RGBA_MIN
+
+def test_stateattribute_type_core_only():
+	# Fixed-function types are intentionally not exposed (see pyosg/osg/State.cpp).
+	for name in ("MATERIAL", "LIGHT", "FOG", "TEXENV", "ALPHAFUNC", "CLIPPLANE", "POINT"):
+		assert not hasattr(StateAttribute.Type, name)
+
+	assert StateAttribute.BLENDEQUATION == StateAttribute.Type.BLENDEQUATION
+	assert StateAttribute.DEPTH == StateAttribute.Type.DEPTH

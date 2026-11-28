@@ -4,6 +4,7 @@ OSGX_DISABLE_WARNINGS
 
 #include <osg/Viewport>
 #include <osg/BlendFunc>
+#include <osg/BlendEquation>
 #include <osg/Depth>
 #include <osg/BufferIndexBinding>
 #include <osg/BindImageTexture>
@@ -97,6 +98,58 @@ void bind_StateAttributes(py::module_& m) {
 		.def(py::init<GLenum, GLenum, GLenum, GLenum>(),
 			"Create a BlendFunc with separate source/destination factors for the RGB and "
 			"alpha channels."
+		)
+	;
+
+	auto blendEquation = py::class_<
+		osg::BlendEquation,
+		osg::StateAttribute,
+		osg::ref_ptr<osg::BlendEquation>
+	>(
+		m,
+		"BlendEquation",
+		"A StateAttribute controlling glBlendEquation: how the (BlendFunc-weighted) source and "
+		"destination colors are combined, e.g. RGBA_MIN/RGBA_MAX to keep the smaller/larger value."
+	);
+
+	// Core-profile equations only: osg::BlendEquation's ALPHA_MIN/ALPHA_MAX (SGIX extension) and
+	// LOGIC_OP (glLogicOp, not a blend equation) are GL_INVALID_ENUM on a core context.
+	py::enum_<osg::BlendEquation::Equation>(blendEquation, "Equation",
+		"The combining operation passed to glBlendEquation(Separate)."
+	)
+		.value("RGBA_MIN", osg::BlendEquation::RGBA_MIN)
+		.value("RGBA_MAX", osg::BlendEquation::RGBA_MAX)
+		.value("FUNC_ADD", osg::BlendEquation::FUNC_ADD)
+		.value("FUNC_SUBTRACT", osg::BlendEquation::FUNC_SUBTRACT)
+		.value("FUNC_REVERSE_SUBTRACT", osg::BlendEquation::FUNC_REVERSE_SUBTRACT)
+		.export_values()
+	;
+
+	blendEquation
+		.def(py::init<>(), "Create a BlendEquation with the default FUNC_ADD equation.")
+		.def(py::init<osg::BlendEquation::Equation>(),
+			"Create a BlendEquation using one equation for both the RGB and alpha channels."
+		)
+		.def(py::init<osg::BlendEquation::Equation, osg::BlendEquation::Equation>(),
+			"Create a BlendEquation with separate RGB and alpha equations."
+		)
+		.def_property(
+			"equation",
+			&osg::BlendEquation::getEquation,
+			&osg::BlendEquation::setEquation,
+			"The RGB equation; assigning sets both the RGB and alpha equations."
+		)
+		.def_property(
+			"equationRGB",
+			&osg::BlendEquation::getEquationRGB,
+			&osg::BlendEquation::setEquationRGB,
+			"The equation applied to the RGB channels."
+		)
+		.def_property(
+			"equationAlpha",
+			&osg::BlendEquation::getEquationAlpha,
+			&osg::BlendEquation::setEquationAlpha,
+			"The equation applied to the alpha channel."
 		)
 	;
 
